@@ -46,15 +46,55 @@ document.addEventListener('DOMContentLoaded', async function() {
   function setStatus(msg) { if (loading) loading.textContent = msg; }
 
   // Error sink persists across replaceWith since it's on window, not the DOM.
-  window.addEventListener('error', function(e) {
+  function __bundlerShowErr(text, soft) {
     var p = document.body || document.documentElement;
-    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
-    d.id = '__bundler_err';
-    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
-    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
-      '[bundle] ' + (e.message || e.type) +
-      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
+    var d = document.getElementById('__bundler_err');
+    if (!d) {
+      d = p.appendChild(document.createElement('div'));
+      d.id = '__bundler_err';
+      d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.5 ui-monospace,monospace;background:#241015;color:#ffb0a6;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+      // tap the box to dismiss; long-press区 reload
+      var bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+      var bClose = document.createElement('button');
+      bClose.textContent = '關閉';
+      var bReload = document.createElement('button');
+      bReload.textContent = '重新整理';
+      var bs = 'flex:1;font:12px ui-monospace,monospace;color:#ffd9d2;background:#3a1a20;border:1px solid #6c3338;border-radius:6px;padding:6px 0';
+      bClose.style.cssText = bs; bReload.style.cssText = bs;
+      bClose.onclick = function(){ d.parentNode && d.parentNode.removeChild(d); };
+      bReload.onclick = function(){ location.reload(); };
+      bar.appendChild(bClose); bar.appendChild(bReload);
+      var msg = document.createElement('div'); msg.id = '__bundler_err_msg';
+      d.appendChild(msg); d.appendChild(bar);
+    }
+    if (soft) d.style.background = '#1c1622', d.style.color = '#cfc3e0', d.style.borderColor = '#3d3450';
+    var m = document.getElementById('__bundler_err_msg');
+    m.textContent = (m.textContent ? m.textContent + String.fromCharCode(10) : '') + text;
+  }
+  // Resource load failures (script/link/img) fire 'error' in capture phase with
+  // e.target as the element — these are the actionable ones (e.g. react-dom or a
+  // CDN script that failed on weak networks). Show WHICH url died.
+  window.addEventListener('error', function(e) {
+    var tgt = e.target;
+    if (tgt && tgt !== window && (tgt.src || tgt.href)) {
+      __bundlerShowErr('[bundle] 資源載入失敗: ' + String(tgt.src || tgt.href).slice(0, 90) + String.fromCharCode(10) + '（弱網下重試常可解決，可按下方重新整理）');
+      return;
+    }
+    var msg = e.message || e.type;
+    // Opaque cross-origin error: no message/file/line. Carries zero actionable
+    // detail (almost always a CDN script that failed under weak signal). The
+    // local React is bundled, so the game itself usually still runs.
+    if ((msg === 'Script error.' || msg === 'Script error') && !e.filename) {
+      __bundlerShowErr('[bundle] 偵測到跨來源腳本錯誤（多半是弱網下 CDN 腳本載入失敗，本地 React 已內建，遊戲通常仍可進行）。若畫面卡住，請按下方重新整理。', true);
+      return;
+    }
+    __bundlerShowErr('[bundle] ' + msg + (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : ''));
   }, true);
+  window.addEventListener('unhandledrejection', function(e) {
+    var r = e && e.reason;
+    __bundlerShowErr('[bundle] Promise 拒絕: ' + ((r && (r.message || r)) || 'unknown'));
+  });
 
   try {
     const manifestEl = document.querySelector('script[type="__bundler/manifest"]');
