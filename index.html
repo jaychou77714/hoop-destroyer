@@ -309,7 +309,21 @@ document.addEventListener('DOMContentLoaded', async function() {
   </script>
 
   <script type="__bundler/template">
-{"pages":{"Abyss Hoop.dc":"<!DOCTYPE html>\n<html><head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<script src=\"af2147d2-3ac8-434b-bfe8-7a89eab8c035\"><\u002Fscript>\n<\u002Fhead>\n<body>\n\n<x-dc>\n<helmet>\n<style>\n  html,body{margin:0;padding:0;height:100%;background:#07060c;overflow:hidden;}\n  *{-webkit-tap-highlight-color:transparent;}\n  #ah-root{position:fixed;inset:0;background:#07060c;touch-action:none;user-select:none;-webkit-user-select:none;}\n  #ah-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}\n<\u002Fstyle>\n<script type=\"module\" src=\"875365e8-8f11-4b79-9780-292f266babda\"><\u002Fscript>\n<\u002Fhelmet>\n<div id=\"ah-root\">\n  <canvas id=\"ah-canvas\"><\u002Fcanvas>\n<\u002Fdiv>\n<\u002Fx-dc>\n<script type=\"text/x-dc\" data-dc-script=\"\">\nclass Component extends DCLogic {\n  componentDidMount() {\n    // engine.js is loaded as a module <script> in <helmet> and exposes window.HBStart.\n    // Poll for the live canvas AND the loaded engine; (re)boot when either changes.\n    this._poll = setInterval(() => {\n      if (!window.HBStart) return;\n      const canvas = document.getElementById('ah-canvas');\n      const root = document.getElementById('ah-root');\n      if (!canvas || !root) return;\n      if (this._bootedCanvas === canvas && this._game && !this._game._dead) return;\n      try { this._game = window.HBStart(canvas, root); this._bootedCanvas = canvas; }\n      catch (e) { console.error('Engine start failed', e); }\n    }, 150);\n  }\n  componentWillUnmount() {\n    clearInterval(this._poll);\n    if (this._game && this._game.destroy) this._game.destroy();\n  }\n  renderVals() { return {}; }\n}\n<\u002Fscript>\n\n\n<\u002Fbody><\u002Fhtml>"},"entry":"Abyss Hoop.dc"}
+{"pages":{"Abyss Hoop.dc":"<!DOCTYPE html>\n<html><head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<script src=\"af2147d2-3ac8-434b-bfe8-7a89eab8c035\"><\u002Fscript>\n<\u002Fhead>\n<body>\n\n<x-dc>\n<helmet>\n<style>\n  html,body{margin:0;padding:0;height:100%;background:#07060c;overflow:hidden;}\n  *{-webkit-tap-highlight-color:transparent;}\n  #ah-root{position:fixed;inset:0;background:#07060c;touch-action:none;user-select:none;-webkit-user-select:none;}\n  #ah-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;-ms-touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}\n<\u002Fstyle>\n<script type=\"module\" src=\"875365e8-8f11-4b79-9780-292f266babda\"><\u002Fscript>\n<\u002Fhelmet>\n<div id=\"ah-root\">\n  <canvas id=\"ah-canvas\"><\u002Fcanvas>\n<\u002Fdiv>\n<\u002Fx-dc>\n<script type=\"text/x-dc\" data-dc-script=\"\">\nclass Component extends DCLogic {\n  componentDidMount() {\n    // engine.js is loaded as a module <script> in <helmet> and exposes window.HBStart.\n    // Poll for the live canvas AND the loaded engine; (re)boot when either changes.\n    this._poll = setInterval(() => {\n      if (!window.HBStart) return;\n      const canvas = document.getElementById('ah-canvas');\n      const root = document.getElementById('ah-root');\n      if (!canvas || !root) return;\n      if (this._bootedCanvas === canvas && this._game && !this._game._dead) return;\n      try { this._game = window.HBStart(canvas, root); this._bootedCanvas = canvas; }\n      catch (e) { console.error('Engine start failed', e); }\n    }, 150);\n  }\n  componentWillUnmount() {\n    clearInterval(this._poll);\n    if (this._game && this._game.destroy) this._game.destroy();\n  }\n  renderVals() { return {}; }\n}\n<\u002Fscript>\n\n\n<\u002Fbody><\u002Fhtml>"},"entry":"Abyss Hoop.dc"}
+  </script>
+  <script>
+  /* 首次互動嘗試進入全螢幕 — 解決手機橫向瀏覽器列吃掉可視高度導致 UI 過小 */
+  (function(){
+    var done=false;
+    function go(){
+      if(done) return; done=true;
+      var el=document.documentElement;
+      var rq=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+      if(rq){ try{ var p=rq.call(el); if(p&&p.catch) p.catch(function(){}); }catch(e){} }
+    }
+    window.addEventListener('pointerdown', go, {once:true, passive:true});
+    window.addEventListener('touchend', go, {once:true, passive:true});
+  })();
   </script>
 </body>
 </html>
