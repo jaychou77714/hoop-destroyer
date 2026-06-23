@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // detail (almost always a CDN script that failed under weak signal). The
     // local React is bundled, so the game itself usually still runs.
     if ((msg === 'Script error.' || msg === 'Script error') && !e.filename) {
-      __bundlerShowErr('[bundle] 偵測到跨來源腳本錯誤（多半是弱網下 CDN 腳本載入失敗，本地 React 已內建，遊戲通常仍可進行）。若畫面卡住，請按下方重新整理。', true);
+      try { console.warn('[bundle] cross-origin script error ignored (local React bundled)'); } catch(_) {}
       return;
     }
     __bundlerShowErr('[bundle] ' + msg + (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : ''));
