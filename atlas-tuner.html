@@ -13,13 +13,16 @@
   .row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
   .tbtn{flex:1 1 auto;min-width:58px;padding:9px 4px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
   .tbtn.on{background:#f4d47a;color:#1a1208;border-color:#f4d47a}
+  .sub{display:flex;gap:6px;margin:6px 0;justify-content:center}
+  .sub button{flex:1;max-width:120px;padding:8px 4px;border:1px solid #3a5a2a;background:#1b2414;color:#cfe0b8;border-radius:7px;font-size:13px;font-weight:700}
+  .sub button.on{background:#9ac63f;color:#15210a;border-color:#9ac63f}
   .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,50px);gap:6px;max-width:260px;margin:6px auto}
   .pad button{border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:9px;font-size:19px;font-weight:800}
   .pad .mid{background:#3a2d1c;font-size:13px}
   .step{display:flex;gap:6px;justify-content:center;margin:6px 0}
   .step button{padding:7px 14px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
   .step button.on{background:#9ac63f;color:#15210a;border-color:#9ac63f}
-  .val{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#0d0a14;border:1px solid #2e2740;border-radius:6px;padding:8px;color:#cfeaff;text-align:center;margin:6px 0}
+  .val{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0d0a14;border:1px solid #2e2740;border-radius:6px;padding:8px;color:#cfeaff;text-align:center;margin:6px 0}
   .opts{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px;margin:8px 0}
   .opts label{display:flex;gap:6px;align-items:center}
   details{border:1px solid #3a2f1a;border-radius:8px;margin:8px 0;background:#1b1524}
@@ -32,15 +35,18 @@
   .act button{flex:1;padding:11px;border-radius:8px;border:1px solid #4a3d22;font-size:15px;font-weight:800}
   #reset{background:#241c14;color:#d8ccb6}
   #exp{background:#9ac63f;color:#15210a;border-color:#9ac63f}
-  textarea{width:100%;height:180px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
+  #alignBtns{display:flex;gap:6px;margin:6px 0}
+  #alignBtns button{flex:1;padding:9px;border-radius:7px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;font-size:13px;font-weight:700}
+  textarea{width:100%;height:190px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
   #err{color:#ffb080;font-size:13px;text-align:center;padding:20px}
 </style></head>
 <body><div class="wrap">
-<h1>籃獄圖譜 · 文字調校台 v2</h1>
-<p class="hint">① 點目標鈕選卡 → ② 在圖上拖曳，<b>文字＋連結點一起動</b>（或用十字鍵微調，可切 1/5/10px）。<br>③ 進階面板可調節點大小/間距、各字級、上下半位置。④ 按「匯出參數」整段貼給我。</p>
+<h1>籃獄圖譜 · 文字調校台 v3</h1>
+<p class="hint">① 點目標鈕選卡 → ② 選要動的部位（整組／上半／節點／下半）→ ③ 在圖上拖曳或十字鍵微調。<br>左右＝整卡水平；上下＝只動所選部位。④ 按「匯出參數」整段貼給我。</p>
 <div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err" style="display:none"></div></div>
 
 <div class="row" id="targets"></div>
+<div class="sub" id="subrow"></div>
 <div class="step" id="steprow">
   <span style="align-self:center;font-size:13px;color:#a99">步進：</span>
   <button data-s="1">1px</button><button data-s="5" class="on">5px</button><button data-s="10">10px</button>
@@ -52,12 +58,17 @@
 </div>
 <div class="val" id="val">—</div>
 
+<div id="alignBtns">
+  <button data-a="nd">節點全部對齊第1幕</button>
+  <button data-a="lo">下方文字全部對齊第1幕</button>
+</div>
+
 <div class="opts">
   <label><input type="checkbox" id="unlock"> 全部解鎖預覽</label>
   <label><input type="checkbox" id="guide" checked> 中心線</label>
 </div>
 
-<details id="adv"><summary>進階參數（節點 / 字級 / 上下半位置）▾</summary><div id="sliders"></div></details>
+<details id="adv"><summary>進階參數（節點樣式 / 字級 / 上下半基準）▾</summary><div id="sliders"></div></details>
 
 <div class="act"><button id="reset">重設全部</button><button id="exp">匯出參數</button></div>
 <textarea id="out" style="display:none" readonly></textarea>
@@ -79,14 +90,14 @@ const DEFAULT={
          {x:757,y:178,w:255,h:470,cx:884,maxw:196},
          {x:1002,y:178,w:255,h:470,cx:1130,maxw:196},
          {x:1253,y:178,w:255,h:470,cx:1381,maxw:196}],
-  dy:[0,-30,-30,-30,-30],
+  upDY:[0,-30,-30,-30,-30], ndDY:[0,-30,-30,-30,-30], loDY:[0,-30,-30,-30,-30],
   NODE:{y:396,sp:48,r:13},
   FS:{no:20,zh:37,en:18,boss:18,stat:17,relic:17,back:28,title:56,sub:24,route:32},
   UP:{no:115,zh:148,en:183}, LO:{boss:468,stat:503,relic:536},
   back:{x:136,y:119}, title:{x:888,y:72}, route:{x:885,y:688}
 };
 let S=JSON.parse(JSON.stringify(DEFAULT));
-let sel='c2', step=5;
+let sel='c2', subT='all', step=5;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const BW=1704,BH=786;
 const img=new Image();
@@ -112,19 +123,19 @@ function render(){
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,BW,BH);
   if(img.complete&&img.naturalWidth)ctx.drawImage(img,0,0,BW,BH);
   const unlocked=document.getElementById('unlock').checked;
-  for(let i=0;i<5;i++){const C=S.cards[i];nodes(C.cx,S.NODE.y+S.dy[i]);}
+  for(let i=0;i<5;i++){const C=S.cards[i];nodes(C.cx,S.NODE.y+S.ndDY[i]);}
   ctx.textBaseline='middle';ctx.textAlign='center';sh();
   cline('← 返回',S.back.x,S.back.y,S.FS.back,'800','#f3ead3',150);
   cline('籃獄圖譜',S.title.x,S.title.y,S.FS.title,'900','#f4d47a',300);
   cline('選擇要進攻的幕',S.title.x,S.title.y+53,S.FS.sub,'800','#e5c36f',320);
-  for(let i=0;i<5;i++){const A=ACTS[i],C=S.cards[i],dy=S.dy[i],lit=unlocked||A.id<=1,cx=C.cx,mw=C.maxw;
+  for(let i=0;i<5;i++){const A=ACTS[i],C=S.cards[i],lit=unlocked||A.id<=1,cx=C.cx,mw=C.maxw,u=S.upDY[i],lo=S.loDY[i];
     ctx.globalAlpha=lit?1:0.52;
-    cline('第 '+A.id+' 幕',cx,C.y+S.UP.no+dy,S.FS.no,'800',lit?'#ffd45a':'#9f9387',mw);
-    cline(A.name,cx,C.y+S.UP.zh+dy,S.FS.zh,'900',lit?'#f8eddc':'#b9afa9',mw);
-    cline(A.sub,cx,C.y+S.UP.en+dy,S.FS.en,'800',lit?'#e4c27e':'#91877e',mw);
-    cline(lit?('Boss：'+A.boss):'未解鎖',cx,S.LO.boss+dy,S.FS.boss,'800',lit?'#f2e1c1':'#a49a91',mw);
-    cline('印記 0    擊敗 0    熟度 0',cx,S.LO.stat+dy,S.FS.stat,'800',lit?'#d7c09c':'#8d847b',mw);
-    cline('精魄聖物：'+A.relic,cx,S.LO.relic+dy,S.FS.relic,'800',lit?'#cdb98f':'#897f77',mw);
+    cline('第 '+A.id+' 幕',cx,C.y+S.UP.no+u,S.FS.no,'800',lit?'#ffd45a':'#9f9387',mw);
+    cline(A.name,cx,C.y+S.UP.zh+u,S.FS.zh,'900',lit?'#f8eddc':'#b9afa9',mw);
+    cline(A.sub,cx,C.y+S.UP.en+u,S.FS.en,'800',lit?'#e4c27e':'#91877e',mw);
+    cline(lit?('Boss：'+A.boss):'未解鎖',cx,S.LO.boss+lo,S.FS.boss,'800',lit?'#f2e1c1':'#a49a91',mw);
+    cline('印記 0    擊敗 0    熟度 0',cx,S.LO.stat+lo,S.FS.stat,'800',lit?'#d7c09c':'#8d847b',mw);
+    cline('精魄聖物：'+A.relic,cx,S.LO.relic+lo,S.FS.relic,'800',lit?'#cdb98f':'#897f77',mw);
     ctx.globalAlpha=1;
   }
   rs();cline('選擇路線  →',S.route.x,S.route.y,S.FS.route,'900','#15110a',330);
@@ -133,52 +144,73 @@ function render(){
 }
 function selX(){if(sel==='back')return S.back.x;if(sel==='title')return S.title.x;if(sel==='route')return S.route.x;return S.cards[+sel[1]-1].cx;}
 function selObj(){if(sel==='back')return S.back;if(sel==='title')return S.title;if(sel==='route')return S.route;return null;}
-function moveSel(dx,dyv){if(sel[0]==='c'){const i=+sel[1]-1;S.cards[i].cx+=dx;S.dy[i]+=dyv;}else{const o=selObj();o.x+=dx;o.y+=dyv;}render();}
-function updVal(){let t='';if(sel[0]==='c'){const i=+sel[1]-1;t=`第${i+1}幕  cx=${S.cards[i].cx}  垂直 dy=${S.dy[i]}（文字＋節點一起動）`;}else if(sel==='back')t=`返回  x=${S.back.x}  y=${S.back.y}`;else if(sel==='title')t=`標題  x=${S.title.x}  y=${S.title.y}`;else if(sel==='route')t=`路線  x=${S.route.x}  y=${S.route.y}`;document.getElementById('val').textContent=t;}
+function moveSel(dx,dyv){
+  if(sel[0]==='c'){const i=+sel[1]-1; S.cards[i].cx+=dx;
+    if(dyv){ if(subT==='all'){S.upDY[i]+=dyv;S.ndDY[i]+=dyv;S.loDY[i]+=dyv;}
+      else if(subT==='up')S.upDY[i]+=dyv; else if(subT==='nd')S.ndDY[i]+=dyv; else if(subT==='lo')S.loDY[i]+=dyv; }
+  } else {const o=selObj();o.x+=dx;o.y+=dyv;}
+  render();
+}
+function updVal(){let t='';
+  if(sel[0]==='c'){const i=+sel[1]-1;t=`第${i+1}幕 cx=${S.cards[i].cx}｜上半 ${S.upDY[i]}  節點 ${S.ndDY[i]}  下半 ${S.loDY[i]}（上下鍵動：${({all:'整組',up:'上半',nd:'節點',lo:'下半'})[subT]}）`;}
+  else if(sel==='back')t=`返回 x=${S.back.x} y=${S.back.y}`;else if(sel==='title')t=`標題 x=${S.title.x} y=${S.title.y}`;else if(sel==='route')t=`路線 x=${S.route.x} y=${S.route.y}`;
+  document.getElementById('val').textContent=t;}
 
 const TGT=[['back','返回'],['c1','第1幕'],['c2','第2幕'],['c3','第3幕'],['c4','第4幕'],['c5','第5幕'],['route','路線'],['title','標題']];
 const tr=document.getElementById('targets');
-TGT.forEach(([k,lbl])=>{const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=lbl;b.dataset.k=k;b.onclick=()=>{sel=k;[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k));render();};tr.appendChild(b);});
+TGT.forEach(([k,lbl])=>{const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=lbl;b.dataset.k=k;b.onclick=()=>{sel=k;[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k));syncSub();render();};tr.appendChild(b);});
+
+const SUB=[['all','整組'],['up','上半'],['nd','節點'],['lo','下半']];
+const sr=document.getElementById('subrow');
+SUB.forEach(([k,lbl])=>{const b=document.createElement('button');b.textContent=lbl;b.dataset.k=k;b.className=(k===subT?'on':'');b.onclick=()=>{subT=k;[...sr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k));updVal();};sr.appendChild(b);});
+function syncSub(){const show=sel[0]==='c';sr.style.display=show?'flex':'none';}
+syncSub();
+
 document.getElementById('steprow').querySelectorAll('button').forEach(b=>{b.onclick=()=>{step=+b.dataset.s;document.querySelectorAll('#steprow button').forEach(x=>x.classList.toggle('on',x===b));};});
 document.querySelector('.pad').addEventListener('click',e=>{const d=e.target.dataset.d;if(!d)return;if(d==='U')moveSel(0,-step);else if(d==='D')moveSel(0,step);else if(d==='L')moveSel(-step,0);else if(d==='R')moveSel(step,0);else if(d==='C'){if(sel[0]==='c'){const i=+sel[1]-1;S.cards[i].cx=DEFAULT.cards[i].x+DEFAULT.cards[i].w/2;render();}}});
 
+// align helpers: set all cards' node/lower offset so their absolute y matches act1
+document.getElementById('alignBtns').addEventListener('click',e=>{const a=e.target.dataset.a;if(!a)return;
+  if(a==='nd'){const base=S.ndDY[0];for(let i=0;i<5;i++)S.ndDY[i]=base;}
+  if(a==='lo'){const base=S.loDY[0];for(let i=0;i<5;i++)S.loDY[i]=base;}
+  render();});
+
 let drag=null;
 function toI(ev){const r=cv.getBoundingClientRect();const sx=BW/r.width,sy=BH/r.height;const p=ev.touches?ev.touches[0]:ev;return{x:(p.clientX-r.left)*sx,y:(p.clientY-r.top)*sy};}
-cv.addEventListener('pointerdown',ev=>{ev.preventDefault();const p=toI(ev);if(p.y>150&&p.y<660){let best=null,bd=1e9;for(let i=0;i<5;i++){const d=Math.abs(p.x-S.cards[i].cx);if(d<bd){bd=d;best=i;}}if(bd<160){sel='c'+(best+1);[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===sel));}}drag={x:p.x,y:p.y};cv.setPointerCapture(ev.pointerId);render();});
+cv.addEventListener('pointerdown',ev=>{ev.preventDefault();const p=toI(ev);if(p.y>150&&p.y<660){let best=null,bd=1e9;for(let i=0;i<5;i++){const d=Math.abs(p.x-S.cards[i].cx);if(d<bd){bd=d;best=i;}}if(bd<160){sel='c'+(best+1);[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===sel));syncSub();}}drag={x:p.x,y:p.y};cv.setPointerCapture(ev.pointerId);render();});
 cv.addEventListener('pointermove',ev=>{if(!drag)return;ev.preventDefault();const p=toI(ev);const dx=Math.round(p.x-drag.x),dy=Math.round(p.y-drag.y);if(dx||dy){moveSel(dx,dy);drag={x:p.x,y:p.y};}});
 cv.addEventListener('pointerup',()=>{drag=null;});cv.addEventListener('pointercancel',()=>{drag=null;});
 
-const SLD=[['節點 Y','NODE.y',300,500],['節點間距','NODE.sp',20,90],['節點半徑','NODE.r',6,28],
+const SLD=[['節點 Y(基準)','NODE.y',300,500],['節點間距','NODE.sp',20,90],['節點半徑','NODE.r',6,28],
 ['字級·第N幕','FS.no',10,40],['字級·中文名','FS.zh',20,60],['字級·英文','FS.en',10,34],['字級·Boss','FS.boss',10,34],['字級·數據','FS.stat',10,30],['字級·聖物','FS.relic',10,30],['字級·返回','FS.back',14,44],['字級·標題','FS.title',30,80],['字級·副標','FS.sub',12,40],['字級·路線','FS.route',16,48],
-['上半·第N幕↕','UP.no',60,210],['上半·中文名↕','UP.zh',60,230],['上半·英文↕','UP.en',60,250],['下半·Boss絕對y','LO.boss',360,560],['下半·數據','LO.stat',360,580],['下半·聖物','LO.relic',380,600]];
+['上半基準·第N幕','UP.no',60,210],['上半基準·中文名','UP.zh',60,230],['上半基準·英文','UP.en',60,250],['下半基準·Boss','LO.boss',360,560],['下半基準·數據','LO.stat',360,580],['下半基準·聖物','LO.relic',380,600]];
 function gp(p){return p.split('.').reduce((o,k)=>o[k],S);}
 function spv(p,v){const a=p.split('.');let o=S;for(let i=0;i<a.length-1;i++)o=o[a[i]];o[a[a.length-1]]=v;}
-const sc=document.getElementById('sliders');
+const scd=document.getElementById('sliders');
 SLD.forEach(([lbl,path,mn,mx])=>{const row=document.createElement('div');row.className='sld';
   row.innerHTML=`<span>${lbl}</span><input type="range" min="${mn}" max="${mx}" value="${gp(path)}"><b>${gp(path)}</b>`;
   const inp=row.querySelector('input'),out=row.querySelector('b');
   inp.oninput=()=>{spv(path,+inp.value);out.textContent=inp.value;render();};
-  row.dataset.path=path;sc.appendChild(row);});
-function syncSliders(){sc.querySelectorAll('.sld').forEach(r=>{const p=r.dataset.path;r.querySelector('input').value=gp(p);r.querySelector('b').textContent=gp(p);});}
+  row.dataset.path=path;scd.appendChild(row);});
+function syncSliders(){scd.querySelectorAll('.sld').forEach(r=>{const p=r.dataset.path;r.querySelector('input').value=gp(p);r.querySelector('b').textContent=gp(p);});}
 
 document.getElementById('unlock').onchange=render;
 document.getElementById('guide').onchange=render;
 document.getElementById('reset').onclick=()=>{S=JSON.parse(JSON.stringify(DEFAULT));syncSliders();render();};
 document.getElementById('exp').onclick=()=>{
-  const cards=S.cards.map((c)=>`  {x:${c.x},y:${c.y},w:${c.w},h:${c.h},cx:${c.cx},maxw:${c.maxw}}`).join(',\n');
+  const cards=S.cards.map((c,i)=>`  {x:${c.x},y:${c.y},w:${c.w},h:${c.h},cx:${c.cx},maxw:${c.maxw},u:${S.upDY[i]},nd:${S.ndDY[i]},lo:${S.loDY[i]}}`).join(',\n');
   const txt=
-`=== 籃獄圖譜 文字/節點參數（給 Claude baked）===
+`=== 籃獄圖譜 文字/節點參數 v3（給 Claude baked）===
 CARDS cx: [${S.cards.map(c=>c.cx).join(', ')}]
-各幕垂直 dy: [${S.dy.join(', ')}]
+上半位移 upDY: [${S.upDY.join(', ')}]
+節點位移 ndDY: [${S.ndDY.join(', ')}]
+下半位移 loDY: [${S.loDY.join(', ')}]
 NODE: y=${S.NODE.y}, sp=${S.NODE.sp}, r=${S.NODE.r}
 FS: ${JSON.stringify(S.FS)}
-UP: ${JSON.stringify(S.UP)}
-LO: ${JSON.stringify(S.LO)}
-back: x=${S.back.x}, y=${S.back.y}
-title: x=${S.title.x}, y=${S.title.y}（副標 +53）
-route: x=${S.route.x}, y=${S.route.y}
+UP: ${JSON.stringify(S.UP)}  LO: ${JSON.stringify(S.LO)}
+back: x=${S.back.x}, y=${S.back.y}　route: x=${S.route.x}, y=${S.route.y}　title: x=${S.title.x}, y=${S.title.y}
 
-CARDS:
+CARDS(含三段位移 u/nd/lo)：
 [\n${cards}\n]`;
   const o=document.getElementById('out');o.style.display='block';o.value=txt;o.focus();o.select();
 };
