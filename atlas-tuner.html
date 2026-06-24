@@ -1,0 +1,185 @@
+<!DOCTYPE html><html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>籃獄圖譜 文字調校台</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#15101c;color:#e9e0d2;font-family:-apple-system,"PingFang TC","Noto Serif TC",sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:10px}
+  h1{font-size:16px;margin:6px 2px;color:#f4d47a}
+  .hint{font-size:12px;color:#a99;margin:0 2px 8px}
+  #stage{position:relative;width:100%;background:#000;border:1px solid #3a2f1a;border-radius:8px;overflow:hidden;touch-action:none}
+  canvas{display:block;width:100%;height:auto}
+  .row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .tbtn{flex:1 1 auto;min-width:60px;padding:9px 4px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
+  .tbtn.on{background:#f4d47a;color:#1a1208;border-color:#f4d47a}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,52px);gap:6px;max-width:260px;margin:6px auto}
+  .pad button{border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:9px;font-size:20px;font-weight:800}
+  .pad .mid{background:#3a2d1c}
+  .step{display:flex;gap:6px;justify-content:center;margin:6px 0}
+  .step button{padding:7px 14px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
+  .step button.on{background:#9ac63f;color:#15210a;border-color:#9ac63f}
+  .val{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#0d0a14;border:1px solid #2e2740;border-radius:6px;padding:8px;color:#cfeaff;text-align:center;margin:6px 0}
+  .opts{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px;margin:8px 0}
+  .opts label{display:flex;gap:6px;align-items:center}
+  .act{display:flex;gap:8px;margin:8px 0}
+  .act button{flex:1;padding:11px;border-radius:8px;border:1px solid #4a3d22;font-size:15px;font-weight:800}
+  #reset{background:#241c14;color:#d8ccb6}
+  #exp{background:#9ac63f;color:#15210a;border-color:#9ac63f}
+  textarea{width:100%;height:150px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
+  #err{color:#ff8080;font-size:13px;text-align:center;padding:20px}
+</style></head>
+<body><div class="wrap">
+<h1>籃獄圖譜 · 文字調校台</h1>
+<p class="hint">① 點下方目標 → ② 直接在圖上拖曳，或用十字鍵微調（可切 1/5/10px）。③ 調好按「匯出參數」把文字給我，我直接 baked 進遊戲。</p>
+<div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err" style="display:none">底圖載入中…若長時間空白，請確認有網路（會從線上載入底圖）。</div></div>
+
+<div class="row" id="targets"></div>
+
+<div class="step" id="steprow">
+  <span style="align-self:center;font-size:13px;color:#a99">步進：</span>
+  <button data-s="1">1px</button><button data-s="5" class="on">5px</button><button data-s="10">10px</button>
+</div>
+<div class="pad">
+  <div></div><button data-d="U">▲</button><div></div>
+  <button data-d="L">◀</button><button class="mid" data-d="C">置中X</button><button data-d="R">▶</button>
+  <div></div><button data-d="D">▼</button><div></div>
+</div>
+<div class="val" id="val">—</div>
+
+<div class="opts">
+  <label><input type="checkbox" id="unlock"> 全部解鎖預覽</label>
+  <label><input type="checkbox" id="guide" checked> 顯示中心線</label>
+</div>
+
+<div class="act">
+  <button id="reset">重設全部</button>
+  <button id="exp">匯出參數</button>
+</div>
+<textarea id="out" style="display:none" readonly></textarea>
+</div>
+
+<script>
+const IMG_URL="https://hoop-destroyer.vercel.app/assets/atlas_base_clean_nodes_1704x786.png";
+const ACTS=[
+ {id:1,name:'灰哨修院',sub:'Ashen Whistle Abbey',boss:'院長 痛苦院長',relic:'修院餘燼'},
+ {id:2,name:'日蝕沙陵',sub:'Eclipse Dunes',boss:'沙墓巨蟲',relic:'沙王骨弓'},
+ {id:3,name:'腐潮城邦',sub:'Rotting Citadel',boss:'憎恨市長',relic:'城邦電瓶'},
+ {id:4,name:'違規煉獄',sub:'Foul Inferno',boss:'紅牌魔王',relic:'紅牌戰斧'},
+ {id:5,name:'終場之巔',sub:'Overtime Summit',boss:'永遠延長賽之王',relic:'終場寒核'},
+];
+// === 目前遊戲線上的數值（newdraw3e）===
+const DEFAULT={
+  cards:[ {x:222,y:150,w:290,h:520,cx:367,maxw:220},
+          {x:504,y:178,w:255,h:470,cx:631,maxw:196},
+          {x:787,y:178,w:255,h:470,cx:914,maxw:196},
+          {x:1073,y:178,w:255,h:470,cx:1200,maxw:196},
+          {x:1359,y:178,w:255,h:470,cx:1486,maxw:196} ],
+  dy:[0,0,0,0,0],
+  UP:{no:115,zh:148,en:183}, LO:{boss:468,stat:503,relic:536},
+  back:{x:151,y:114}, title:{x:888,y:72}, route:{x:865,y:693}
+};
+let S=JSON.parse(JSON.stringify(DEFAULT));
+let sel='c2', step=5;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const BW=1704,BH=786, U=1, D=v=>v;
+
+const img=new Image();
+img.onload=()=>{ document.getElementById('err').style.display='none'; render(); };
+img.onerror=()=>{ document.getElementById('err').textContent='底圖載入失敗，請確認網路後重開。'; };
+img.src=IMG_URL;
+
+const FONT=(s,w)=>`${w} ${s}px "Noto Serif TC","Noto Serif CJK TC",Georgia,serif`;
+function cline(s,cx,yy,size,weight,color,maxw){ ctx.font=FONT(size,weight); const mb=maxw; let w=ctx.measureText(s).width; if(w>mb) ctx.font=FONT(size*mb/w,weight); ctx.fillStyle=color; ctx.fillText(s,cx,yy); }
+function sh(){ctx.shadowColor='rgba(0,0,0,0.85)';ctx.shadowBlur=4;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;}
+function rs(){ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;}
+
+function render(){
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,BW,BH);
+  if(img.complete&&img.naturalWidth) ctx.drawImage(img,0,0,BW,BH);
+  const unlocked=document.getElementById('unlock').checked;
+  ctx.textBaseline='middle'; ctx.textAlign='center';
+  sh();
+  cline('← 返回',S.back.x,S.back.y,28,'800','#f3ead3',150);
+  cline('籃獄圖譜',S.title.x,S.title.y,56,'900','#f4d47a',300);
+  cline('選擇要進攻的幕',S.title.x,S.title.y+53,24,'800','#e5c36f',320);
+  for(let i=0;i<5;i++){ const A=ACTS[i],C=S.cards[i],dy=S.dy[i]; const lit=unlocked||A.id<=1; const cx=C.cx,mw=C.maxw;
+    ctx.globalAlpha=lit?1:0.52;
+    cline('第 '+A.id+' 幕',cx,C.y+S.UP.no+dy,20,'800',lit?'#ffd45a':'#9f9387',mw);
+    cline(A.name,cx,C.y+S.UP.zh+dy,37,'900',lit?'#f8eddc':'#b9afa9',mw);
+    cline(A.sub,cx,C.y+S.UP.en+dy,18,'800',lit?'#e4c27e':'#91877e',mw);
+    cline(lit?('Boss：'+A.boss):'未解鎖',cx,S.LO.boss+dy,18,'800',lit?'#f2e1c1':'#a49a91',mw);
+    cline('印記 0    擊敗 0    熟度 0',cx,S.LO.stat+dy,17,'800',lit?'#d7c09c':'#8d847b',mw);
+    cline('精魄聖物：'+A.relic,cx,S.LO.relic+dy,17,'800',lit?'#cdb98f':'#897f77',mw);
+    ctx.globalAlpha=1;
+  }
+  rs(); cline('選擇路線  →',S.route.x,S.route.y,32,'900','#15110a',330);
+  // guide line on selected target
+  if(document.getElementById('guide').checked){
+    const gx=selX();
+    if(gx!=null){ ctx.strokeStyle='rgba(0,255,120,0.9)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(gx,90); ctx.lineTo(gx,700); ctx.stroke(); }
+  }
+  updVal();
+}
+function selX(){ if(sel==='back')return S.back.x; if(sel==='title')return S.title.x; if(sel==='route')return S.route.x; const i=+sel[1]-1; return S.cards[i].cx; }
+function selObj(){ if(sel==='back')return S.back; if(sel==='title')return S.title; if(sel==='route')return S.route; return null; }
+function moveSel(dx,dyv){
+  if(sel[0]==='c'){ const i=+sel[1]-1; S.cards[i].cx+=dx; S.dy[i]+=dyv; }
+  else { const o=selObj(); o.x+=dx; o.y+=dyv; }
+  render();
+}
+function updVal(){
+  let t='';
+  if(sel[0]==='c'){ const i=+sel[1]-1; t=`第${i+1}幕  cx=${S.cards[i].cx}  垂直微調 dy=${S.dy[i]}`; }
+  else if(sel==='back') t=`返回  x=${S.back.x}  y=${S.back.y}`;
+  else if(sel==='title') t=`標題  x=${S.title.x}  y=${S.title.y}`;
+  else if(sel==='route') t=`路線  x=${S.route.x}  y=${S.route.y}`;
+  document.getElementById('val').textContent=t;
+}
+
+// targets row
+const TGT=[['back','返回'],['c1','第1幕'],['c2','第2幕'],['c3','第3幕'],['c4','第4幕'],['c5','第5幕'],['route','路線'],['title','標題']];
+const tr=document.getElementById('targets');
+TGT.forEach(([k,lbl])=>{ const b=document.createElement('button'); b.className='tbtn'+(k===sel?' on':''); b.textContent=lbl; b.dataset.k=k;
+  b.onclick=()=>{ sel=k; [...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k)); render(); }; tr.appendChild(b); });
+
+// step
+document.getElementById('steprow').querySelectorAll('button').forEach(b=>{ b.onclick=()=>{ step=+b.dataset.s; document.querySelectorAll('#steprow button').forEach(x=>x.classList.toggle('on',x===b)); }; });
+// pad
+document.querySelector('.pad').addEventListener('click',e=>{ const d=e.target.dataset.d; if(!d)return;
+  if(d==='U')moveSel(0,-step); else if(d==='D')moveSel(0,step); else if(d==='L')moveSel(-step,0); else if(d==='R')moveSel(step,0);
+  else if(d==='C'){ if(sel[0]==='c'){ const i=+sel[1]-1; S.cards[i].cx=DEFAULT.cards[i].x+DEFAULT.cards[i].w/2; render(); } }
+});
+
+// drag on canvas
+let drag=null;
+function toInternal(ev){ const r=cv.getBoundingClientRect(); const sx=BW/r.width, sy=BH/r.height; const p=ev.touches?ev.touches[0]:ev; return {x:(p.clientX-r.left)*sx, y:(p.clientY-r.top)*sy}; }
+cv.addEventListener('pointerdown',ev=>{ ev.preventDefault(); const p=toInternal(ev);
+  // auto-select nearest card by x if tapping in card band
+  if(p.y>150&&p.y<660){ let best=null,bd=1e9; for(let i=0;i<5;i++){ const d=Math.abs(p.x-S.cards[i].cx); if(d<bd){bd=d;best=i;} }
+    if(bd<160){ sel='c'+(best+1); [...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===sel)); } }
+  drag={x:p.x,y:p.y}; cv.setPointerCapture(ev.pointerId); render();
+});
+cv.addEventListener('pointermove',ev=>{ if(!drag)return; ev.preventDefault(); const p=toInternal(ev); const dx=Math.round(p.x-drag.x), dy=Math.round(p.y-drag.y); if(dx||dy){ moveSel(dx,dy); drag={x:p.x,y:p.y}; } });
+cv.addEventListener('pointerup',()=>{drag=null;}); cv.addEventListener('pointercancel',()=>{drag=null;});
+
+document.getElementById('unlock').onchange=render;
+document.getElementById('guide').onchange=render;
+document.getElementById('reset').onclick=()=>{ S=JSON.parse(JSON.stringify(DEFAULT)); render(); };
+document.getElementById('exp').onclick=()=>{
+  const cards=S.cards.map((c,i)=>`{x:${c.x},y:${c.y},w:${c.w},h:${c.h},cx:${c.cx},maxw:${c.maxw}}  // 第${i+1}幕 dy=${S.dy[i]}`).join('\n');
+  const txt=
+`=== 籃獄圖譜 文字參數（給 Claude baked 用）===
+CARDS cx: [${S.cards.map(c=>c.cx).join(', ')}]
+各幕垂直微調 dy: [${S.dy.join(', ')}]
+返回 back: x=${S.back.x}, y=${S.back.y}
+標題 title: x=${S.title.x}, y=${S.title.y}（副標 +53）
+路線 route: x=${S.route.x}, y=${S.route.y}
+UP(上半相對框頂): no=${S.UP.no}, zh=${S.UP.zh}, en=${S.UP.en}
+LO(下半絕對y): boss=${S.LO.boss}, stat=${S.LO.stat}, relic=${S.LO.relic}
+
+CARDS 陣列：
+${cards}`;
+  const o=document.getElementById('out'); o.style.display='block'; o.value=txt; o.focus(); o.select();
+};
+</script></body></html>
