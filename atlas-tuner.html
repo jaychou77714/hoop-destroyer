@@ -7,35 +7,40 @@
   body{margin:0;background:#15101c;color:#e9e0d2;font-family:-apple-system,"PingFang TC","Noto Serif TC",sans-serif}
   .wrap{max-width:1000px;margin:0 auto;padding:10px}
   h1{font-size:16px;margin:6px 2px;color:#f4d47a}
-  .hint{font-size:12px;color:#a99;margin:0 2px 8px}
+  .hint{font-size:12px;color:#a99;margin:0 2px 8px;line-height:1.5}
   #stage{position:relative;width:100%;background:#000;border:1px solid #3a2f1a;border-radius:8px;overflow:hidden;touch-action:none}
   canvas{display:block;width:100%;height:auto}
   .row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
-  .tbtn{flex:1 1 auto;min-width:60px;padding:9px 4px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
+  .tbtn{flex:1 1 auto;min-width:58px;padding:9px 4px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
   .tbtn.on{background:#f4d47a;color:#1a1208;border-color:#f4d47a}
-  .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,52px);gap:6px;max-width:260px;margin:6px auto}
-  .pad button{border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:9px;font-size:20px;font-weight:800}
-  .pad .mid{background:#3a2d1c}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,50px);gap:6px;max-width:260px;margin:6px auto}
+  .pad button{border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:9px;font-size:19px;font-weight:800}
+  .pad .mid{background:#3a2d1c;font-size:13px}
   .step{display:flex;gap:6px;justify-content:center;margin:6px 0}
   .step button{padding:7px 14px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:14px;font-weight:700}
   .step button.on{background:#9ac63f;color:#15210a;border-color:#9ac63f}
   .val{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#0d0a14;border:1px solid #2e2740;border-radius:6px;padding:8px;color:#cfeaff;text-align:center;margin:6px 0}
-  .opts{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px;margin:8px 0}
+  .opts{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px;margin:8px 0}
   .opts label{display:flex;gap:6px;align-items:center}
+  details{border:1px solid #3a2f1a;border-radius:8px;margin:8px 0;background:#1b1524}
+  summary{padding:10px;font-weight:700;color:#f4d47a;cursor:pointer}
+  .sld{display:flex;align-items:center;gap:8px;padding:4px 10px;font-size:13px}
+  .sld span{flex:0 0 148px;color:#cbb}
+  .sld input[type=range]{flex:1}
+  .sld b{flex:0 0 46px;text-align:right;font-family:ui-monospace,monospace;color:#bfe}
   .act{display:flex;gap:8px;margin:8px 0}
   .act button{flex:1;padding:11px;border-radius:8px;border:1px solid #4a3d22;font-size:15px;font-weight:800}
   #reset{background:#241c14;color:#d8ccb6}
   #exp{background:#9ac63f;color:#15210a;border-color:#9ac63f}
-  textarea{width:100%;height:150px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
-  #err{color:#ff8080;font-size:13px;text-align:center;padding:20px}
+  textarea{width:100%;height:180px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
+  #err{color:#ffb080;font-size:13px;text-align:center;padding:20px}
 </style></head>
 <body><div class="wrap">
-<h1>籃獄圖譜 · 文字調校台</h1>
-<p class="hint">① 點下方目標 → ② 直接在圖上拖曳，或用十字鍵微調（可切 1/5/10px）。③ 調好按「匯出參數」把文字給我，我直接 baked 進遊戲。</p>
-<div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err" style="display:none">底圖載入中…若長時間空白，請確認有網路（會從線上載入底圖）。</div></div>
+<h1>籃獄圖譜 · 文字調校台 v2</h1>
+<p class="hint">① 點目標鈕選卡 → ② 在圖上拖曳，<b>文字＋連結點一起動</b>（或用十字鍵微調，可切 1/5/10px）。<br>③ 進階面板可調節點大小/間距、各字級、上下半位置。④ 按「匯出參數」整段貼給我。</p>
+<div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err" style="display:none"></div></div>
 
 <div class="row" id="targets"></div>
-
 <div class="step" id="steprow">
   <span style="align-self:center;font-size:13px;color:#a99">步進：</span>
   <button data-s="1">1px</button><button data-s="5" class="on">5px</button><button data-s="10">10px</button>
@@ -49,18 +54,18 @@
 
 <div class="opts">
   <label><input type="checkbox" id="unlock"> 全部解鎖預覽</label>
-  <label><input type="checkbox" id="guide" checked> 顯示中心線</label>
+  <label><input type="checkbox" id="guide" checked> 中心線</label>
 </div>
 
-<div class="act">
-  <button id="reset">重設全部</button>
-  <button id="exp">匯出參數</button>
-</div>
+<details id="adv"><summary>進階參數（節點 / 字級 / 上下半位置）▾</summary><div id="sliders"></div></details>
+
+<div class="act"><button id="reset">重設全部</button><button id="exp">匯出參數</button></div>
 <textarea id="out" style="display:none" readonly></textarea>
 </div>
 
 <script>
-const IMG_URL="https://hoop-destroyer.vercel.app/assets/atlas_base_clean_nodes_1704x786.png";
+const TAU=Math.PI*2;
+const IMG_URL="https://hoop-destroyer.vercel.app/assets/atlas_base_clean_no_nodes_1704x786.png";
 const ACTS=[
  {id:1,name:'灰哨修院',sub:'Ashen Whistle Abbey',boss:'院長 痛苦院長',relic:'修院餘燼'},
  {id:2,name:'日蝕沙陵',sub:'Eclipse Dunes',boss:'沙墓巨蟲',relic:'沙王骨弓'},
@@ -68,118 +73,113 @@ const ACTS=[
  {id:4,name:'違規煉獄',sub:'Foul Inferno',boss:'紅牌魔王',relic:'紅牌戰斧'},
  {id:5,name:'終場之巔',sub:'Overtime Summit',boss:'永遠延長賽之王',relic:'終場寒核'},
 ];
-// === 目前遊戲線上的數值（newdraw3e）===
 const DEFAULT={
-  cards:[ {x:222,y:150,w:290,h:520,cx:367,maxw:220},
-          {x:504,y:178,w:255,h:470,cx:631,maxw:196},
-          {x:787,y:178,w:255,h:470,cx:914,maxw:196},
-          {x:1073,y:178,w:255,h:470,cx:1200,maxw:196},
-          {x:1359,y:178,w:255,h:470,cx:1486,maxw:196} ],
+  cards:[{x:222,y:150,w:290,h:520,cx:367,maxw:220},
+         {x:504,y:178,w:255,h:470,cx:631,maxw:196},
+         {x:787,y:178,w:255,h:470,cx:914,maxw:196},
+         {x:1073,y:178,w:255,h:470,cx:1200,maxw:196},
+         {x:1359,y:178,w:255,h:470,cx:1486,maxw:196}],
   dy:[0,0,0,0,0],
+  NODE:{y:396,sp:48,r:13},
+  FS:{no:20,zh:37,en:18,boss:18,stat:17,relic:17,back:28,title:56,sub:24,route:32},
   UP:{no:115,zh:148,en:183}, LO:{boss:468,stat:503,relic:536},
   back:{x:151,y:114}, title:{x:888,y:72}, route:{x:865,y:693}
 };
 let S=JSON.parse(JSON.stringify(DEFAULT));
 let sel='c2', step=5;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
-const BW=1704,BH=786, U=1, D=v=>v;
-
+const BW=1704,BH=786;
 const img=new Image();
-img.onload=()=>{ document.getElementById('err').style.display='none'; render(); };
-img.onerror=()=>{ document.getElementById('err').textContent='底圖載入失敗，請確認網路後重開。'; };
+img.onload=()=>{document.getElementById('err').style.display='none';render();};
+img.onerror=()=>{const e=document.getElementById('err');e.style.display='block';e.textContent='底圖載入失敗，請確認網路後重開。';};
 img.src=IMG_URL;
 
 const FONT=(s,w)=>`${w} ${s}px "Noto Serif TC","Noto Serif CJK TC",Georgia,serif`;
-function cline(s,cx,yy,size,weight,color,maxw){ ctx.font=FONT(size,weight); const mb=maxw; let w=ctx.measureText(s).width; if(w>mb) ctx.font=FONT(size*mb/w,weight); ctx.fillStyle=color; ctx.fillText(s,cx,yy); }
+function cline(s,cx,yy,size,weight,color,maxw){ctx.font=FONT(size,weight);const mb=maxw;let w=ctx.measureText(s).width;if(w>mb)ctx.font=FONT(size*mb/w,weight);ctx.fillStyle=color;ctx.fillText(s,cx,yy);}
 function sh(){ctx.shadowColor='rgba(0,0,0,0.85)';ctx.shadowBlur=4;ctx.shadowOffsetX=2;ctx.shadowOffsetY=2;}
 function rs(){ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;}
-
+function nodes(cx,y){const r=S.NODE.r,sp=S.NODE.sp,n=4,total=(n-1)*sp,x0=cx-total/2;
+  ctx.save();ctx.shadowColor='transparent';ctx.globalAlpha=1;
+  ctx.strokeStyle='#7c6626';ctx.lineWidth=Math.max(2,r*0.42);ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x0+total,y);ctx.stroke();
+  for(let i=0;i<n;i++){const x=x0+i*sp,red=(i===n-1);
+    ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fillStyle=red?'#c9382e':'#7a6a2b';ctx.fill();
+    ctx.beginPath();ctx.arc(x,y,r*0.42,0,TAU);ctx.fillStyle=red?'#2c1411':'#241f12';ctx.fill();
+    ctx.lineWidth=Math.max(1.5,r*0.12);ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.stroke();}
+  ctx.restore();
+}
 function render(){
-  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,BW,BH);
-  if(img.complete&&img.naturalWidth) ctx.drawImage(img,0,0,BW,BH);
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,BW,BH);
+  if(img.complete&&img.naturalWidth)ctx.drawImage(img,0,0,BW,BH);
   const unlocked=document.getElementById('unlock').checked;
-  ctx.textBaseline='middle'; ctx.textAlign='center';
-  sh();
-  cline('← 返回',S.back.x,S.back.y,28,'800','#f3ead3',150);
-  cline('籃獄圖譜',S.title.x,S.title.y,56,'900','#f4d47a',300);
-  cline('選擇要進攻的幕',S.title.x,S.title.y+53,24,'800','#e5c36f',320);
-  for(let i=0;i<5;i++){ const A=ACTS[i],C=S.cards[i],dy=S.dy[i]; const lit=unlocked||A.id<=1; const cx=C.cx,mw=C.maxw;
+  for(let i=0;i<5;i++){const C=S.cards[i];nodes(C.cx,S.NODE.y+S.dy[i]);}
+  ctx.textBaseline='middle';ctx.textAlign='center';sh();
+  cline('← 返回',S.back.x,S.back.y,S.FS.back,'800','#f3ead3',150);
+  cline('籃獄圖譜',S.title.x,S.title.y,S.FS.title,'900','#f4d47a',300);
+  cline('選擇要進攻的幕',S.title.x,S.title.y+53,S.FS.sub,'800','#e5c36f',320);
+  for(let i=0;i<5;i++){const A=ACTS[i],C=S.cards[i],dy=S.dy[i],lit=unlocked||A.id<=1,cx=C.cx,mw=C.maxw;
     ctx.globalAlpha=lit?1:0.52;
-    cline('第 '+A.id+' 幕',cx,C.y+S.UP.no+dy,20,'800',lit?'#ffd45a':'#9f9387',mw);
-    cline(A.name,cx,C.y+S.UP.zh+dy,37,'900',lit?'#f8eddc':'#b9afa9',mw);
-    cline(A.sub,cx,C.y+S.UP.en+dy,18,'800',lit?'#e4c27e':'#91877e',mw);
-    cline(lit?('Boss：'+A.boss):'未解鎖',cx,S.LO.boss+dy,18,'800',lit?'#f2e1c1':'#a49a91',mw);
-    cline('印記 0    擊敗 0    熟度 0',cx,S.LO.stat+dy,17,'800',lit?'#d7c09c':'#8d847b',mw);
-    cline('精魄聖物：'+A.relic,cx,S.LO.relic+dy,17,'800',lit?'#cdb98f':'#897f77',mw);
+    cline('第 '+A.id+' 幕',cx,C.y+S.UP.no+dy,S.FS.no,'800',lit?'#ffd45a':'#9f9387',mw);
+    cline(A.name,cx,C.y+S.UP.zh+dy,S.FS.zh,'900',lit?'#f8eddc':'#b9afa9',mw);
+    cline(A.sub,cx,C.y+S.UP.en+dy,S.FS.en,'800',lit?'#e4c27e':'#91877e',mw);
+    cline(lit?('Boss：'+A.boss):'未解鎖',cx,S.LO.boss+dy,S.FS.boss,'800',lit?'#f2e1c1':'#a49a91',mw);
+    cline('印記 0    擊敗 0    熟度 0',cx,S.LO.stat+dy,S.FS.stat,'800',lit?'#d7c09c':'#8d847b',mw);
+    cline('精魄聖物：'+A.relic,cx,S.LO.relic+dy,S.FS.relic,'800',lit?'#cdb98f':'#897f77',mw);
     ctx.globalAlpha=1;
   }
-  rs(); cline('選擇路線  →',S.route.x,S.route.y,32,'900','#15110a',330);
-  // guide line on selected target
-  if(document.getElementById('guide').checked){
-    const gx=selX();
-    if(gx!=null){ ctx.strokeStyle='rgba(0,255,120,0.9)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(gx,90); ctx.lineTo(gx,700); ctx.stroke(); }
-  }
+  rs();cline('選擇路線  →',S.route.x,S.route.y,S.FS.route,'900','#15110a',330);
+  if(document.getElementById('guide').checked){const gx=selX();if(gx!=null){ctx.strokeStyle='rgba(0,255,120,0.9)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(gx,90);ctx.lineTo(gx,700);ctx.stroke();}}
   updVal();
 }
-function selX(){ if(sel==='back')return S.back.x; if(sel==='title')return S.title.x; if(sel==='route')return S.route.x; const i=+sel[1]-1; return S.cards[i].cx; }
-function selObj(){ if(sel==='back')return S.back; if(sel==='title')return S.title; if(sel==='route')return S.route; return null; }
-function moveSel(dx,dyv){
-  if(sel[0]==='c'){ const i=+sel[1]-1; S.cards[i].cx+=dx; S.dy[i]+=dyv; }
-  else { const o=selObj(); o.x+=dx; o.y+=dyv; }
-  render();
-}
-function updVal(){
-  let t='';
-  if(sel[0]==='c'){ const i=+sel[1]-1; t=`第${i+1}幕  cx=${S.cards[i].cx}  垂直微調 dy=${S.dy[i]}`; }
-  else if(sel==='back') t=`返回  x=${S.back.x}  y=${S.back.y}`;
-  else if(sel==='title') t=`標題  x=${S.title.x}  y=${S.title.y}`;
-  else if(sel==='route') t=`路線  x=${S.route.x}  y=${S.route.y}`;
-  document.getElementById('val').textContent=t;
-}
+function selX(){if(sel==='back')return S.back.x;if(sel==='title')return S.title.x;if(sel==='route')return S.route.x;return S.cards[+sel[1]-1].cx;}
+function selObj(){if(sel==='back')return S.back;if(sel==='title')return S.title;if(sel==='route')return S.route;return null;}
+function moveSel(dx,dyv){if(sel[0]==='c'){const i=+sel[1]-1;S.cards[i].cx+=dx;S.dy[i]+=dyv;}else{const o=selObj();o.x+=dx;o.y+=dyv;}render();}
+function updVal(){let t='';if(sel[0]==='c'){const i=+sel[1]-1;t=`第${i+1}幕  cx=${S.cards[i].cx}  垂直 dy=${S.dy[i]}（文字＋節點一起動）`;}else if(sel==='back')t=`返回  x=${S.back.x}  y=${S.back.y}`;else if(sel==='title')t=`標題  x=${S.title.x}  y=${S.title.y}`;else if(sel==='route')t=`路線  x=${S.route.x}  y=${S.route.y}`;document.getElementById('val').textContent=t;}
 
-// targets row
 const TGT=[['back','返回'],['c1','第1幕'],['c2','第2幕'],['c3','第3幕'],['c4','第4幕'],['c5','第5幕'],['route','路線'],['title','標題']];
 const tr=document.getElementById('targets');
-TGT.forEach(([k,lbl])=>{ const b=document.createElement('button'); b.className='tbtn'+(k===sel?' on':''); b.textContent=lbl; b.dataset.k=k;
-  b.onclick=()=>{ sel=k; [...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k)); render(); }; tr.appendChild(b); });
+TGT.forEach(([k,lbl])=>{const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=lbl;b.dataset.k=k;b.onclick=()=>{sel=k;[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k));render();};tr.appendChild(b);});
+document.getElementById('steprow').querySelectorAll('button').forEach(b=>{b.onclick=()=>{step=+b.dataset.s;document.querySelectorAll('#steprow button').forEach(x=>x.classList.toggle('on',x===b));};});
+document.querySelector('.pad').addEventListener('click',e=>{const d=e.target.dataset.d;if(!d)return;if(d==='U')moveSel(0,-step);else if(d==='D')moveSel(0,step);else if(d==='L')moveSel(-step,0);else if(d==='R')moveSel(step,0);else if(d==='C'){if(sel[0]==='c'){const i=+sel[1]-1;S.cards[i].cx=DEFAULT.cards[i].x+DEFAULT.cards[i].w/2;render();}}});
 
-// step
-document.getElementById('steprow').querySelectorAll('button').forEach(b=>{ b.onclick=()=>{ step=+b.dataset.s; document.querySelectorAll('#steprow button').forEach(x=>x.classList.toggle('on',x===b)); }; });
-// pad
-document.querySelector('.pad').addEventListener('click',e=>{ const d=e.target.dataset.d; if(!d)return;
-  if(d==='U')moveSel(0,-step); else if(d==='D')moveSel(0,step); else if(d==='L')moveSel(-step,0); else if(d==='R')moveSel(step,0);
-  else if(d==='C'){ if(sel[0]==='c'){ const i=+sel[1]-1; S.cards[i].cx=DEFAULT.cards[i].x+DEFAULT.cards[i].w/2; render(); } }
-});
-
-// drag on canvas
 let drag=null;
-function toInternal(ev){ const r=cv.getBoundingClientRect(); const sx=BW/r.width, sy=BH/r.height; const p=ev.touches?ev.touches[0]:ev; return {x:(p.clientX-r.left)*sx, y:(p.clientY-r.top)*sy}; }
-cv.addEventListener('pointerdown',ev=>{ ev.preventDefault(); const p=toInternal(ev);
-  // auto-select nearest card by x if tapping in card band
-  if(p.y>150&&p.y<660){ let best=null,bd=1e9; for(let i=0;i<5;i++){ const d=Math.abs(p.x-S.cards[i].cx); if(d<bd){bd=d;best=i;} }
-    if(bd<160){ sel='c'+(best+1); [...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===sel)); } }
-  drag={x:p.x,y:p.y}; cv.setPointerCapture(ev.pointerId); render();
-});
-cv.addEventListener('pointermove',ev=>{ if(!drag)return; ev.preventDefault(); const p=toInternal(ev); const dx=Math.round(p.x-drag.x), dy=Math.round(p.y-drag.y); if(dx||dy){ moveSel(dx,dy); drag={x:p.x,y:p.y}; } });
-cv.addEventListener('pointerup',()=>{drag=null;}); cv.addEventListener('pointercancel',()=>{drag=null;});
+function toI(ev){const r=cv.getBoundingClientRect();const sx=BW/r.width,sy=BH/r.height;const p=ev.touches?ev.touches[0]:ev;return{x:(p.clientX-r.left)*sx,y:(p.clientY-r.top)*sy};}
+cv.addEventListener('pointerdown',ev=>{ev.preventDefault();const p=toI(ev);if(p.y>150&&p.y<660){let best=null,bd=1e9;for(let i=0;i<5;i++){const d=Math.abs(p.x-S.cards[i].cx);if(d<bd){bd=d;best=i;}}if(bd<160){sel='c'+(best+1);[...tr.children].forEach(c=>c.classList.toggle('on',c.dataset.k===sel));}}drag={x:p.x,y:p.y};cv.setPointerCapture(ev.pointerId);render();});
+cv.addEventListener('pointermove',ev=>{if(!drag)return;ev.preventDefault();const p=toI(ev);const dx=Math.round(p.x-drag.x),dy=Math.round(p.y-drag.y);if(dx||dy){moveSel(dx,dy);drag={x:p.x,y:p.y};}});
+cv.addEventListener('pointerup',()=>{drag=null;});cv.addEventListener('pointercancel',()=>{drag=null;});
+
+const SLD=[['節點 Y','NODE.y',300,500],['節點間距','NODE.sp',20,90],['節點半徑','NODE.r',6,28],
+['字級·第N幕','FS.no',10,40],['字級·中文名','FS.zh',20,60],['字級·英文','FS.en',10,34],['字級·Boss','FS.boss',10,34],['字級·數據','FS.stat',10,30],['字級·聖物','FS.relic',10,30],['字級·返回','FS.back',14,44],['字級·標題','FS.title',30,80],['字級·副標','FS.sub',12,40],['字級·路線','FS.route',16,48],
+['上半·第N幕↕','UP.no',60,210],['上半·中文名↕','UP.zh',60,230],['上半·英文↕','UP.en',60,250],['下半·Boss絕對y','LO.boss',360,560],['下半·數據','LO.stat',360,580],['下半·聖物','LO.relic',380,600]];
+function gp(p){return p.split('.').reduce((o,k)=>o[k],S);}
+function spv(p,v){const a=p.split('.');let o=S;for(let i=0;i<a.length-1;i++)o=o[a[i]];o[a[a.length-1]]=v;}
+const sc=document.getElementById('sliders');
+SLD.forEach(([lbl,path,mn,mx])=>{const row=document.createElement('div');row.className='sld';
+  row.innerHTML=`<span>${lbl}</span><input type="range" min="${mn}" max="${mx}" value="${gp(path)}"><b>${gp(path)}</b>`;
+  const inp=row.querySelector('input'),out=row.querySelector('b');
+  inp.oninput=()=>{spv(path,+inp.value);out.textContent=inp.value;render();};
+  row.dataset.path=path;sc.appendChild(row);});
+function syncSliders(){sc.querySelectorAll('.sld').forEach(r=>{const p=r.dataset.path;r.querySelector('input').value=gp(p);r.querySelector('b').textContent=gp(p);});}
 
 document.getElementById('unlock').onchange=render;
 document.getElementById('guide').onchange=render;
-document.getElementById('reset').onclick=()=>{ S=JSON.parse(JSON.stringify(DEFAULT)); render(); };
+document.getElementById('reset').onclick=()=>{S=JSON.parse(JSON.stringify(DEFAULT));syncSliders();render();};
 document.getElementById('exp').onclick=()=>{
-  const cards=S.cards.map((c,i)=>`{x:${c.x},y:${c.y},w:${c.w},h:${c.h},cx:${c.cx},maxw:${c.maxw}}  // 第${i+1}幕 dy=${S.dy[i]}`).join('\n');
+  const cards=S.cards.map((c)=>`  {x:${c.x},y:${c.y},w:${c.w},h:${c.h},cx:${c.cx},maxw:${c.maxw}}`).join(',\n');
   const txt=
-`=== 籃獄圖譜 文字參數（給 Claude baked 用）===
+`=== 籃獄圖譜 文字/節點參數（給 Claude baked）===
 CARDS cx: [${S.cards.map(c=>c.cx).join(', ')}]
-各幕垂直微調 dy: [${S.dy.join(', ')}]
-返回 back: x=${S.back.x}, y=${S.back.y}
-標題 title: x=${S.title.x}, y=${S.title.y}（副標 +53）
-路線 route: x=${S.route.x}, y=${S.route.y}
-UP(上半相對框頂): no=${S.UP.no}, zh=${S.UP.zh}, en=${S.UP.en}
-LO(下半絕對y): boss=${S.LO.boss}, stat=${S.LO.stat}, relic=${S.LO.relic}
+各幕垂直 dy: [${S.dy.join(', ')}]
+NODE: y=${S.NODE.y}, sp=${S.NODE.sp}, r=${S.NODE.r}
+FS: ${JSON.stringify(S.FS)}
+UP: ${JSON.stringify(S.UP)}
+LO: ${JSON.stringify(S.LO)}
+back: x=${S.back.x}, y=${S.back.y}
+title: x=${S.title.x}, y=${S.title.y}（副標 +53）
+route: x=${S.route.x}, y=${S.route.y}
 
-CARDS 陣列：
-${cards}`;
-  const o=document.getElementById('out'); o.style.display='block'; o.value=txt; o.focus(); o.select();
+CARDS:
+[\n${cards}\n]`;
+  const o=document.getElementById('out');o.style.display='block';o.value=txt;o.focus();o.select();
 };
 </script></body></html>
