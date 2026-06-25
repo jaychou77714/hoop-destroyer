@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`90041cf`(Phase 4-2 五種進球判定)。push 後請更新本行。
+- **目前 HEAD**：`8623688`(瞄準觸控小修：任意空白處拖曳、錨點差量)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -109,6 +109,7 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 
 - **Phase 4-2 五種進球判定**(`90041cf`)：**只動三函式**。`spawnBall` 初始化 `rimBounces:0/_rimLatch:false/scoreType:null`；`collideHoop` 加上升緣閂鎖累積 `rimBounces`(防每幀灌水，反彈衝量一字未改)；`makeBasket` 依優先序判 `b.scoreType`(空心`!board&&rb===0`>擦板`board&&rb===0`>幸運`rb>=2`>普通其餘)、用相容布林`swish/bank`餵下游、補「幸運進球 LUCKY!」(紫#c89bff)/「進球」浮字。**幸運球**：傷害=XP=普通(走 swish=bank=false)、不觸發空心/擦板/擦板蠻王加成、combo 照++不中斷。投失沿用 `endShot(false)` 未動。headless 驗證：五型判定優先序正確(含 board+rb>=2→lucky)、閂鎖貼框8幀只計1次/離開歸位/再接觸計2、LUCKY 浮字渲染 OK。**未動** stepBall/battleDown·Move·Up/drawHUD/drawEnd/物理/heroes/route/atlas/球途盤/球語/干擾/loadout。
 - **`b.scoreType` 現可用**：戰鬥內每次進球後 `run.ball.scoreType` ∈ {swish,bank,lucky,normal}。未來若要結算頁幸運球計數或聖物依 scoreType 觸發，直接讀此欄。
+- **瞄準觸控小修**(`8623688`)：為實機測試手感，把拉弓改成「**按下點為錨、拖曳差量**」模型(原本是球→手指、按遠處會滿力)。生效 `battleDown`@2206、`battleUp`@765、`drawAim`@1883(檔內有重複定義，**取最後者為生效**，別改到死碼 759)。新增 `run.aimStartX/aimStartY` 錨點(按下時記錄)；battleUp/drawAim 用 `(aimStart - 手指)` 算方向力道。**發射起點與預測軌跡仍從球 b.x,b.y**。觸控避開 UI(英雄面板 IL+24..+486×IT+22..+210 / 關卡條 BW/2±280×IT+18..+92 / 暫停右上 / 底部 BH-IB-44 以下)，保留按球附近也可拉。headless 驗證 10 項全過(任意空白拉/錨點正確/左下拖→右上射/起點在球/UI不誤觸/按球附近仍可/點擊不誤射)。**未動** stepBall/collideHoop/makeBasket/五種判定/drawHUD/籃框行為/干擾/loadout/heroes/route/atlas/球途盤/球語。
 
 ## 11. 近期 commit(新→舊)
 `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排 → `9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段 → `a9fd9d5` 英雄頁第一階段 → `b450439` 首頁/導航重構 → `25b4b89` 清舊版+webp+vercel no-cache。
