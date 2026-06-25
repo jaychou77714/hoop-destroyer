@@ -1,0 +1,166 @@
+<!DOCTYPE html><html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>HOOPBREAKER · 全頁面調校後台</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#15101c;color:#e9e0d2;font-family:-apple-system,"PingFang TC","Noto Serif TC",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:8px}
+  h1{font-size:15px;margin:6px 2px;color:#f4d47a}
+  .hint{font-size:12px;color:#a99;margin:0 2px 6px;line-height:1.5}
+  .tabs{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+  .tab{padding:8px 12px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:13px;font-weight:700}
+  .tab.on{background:#f4d47a;color:#1a1208;border-color:#f4d47a}
+  .tab.todo{opacity:.62}
+  #stage{position:relative;width:100%;background:#000;border:1px solid #3a2f1a;border-radius:8px;overflow:hidden;touch-action:none}
+  canvas{display:block;width:100%;height:auto}
+  .row{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;max-height:118px;overflow:auto;padding:2px}
+  .tbtn{flex:0 0 auto;padding:7px 9px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:6px;font-size:12px;font-weight:700}
+  .tbtn.on{background:#39ff88;color:#06210f;border-color:#39ff88}
+  .step{display:flex;gap:6px;justify-content:center;align-items:center;margin:6px 0;flex-wrap:wrap}
+  .step button{padding:7px 12px;border:1px solid #4a3d22;background:#241c14;color:#d8ccb6;border-radius:7px;font-size:13px;font-weight:700}
+  .step button.on{background:#9ac63f;color:#15210a;border-color:#9ac63f}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,46px);gap:6px;max-width:230px;margin:6px auto}
+  .pad button{border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:9px;font-size:18px;font-weight:800}
+  .pad .mid{background:#3a2d1c;font-size:12px}
+  .szrow{display:flex;gap:8px;justify-content:center;margin:6px 0}
+  .szrow button{padding:9px 18px;border:1px solid #4a3d22;background:#2a2118;color:#f0e6d2;border-radius:8px;font-size:16px;font-weight:800}
+  .val{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0d0a14;border:1px solid #2e2740;border-radius:6px;padding:8px;color:#cfeaff;text-align:center;margin:6px 0}
+  .opts{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:13px;margin:6px 0}
+  .opts label{display:flex;gap:6px;align-items:center}
+  .act{display:flex;gap:8px;margin:10px 0}
+  .act button{flex:1;padding:12px;border-radius:8px;border:1px solid #4a3d22;font-size:15px;font-weight:800}
+  #reset{background:#241c14;color:#d8ccb6}
+  #exp{background:#9ac63f;color:#15210a;border-color:#9ac63f}
+  textarea{width:100%;height:200px;background:#0d0a14;color:#bfe;border:1px solid #2e2740;border-radius:6px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;margin-top:6px}
+  #todo{padding:30px;text-align:center;color:#cbb;font-size:15px;line-height:1.7}
+  #err{color:#ffb080;font-size:13px;text-align:center;padding:20px;display:none}
+</style></head>
+<body><div class="wrap">
+<h1>HOOPBREAKER · 全頁面調校後台</h1>
+<p class="hint">上方選頁籤 → 點下方元件名稱（或圖上綠點）選元件 → 十字鍵微調 / A± 調字級 → 「匯出參數」整段貼回給 Claude。每個元件都可<b>個別</b>調。</p>
+<div class="tabs" id="tabs"></div>
+<div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err"></div></div>
+<div id="todo" style="display:none"></div>
+
+<div class="row" id="targets"></div>
+<div class="step"><span style="font-size:13px;color:#a99">步進</span><button data-s="1">1</button><button data-s="5" class="on">5</button><button data-s="10">10</button></div>
+<div class="pad"><div></div><button data-d="U">▲</button><div></div><button data-d="L">◀</button><button class="mid" data-d="C">置中X</button><button data-d="R">▶</button><div></div><button data-d="D">▼</button><div></div></div>
+<div class="szrow"><button data-z="-1">A −</button><button data-z="1">A ＋</button></div>
+<div class="val" id="val">—</div>
+<div class="opts"><label><input type="checkbox" id="guide" checked> 中心線</label><label><input type="checkbox" id="markers" checked> 綠點</label></div>
+<div class="act"><button id="reset">重設本頁</button><button id="exp">匯出參數</button></div>
+<textarea id="out" style="display:none" readonly></textarea>
+</div>
+<script>
+const TAU=Math.PI*2, W=1704, H=786, A="https://hoop-destroyer.vercel.app";
+const CLS=['#caa23a','#9a6fd0','#5a86d8','#b5483f','#9a6fd0'], RCH=['修','血','死','裁','裂'];
+const ROUTES=[['速投線','2 菁英 + Boss｜約 7-9 分｜標準掉落'],['標準遠征','3 菁英 + Boss｜約 10-15 分｜較多聖物'],['腐化加時','3 腐化菁英 + Boss 變體｜失手 +20%｜標誌機率高']];
+const STONES=[['無門捷徑','跳過一個菁英關，但 Boss +一組護衛'],['貪婪深路','聖物掉落提高，失手傷害 +20%'],['追獵者誓約','菁英比例提高，所有進球 XP +20%'],['不朽鎮印','本次遠征第一次失手不扣血'],['遠望之徑','顯示所有事件與標誌傾向'],['替補名單','每次升級可重抽，但 Boss 多一階段護衛']];
+
+// === 各頁籤 ===
+const TABS=[
+ {k:'route',label:'遠征頁',bg:A+'/assets/stage1_route_base_1704x786.webp',impl:true},
+ {k:'home',label:'首頁',bg:A+'/assets/background/home_bg_dark_1704x786.webp',impl:false},
+ {k:'bench',label:'板凳席',bg:A+'/assets/final_bench_menu/final_bench_menu_full_flat_1704x786.webp',impl:false},
+ {k:'hero',label:'英雄選',bg:A+'/assets/hero_select/bg_clean.webp',impl:false},
+ {k:'atlas',label:'地圖',bg:A+'/assets/atlas_base_clean_no_nodes_1704x786.webp',impl:false},
+ {k:'codex',label:'玩法圖鑑',bg:A+'/assets/host_guide/codex_bg_flat.webp',impl:false},
+ {k:'settings',label:'設定',bg:null,impl:false},
+ {k:'end',label:'結算',bg:null,impl:false},
+];
+
+// === 遠征頁全元件預設 (與引擎 _drawRouteArt 同 key) ===
+function DEF_route(){const d={
+ back:{x:131,y:57,s:19},title:{x:852,y:50,s:30},subtitle:{x:852,y:86,s:15},
+ portrait:{x:165,y:177,r:73},heroName:{x:252,y:150,s:27},heroEn:{x:252,y:184,s:17},heroRole:{x:252,y:214,s:15},
+ relicLabel:{x:525,y:140,s:16},bd:{x:525,y:242,s:14},changeBtn:{x:1490,y:226,s:15},
+ routeHeader:{x:293,y:290,s:20},stonesHeader:{x:1387,y:286,s:18},summary:{x:852,y:686,s:15},cta:{x:853,y:737,s:26},
+};
+ const rd=[553,623,693,763,833]; for(let i=0;i<5;i++)d['relic'+i]={x:rd[i],y:184,sz:52};
+ const ry=[355,454,553]; for(let i=0;i<3;i++){d['r'+i+'name']={x:189,y:ry[i]+34,s:22};d['r'+i+'desc']={x:189,y:ry[i]+62,s:13};}
+ const col=[1285,1490],top=[308,445,580]; for(let i=0;i<6;i++){const c=i%2,r=(i/2)|0;d['s'+i+'name']={x:col[c],y:top[r]+62,s:18};d['s'+i+'desc']={x:col[c],y:top[r]+86,s:14};}
+ const nx=[648,772,904,1046],ny=[516,612,600,516]; for(let i=0;i<4;i++)d['node'+i]={x:nx[i],y:ny[i]};
+ return d;
+}
+const LABELS={back:'返回',title:'主標',subtitle:'副標',portrait:'頭像',heroName:'角色名',heroEn:'英文名',heroRole:'定位',relicLabel:'攜帶聖物字',bd:'BD',changeBtn:'回英雄頁',routeHeader:'路線標題',stonesHeader:'石板標題',summary:'出戰摘要',cta:'進入鈕字',relic0:'聖物1',relic1:'聖物2',relic2:'聖物3',relic3:'聖物4',relic4:'聖物5',r0name:'路線1名',r0desc:'路線1述',r1name:'路線2名',r1desc:'路線2述',r2name:'路線3名',r2desc:'路線3述',s0name:'石板1名',s0desc:'石板1述',s1name:'石板2名',s1desc:'石板2述',s2name:'石板3名',s2desc:'石板3述',s3name:'石板4名',s3desc:'石板4述',s4name:'石板5名',s4desc:'石板5述',s5name:'石板6名',s5desc:'石板6述',node0:'節點1',node1:'節點2',node2:'節點3',node3:'Boss節點'};
+
+let curTab='route', sel=null, step=5;
+let L={}, def={};
+const imgs={};
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+function loadTab(tk){ curTab=tk; sel=null;
+ const tab=TABS.find(t=>t.k===tk);
+ document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.k===tk));
+ const editable=tab.impl;
+ document.getElementById('todo').style.display=editable?'none':'block';
+ ['targets','val'].forEach(id=>document.getElementById(id).style.display=editable?'':'none');
+ document.querySelector('.step').style.display=editable?'':'none'; document.querySelector('.pad').style.display=editable?'':'none'; document.querySelector('.szrow').style.display=editable?'':'none'; document.querySelector('.act').style.display=editable?'':'none';
+ if(!editable){ document.getElementById('todo').innerHTML='【'+tab.label+'】此頁尚未接入調校。<br>跟 Claude 說「做 '+tab.label+' 的調校」我就把這頁的元件加進來。<br>（下方先顯示底圖預覽）'; }
+ if(tk==='route'){ def=DEF_route(); L=load('route',def); buildTargets(); }
+ // bg
+ if(tab.bg){ if(!imgs[tk]){ const im=new Image(); imgs[tk]=im; im.onload=draw; im.onerror=()=>{document.getElementById('err').style.display='block';document.getElementById('err').textContent='底圖載入失敗: '+tab.bg;}; im.src=tab.bg; } }
+ draw();
+}
+function load(tk,d){ let s={}; try{s=JSON.parse(localStorage.getItem('hb_tuner_'+tk)||'{}')||{};}catch(e){}
+ const o={}; for(const k in d){ o[k]=Object.assign({},d[k], s[k]||{}); } return o; }
+function save(){ localStorage.setItem('hb_tuner_'+curTab, JSON.stringify(L)); }
+function T(str,x,y,size,col,align,weight,baseline){ctx.font=(weight||'700')+' '+size+'px "Noto Serif TC",Georgia,serif';ctx.textAlign=align||'left';ctx.textBaseline=baseline||'alphabetic';ctx.fillStyle=col;ctx.fillText(str,x,y);}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function wrapC(str,cx,y,maxw,lh,col,size){ctx.font='400 '+size+'px "Noto Serif TC",Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=col;let line='',yy=y;for(const ch of str){if(ctx.measureText(line+ch).width>maxw&&line){ctx.fillText(line,cx,yy);line=ch;yy+=lh;}else line+=ch;}if(line)ctx.fillText(line,cx,yy);}
+
+function draw(){ ctx.clearRect(0,0,W,H);
+ const tab=TABS.find(t=>t.k===curTab), im=imgs[curTab];
+ if(im&&im.complete&&im.naturalWidth) ctx.drawImage(im,0,0,W,H); else { ctx.fillStyle='#0d0a12'; ctx.fillRect(0,0,W,H); }
+ if(document.getElementById('guide').checked){ctx.strokeStyle='rgba(0,255,180,0.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();}
+ if(curTab==='route') drawRoute();
+ if(document.getElementById('markers').checked && tab.impl) marks();
+}
+function drawRoute(){ const g=k=>L[k];
+ T('← 返回',g('back').x,g('back').y,g('back').s,'#e9d9ad','center',700,'middle');
+ T('第 1 幕 · 灰哨修院',g('title').x,g('title').y,g('title').s,'#f0e3c6','center',800,'middle');
+ T('出戰準備，選擇遠征路線與球路石板',g('subtitle').x,g('subtitle').y,g('subtitle').s,'#b6a888','center',400,'middle');
+ {const p=g('portrait');ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fillStyle='rgba(255,200,112,0.1)';ctx.fill();ctx.strokeStyle='rgba(255,200,112,0.5)';ctx.lineWidth=2;ctx.stroke();T('頭像',p.x,p.y,20,'#ffcf80','center',700,'middle');ctx.restore();}
+ T('擦板蠻王',g('heroName').x,g('heroName').y,g('heroName').s,'#f1e7cf','left',800,'middle');
+ T('Boardbarian',g('heroEn').x,g('heroEn').y,g('heroEn').s,'#b5483f','left',700,'middle');
+ T('定位 · 戰斧 / 擦板',g('heroRole').x,g('heroRole').y,g('heroRole').s,'#cfc6b0','left',400,'middle');
+ T('攜帶聖物 5/5',g('relicLabel').x,g('relicLabel').y,g('relicLabel').s,'#e6c068','left',700,'middle');
+ for(let i=0;i<5;i++){const r=g('relic'+i);rr(r.x-r.sz/2,r.y-r.sz/2,r.sz,r.sz,9);ctx.globalAlpha=.62;ctx.fillStyle=CLS[i];ctx.fill();ctx.globalAlpha=1;ctx.lineWidth=1.6;ctx.strokeStyle=CLS[i];ctx.stroke();T(RCH[i],r.x,r.y,26,'#f7eed6','center',800,'middle');}
+ {const b=g('bd');T('BD',b.x,b.y,b.s,'#a99c80','left',700,'middle');let tx=b.x+44;for(const tg of ['護盾','擦板','連擊','高風險']){ctx.font='700 15px Georgia,serif';const tw=ctx.measureText(tg).width+18;rr(tx,b.y-14,tw,28,7);ctx.fillStyle='rgba(58,44,20,.9)';ctx.fill();ctx.lineWidth=1.3;ctx.strokeStyle='rgba(200,160,70,.5)';ctx.stroke();T(tg,tx+tw/2,b.y,15,'#f0d8a0','center',700,'middle');tx+=tw+12;}}
+ T('點此回英雄頁更換 ›',g('changeBtn').x,g('changeBtn').y,g('changeBtn').s,'#d8b878','center',700,'middle');
+ T('◆ 遠征路線 ◆',g('routeHeader').x,g('routeHeader').y,g('routeHeader').s,'#e6c068','center',800,'middle');
+ const ry=[355,454,553];for(let i=0;i<3;i++){const seld=(i===1),y=ry[i];if(seld){rr(93,y,400,84,12);ctx.fillStyle='rgba(120,86,30,.22)';ctx.fill();ctx.lineWidth=2.4;ctx.strokeStyle='rgba(240,200,110,.95)';ctx.stroke();ctx.fillStyle='#f0c860';rr(97,y+12,6,60,3);ctx.fill();}const nm=g('r'+i+'name'),de=g('r'+i+'desc');T(ROUTES[i][0],nm.x,nm.y,nm.s,seld?'#f4d27a':'#ece0c4','left',800,'middle');T(ROUTES[i][1],de.x,de.y,de.s,'#cabf9f','left',400,'middle');}
+ T('◆ 球路石板（可不選） ◆',g('stonesHeader').x,g('stonesHeader').y,g('stonesHeader').s,'#e6c068','center',800,'middle');
+ const col=[1285,1490],top=[308,445,580];for(let i=0;i<6;i++){const c=i%2,r=(i/2)|0,cx=col[c],ty=top[r],seld=(i===0);if(seld){rr(cx-98,ty,196,122,12);ctx.fillStyle='rgba(120,86,30,.2)';ctx.fill();ctx.lineWidth=2.4;ctx.strokeStyle='rgba(240,200,110,.95)';ctx.stroke();}const nm=g('s'+i+'name'),de=g('s'+i+'desc');T(STONES[i][0],nm.x,nm.y,nm.s,seld?'#f4d27a':'#ece0c4','center',800,'middle');wrapC(STONES[i][1],de.x,de.y,196-24,20,'#cabf9f',de.s);}
+ // 中央 4 節點
+ const ns=[g('node0'),g('node1'),g('node2'),g('node3')];ctx.save();ctx.strokeStyle='rgba(232,202,120,.65)';ctx.lineWidth=3;ctx.setLineDash([3,11]);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(ns[0].x,ns[0].y);for(let i=1;i<4;i++)ctx.lineTo(ns[i].x,ns[i].y);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+ for(let i=0;i<4;i++){const n=ns[i],boss=(i===3),rad=boss?30:24;ctx.save();ctx.translate(n.x,n.y);ctx.rotate(Math.PI/4);rr(-rad,-rad,rad*2,rad*2,6);ctx.fillStyle=boss?'#5a1f18':'rgba(26,20,12,.95)';ctx.fill();ctx.lineWidth=2.6;ctx.strokeStyle=boss?'#e0563a':'#caa23a';ctx.stroke();ctx.restore();if(boss){ctx.strokeStyle='#ffcab8';ctx.lineWidth=3.5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(n.x-9,n.y-9);ctx.lineTo(n.x+9,n.y+9);ctx.moveTo(n.x+9,n.y-9);ctx.lineTo(n.x-9,n.y+9);ctx.stroke();}else{ctx.beginPath();ctx.arc(n.x,n.y,6,0,TAU);ctx.fillStyle='#e6c068';ctx.fill();}}
+ T('出戰摘要 ｜ 擦板蠻王　·　標準遠征　·　無門捷徑',g('summary').x,g('summary').y,g('summary').s,'#d8cba8','center',700,'middle');
+ T('進入第 1 幕',g('cta').x,g('cta').y,g('cta').s,'#ffe6b0','center',800,'middle');
+}
+function anchor(k){const e=L[k];return{x:e.x,y:e.y};}
+function marks(){if(!sel&&!Object.keys(L).length)return;ctx.save();for(const k in L){const a=anchor(k),on=(k===sel);ctx.beginPath();ctx.arc(a.x,a.y,on?13:8,0,TAU);ctx.fillStyle=on?'#39ff88':'rgba(57,255,136,.5)';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#0b3';ctx.stroke();if(on){ctx.beginPath();ctx.arc(a.x,a.y,20,0,TAU);ctx.strokeStyle='#39ff88';ctx.stroke();}}ctx.restore();}
+
+// UI
+const tabsEl=document.getElementById('tabs');
+TABS.forEach(t=>{const b=document.createElement('button');b.className='tab'+(t.impl?'':' todo')+(t.k==='route'?' on':'');b.textContent=t.label+(t.impl?'':' ·待接');b.dataset.k=t.k;b.onclick=()=>loadTab(t.k);tabsEl.appendChild(b);});
+const tgEl=document.getElementById('targets');
+function buildTargets(){tgEl.innerHTML='';for(const k in def){const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=LABELS[k]||k;b.dataset.k=k;b.onclick=()=>{sel=k;refresh();};tgEl.appendChild(b);}}
+function refresh(){[...tgEl.children].forEach(b=>b.classList.toggle('on',b.dataset.k===sel));updVal();draw();}
+function updVal(){const e=sel&&L[sel];document.getElementById('val').textContent=sel?((LABELS[sel]||sel)+' → x:'+Math.round(e.x)+'  y:'+Math.round(e.y)+(e.s!=null?'  字級:'+Math.round(e.s):(e.r!=null?'  半徑:'+Math.round(e.r):(e.sz!=null?'  尺寸:'+Math.round(e.sz):'')))):'—';}
+document.querySelectorAll('.step button').forEach(b=>b.onclick=()=>{step=+b.dataset.s;document.querySelectorAll('.step button').forEach(x=>x.classList.toggle('on',x===b));});
+document.querySelectorAll('.pad button[data-d]').forEach(b=>b.onclick=()=>{if(!sel)return;const d=b.dataset.d;if(d==='C')L[sel].x=W/2;else{if(d==='L')L[sel].x-=step;if(d==='R')L[sel].x+=step;if(d==='U')L[sel].y-=step;if(d==='D')L[sel].y+=step;}save();updVal();draw();});
+document.querySelectorAll('.szrow button').forEach(b=>b.onclick=()=>{if(!sel)return;const e=L[sel];const key=e.s!=null?'s':e.r!=null?'r':e.sz!=null?'sz':null;if(!key)return;e[key]=Math.max(6,e[key]+(+b.dataset.z)*step);save();updVal();draw();});
+document.getElementById('guide').onchange=draw;document.getElementById('markers').onchange=draw;
+document.getElementById('reset').onclick=()=>{if(confirm('重設本頁所有版位？')){localStorage.removeItem('hb_tuner_'+curTab);L=load(curTab,def);refresh();}};
+document.getElementById('exp').onclick=()=>{const ta=document.getElementById('out');ta.style.display='block';const o={};for(const k in L)o[curTab.replace('route','rt')+'.'+k]=L[k];ta.value='// '+curTab+' 版位 (貼回給 Claude)\n'+JSON.stringify(o,(k,v)=>typeof v==='number'?Math.round(v*10)/10:v,1);ta.select();try{document.execCommand('copy');}catch(e){}try{navigator.clipboard.writeText(ta.value);}catch(e){}};
+// 拖曳
+let drag=false,lx,ly;
+function toImg(e){const r=cv.getBoundingClientRect(),sx=W/r.width,sy=H/r.height,t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*sx,y:(t.clientY-r.top)*sy};}
+cv.addEventListener('pointerdown',e=>{if(curTab!=='route')return;const p=toImg(e);let best=null,bd=9999;for(const k in L){const a=anchor(k),d=Math.hypot(a.x-p.x,a.y-p.y);if(d<bd){bd=d;best=k;}}if(bd<60){sel=best;refresh();}drag=true;lx=p.x;ly=p.y;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag||!sel||curTab!=='route')return;const p=toImg(e);L[sel].x+=p.x-lx;L[sel].y+=p.y-ly;lx=p.x;ly=p.y;save();updVal();draw();});
+cv.addEventListener('pointerup',()=>drag=false);cv.addEventListener('pointercancel',()=>drag=false);
+
+loadTab('route');
+</script>
+</body></html>
