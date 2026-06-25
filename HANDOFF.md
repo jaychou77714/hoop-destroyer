@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`5b45664`(Phase 4-5b 投籃輔助+殘影+頭頂預告放大，**已過 iPhone 15 橫向實機驗收**)。push 後請更新本行。
+- **目前 HEAD**：`186faa3`(Phase 4-6 籃框位置行為牌+下一球預告 第一版)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -77,7 +77,7 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 1 英雄頁**：✅ 完成(§10)。
 - **Phase 2 遠征頁**：✅ 完成(§10)。
 - **Phase 3 籃獄圖譜**：近 FINAL，只需收尾統一暗黑墓碑風，**不大改**。
-- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅(`1937f89`)**；**4-2 五種進球判定 ✅(`90041cf`)**；**4-3 loadout 帶入(只摘要+開局形態) ✅(`cfce57b`)**；**4-4 擦板蠻王最小被動 ✅(`7889f3d`)**；**4-5 干擾補接+預告 ✅(`e90147c`，見 §10)**；4-6 籃框行為牌組+預告(預告在投下一球前顯示)。哈利定的開工順序＝4-1→4-2→…。
+- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅(`1937f89`)**；**4-2 五種進球判定 ✅(`90041cf`)**；**4-3 loadout 帶入(只摘要+開局形態) ✅(`cfce57b`)**；**4-4 擦板蠻王最小被動 ✅(`7889f3d`)**；**4-5 干擾補接+預告 ✅(`e90147c`，見 §10)**；**4-6 籃框位置行為牌+下一球預告(第一版) ✅(`186faa3`，見 §10)**。哈利定的開工順序＝4-1→4-2→…。
 - **Phase 5 完整第一幕**(灰哨修院 4 關+怪物+Boss 三階段)。
 - **小階段(哈利提過)**：導航優化(目前遠征頁「點摘要回英雄頁」後，英雄頁返回是回 hub 非回遠征頁)；英雄美術(現用 7 張現成 `hero_*.png`，之後重繪)；遠征頁底圖(現程序底+暗黑框，之後新繪)。
 
@@ -122,11 +122,13 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 4-5b 投籃輔助+殘影+頭頂預告放大**(`5b45664`)：(1)`drawAim` 底部中央『力道%　弧線(平射/標準/高拋)』僅瞄準中、力道=拉弓/maxPull、弧線由 `ang` 分類(<30平射/<55標準/else高拋)。(2)**上一球前50%殘影**：`startRun` 初始化 `run.prevTraj`、`battleUp` 後 `_recordPrevTraj(b)` 用發射 vx/vy 模擬弧取前50%、`drawAim` 灰虛線 alpha0.3 畫在預測下層、投進投失皆保留、spawnBall 後保留、hideLanding 不影響。(3)`drawGuardTags` 放大 108×30→132×36、icon 18→22、pips d6→d8/間距3→4、casting 描邊加粗+橘金#ffc266+『!』更明顯、近籃框自動左移80。**機制全不動**。
   - **✅ 已過實機驗收(iPhone 15 橫向)**：投籃輔助資訊／上一球殘影／小怪頭頂預告**先保留現況**；**頭頂預告留待未來美術 polish 階段統一調整**。**4-5 系列不再細修**。
 
+- **Phase 4-6 籃框位置行為牌+下一球預告(第一版)**(`186faa3`)：沿用 `POS_POOL` 9 位置當牌庫(label 即牌名)。新增 `_pickHoopCard(excludeIdx)`。`pickHoopPos` 進球換位(force=false)改**套用 `run.nextHoopAct`(預告牌)**而非當下隨機 → 寫入 `run.hoopAct` → 補抽新 `run.nextHoopAct`(≠目前)；force/init 仍抽新。**絕對定位**(固定基準+POS_POOL dx/dy、不用 += 不漂移)。`drawHUD` 右下改『進球後框位：<nextHoopAct.label>』。投失(`endShot(false)`)不換位、預告不變。換位(repos lerp)只在投球之間;`ball.live`/`run.aiming` 時不動 hoop 目標也不設 repos。**關鍵**:`pickHoopPos(false)` 由 `endShot(true)`@941 呼叫(非 makeBasket)。headless 驗證:套用=上一預告/hoopAct=預告/新預告≠目前/repos 啟動/label 同步/連續5球不漂移(tx 恆定)/投失不動/五種判定 swish·bank·lucky·normal 正常/擦板蠻王 axer bank 正常/瞄準·飛行籃框靜止。**未動** stepBall/collideHoop/makeBasket五種判定/hoop·rim hitbox/擦板蠻王/干擾/4-5b/loadout/heroes/route/atlas;未新增 HOOP_ACTS;無縮框斜框旋轉飛行中移動。
+
 ## 11. 近期 commit(新→舊)
-`5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
+`186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
-**4-5 系列已凍結**(4-5/4-5a/4-5b 全過實機驗收，不再細修；頭頂預告等未來美術 polish 統一處理)。
-**下一步＝Phase 4-6：籃框行為牌組 + 預告**(哈利已指示可進，但**先只做規劃、不要直接實作**)。最大子階段：籃框(host/hoop)行為牌——可能讓籃框移位/縮小/傾斜/換位等，需「投下一球前」預告(畫面已有底部「下一籃框行為：—」欄位可沿用)。會動到 host/hoop 定位(`pickHoopPos`)與 drawHUD 底部欄，是動 hoop 位置的最大改動，務必逐項 headless 驗證。
-**4-6 規劃時的不動清單(哈利現行指示)**：物理核心、五種進球判定、擦板蠻王被動、loadout、heroes/route/atlas。
-**動工前一律先「只規劃、不實作」，等哈利上傳企劃並說「開始」。**
+**Phase 4-6 第一版(位置牌+預告)已完成**(`186faa3`)，待哈利實機驗收。
+**未來可選方向**(全部待哈利指示、先規劃)：4-6 第二版牌型擴充(縮框/斜框/旋轉等，需先規劃且小心 hitbox 與五種判定)、或主題化 `HOOP_ACTS` 具名牌庫(取代沿用 POS_POOL)、或進其他系統。
+**現行不動清單**：物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、loadout、heroes/route/atlas。
+**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
