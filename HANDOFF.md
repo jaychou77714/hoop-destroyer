@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`1937f89`(Phase 4-1 戰鬥 HUD 重排)。push 後請更新本行。
+- **目前 HEAD**：`90041cf`(Phase 4-2 五種進球判定)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -77,7 +77,7 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 1 英雄頁**：✅ 完成(§10)。
 - **Phase 2 遠征頁**：✅ 完成(§10)。
 - **Phase 3 籃獄圖譜**：近 FINAL，只需收尾統一暗黑墓碑風，**不大改**。
-- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅ 完成(`1937f89`，見 §10)**；4-2 五種進球判定(空心/擦板/彈框幸運球/普通/投失，彈框=框上彈≥2次才算、判定優先序 空心>擦板>彈框幸運球>普通>投失、幸運球不觸發擦板/空心加成、可不斷連擊、傷害≈普通)；4-3 loadout 5 聖物帶入(只摘要+開局形態)；4-4 擦板蠻王最小被動;4-5 干擾補接+預告；4-6 籃框行為牌組+預告(預告在投下一球前顯示)。哈利定的開工順序＝4-1→4-2→…。
+- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅(`1937f89`)**；**4-2 五種進球判定 ✅(`90041cf`，見 §10)**；4-3 loadout 5 聖物帶入(只摘要+開局形態)；4-4 擦板蠻王最小被動;4-5 干擾補接+預告；4-6 籃框行為牌組+預告(預告在投下一球前顯示)。哈利定的開工順序＝4-1→4-2→…。
 - **Phase 5 完整第一幕**(灰哨修院 4 關+怪物+Boss 三階段)。
 - **小階段(哈利提過)**：導航優化(目前遠征頁「點摘要回英雄頁」後，英雄頁返回是回 hub 非回遠征頁)；英雄美術(現用 7 張現成 `hero_*.png`，之後重繪)；遠征頁底圖(現程序底+暗黑框，之後新繪)。
 
@@ -107,8 +107,11 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - 兩階段都**未動**：戰鬥/win/lose、物理引擎、籃獄圖譜、home/hub、球途盤三選一、球語、部署。
 - **Phase 4-1 戰鬥 HUD 重排**(`1937f89`)：**只重寫 `drawHUD()` 一個方法**。左上整合英雄面板(圓形立繪徽章複用`drawHero`裁切+惡搞名+Lv+HP/護盾+經驗細條+球形態膠囊+干擾預留槽「無」)、上方關卡條集中(幕別`ACTS.name`/關卡名`stage.name`(boss轉紅)/第N/M波/剩餘護衛X/Y)、右上只留暫停(`_pauseHit`保留)、底部極簡(球形態+「下一籃框行為：—」預留)、連擊改關卡條下方單一焦點、HUD 全錨安全區`insL/insR/insT/insB`(舊版用死margin 40)。**未動** stepBall/battleDown·Move·Up/collideHoop/makeBasket/BALL_FORMS/ABILITIES/drawAim/物理/heroes/route/atlas/home/hub/球途盤/球語/部署。headless 四態驗證通過(未瞄準/瞄準/投球後/Boss波數)。
 
+- **Phase 4-2 五種進球判定**(`90041cf`)：**只動三函式**。`spawnBall` 初始化 `rimBounces:0/_rimLatch:false/scoreType:null`；`collideHoop` 加上升緣閂鎖累積 `rimBounces`(防每幀灌水，反彈衝量一字未改)；`makeBasket` 依優先序判 `b.scoreType`(空心`!board&&rb===0`>擦板`board&&rb===0`>幸運`rb>=2`>普通其餘)、用相容布林`swish/bank`餵下游、補「幸運進球 LUCKY!」(紫#c89bff)/「進球」浮字。**幸運球**：傷害=XP=普通(走 swish=bank=false)、不觸發空心/擦板/擦板蠻王加成、combo 照++不中斷。投失沿用 `endShot(false)` 未動。headless 驗證：五型判定優先序正確(含 board+rb>=2→lucky)、閂鎖貼框8幀只計1次/離開歸位/再接觸計2、LUCKY 浮字渲染 OK。**未動** stepBall/battleDown·Move·Up/drawHUD/drawEnd/物理/heroes/route/atlas/球途盤/球語/干擾/loadout。
+- **`b.scoreType` 現可用**：戰鬥內每次進球後 `run.ball.scoreType` ∈ {swish,bank,lucky,normal}。未來若要結算頁幸運球計數或聖物依 scoreType 觸發，直接讀此欄。
+
 ## 11. 近期 commit(新→舊)
-`1937f89` Phase 4-1 戰鬥HUD重排 → `9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段 → `a9fd9d5` 英雄頁第一階段 → `b450439` 首頁/導航重構 → `25b4b89` 清舊版+webp+vercel no-cache → `2964b31`/`7f61c7d` 籃獄圖譜節點烤入+調校台。
+`90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排 → `9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段 → `a9fd9d5` 英雄頁第一階段 → `b450439` 首頁/導航重構 → `25b4b89` 清舊版+webp+vercel no-cache。
 
 ## 12. 下一步建議
-**Phase 4-2：五種進球判定**(哈利定的下一步)。在 `collideHoop` 給球加 rimBounces 計數，`makeBasket` 改判定樹。定案規則：彈框幸運球=框上彈≥2次後進；優先序 空心>擦板>彈框幸運球>普通>投失；幸運球不觸發擦板蠻王/空心加成、可不中斷連擊、傷害給普通或略高、顯示 LUCKY/幸運進球 浮字。**這動到 `makeBasket`/`collideHoop`(高風險區)，務必逐項 headless 驗證**。動工前一律先「只規劃、不實作」，等哈利說「開始」。
+**Phase 4-3：loadout 5 聖物帶入戰鬥(只摘要+開局形態，不接完整數值)**(哈利定的順序)。`startRun` 現讀舊 `save.relics[3]`；4-3 要改讀 `save.loadout[5]`(保留 relics 相容)、在戰鬥英雄面板顯示 5 聖物唯讀小圖(複用遠征頁 `_clsCol`/BD 標籤)、開局形態 `startForm` 由 loadout 聖物 form 推導(現成邏輯沿用)。其餘聖物數值效果(誓約/惡搞/職業)先不接。**動工前先「只規劃、不實作」，等哈利說「開始」。** 之後 4-4 擦板蠻王最小被動(可讀 `scoreType==='bank'` 觸發)、4-5 干擾補接+預告、4-6 籃框行為牌組+預告。
