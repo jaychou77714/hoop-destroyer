@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`bdd5a60`(Phase 5-1a 第一幕籃框遠近平衡)。push 後請更新本行。
+- **目前 HEAD**：`484b156`(Phase 5-1b 獎勵與成長系統)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -130,10 +130,12 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 
 - **Phase 5-1a 第一幕籃框遠近平衡**(`bdd5a60`)：解「第一幕每球大三分」。`POS_POOL` **append** 2 真正近框(**idx9 貼框低 dx-400/dy-120、idx10 貼框 dx-520/dy-180**;既有 idx0-8 不動)。`_pickHoopCard` 加 `run.act===1` 分層:NEAR=[9,10,0,1]/MID=[2,3,4]/FAR=[5,6,7,8](idx8 近極高=高拋歸 far難度)。**第1-2關(pi<=1)只近+中不出遠**;**第3-4關(pi<=3)近中為主+少量遠(僅遠低idx5)且 `run._lastWasFar` 防連續遠**;**Boss(pi4)中遠輪替但 `run._farStreak>=2` 強制回近中**。非 act1 維持原 `maxIdx=3+tier`(<9,新條目不影響其他幕)。headless:第1-2關無遠(distinct[0,1,2,3,4,9,10])、真正近框可達、第3-4關遠僅idx5且不連續、boss farStreak<=2、idx9/10 append 完整、Phase 4-6 預告(score 套用/miss 不換位)正常。**未動** pickHoopPos 絕對定位/nextHoopAct·hoopAct/右下框位文字/物理/五種判定/hitbox/擦板蠻王/干擾/4-5b/閉環骨架/reward。**注意**:框位平衡只在 `_pickHoopCard` 約束「合格 idx」,卡片架構不變。
 
+- **Phase 5-1b 獎勵與成長系統**(`484b156`)：reward 頁從補給升級成 Roguelite 成長頁。新增 `REWARDS` **12 池**(生存4 heal/shield/ironhide/regen、投籃2 nearfocus/farfocus、攻擊6 fireup/frost/thunder/bankfaith/swishzeal/luckydisc)+`REWARD_IDS`。`startRun` 初始化 `run.mods`(10鍵:傷害類 1、生存類 0)+`run.modStacks{}`+`run.rewardChoices[]`。`_rollRewards()` 抽 3 不重複、**疊滿(maxStack3)排除**、heal/shield 即時類永遠可出。`drawReward` 改正式成長卡(類型標籤 生存綠/投籃藍/攻擊橘+名稱+短描述+`Lv n/3`,標題『選擇一項成長』)。`_pickReward` 套用即時(heal clamp/shield+20)或 mod(+0.15/+0.05、cap damageReduce0.45·stageStartHeal0.15·mult1.45、modStacks++)、防連點(rewardPending 一次性)。**`_applyRewardDamageMods(ctx)` 掛 `makeBasket` 的 `BALL_FORMS.attack` 前**(fire/ice/lightning 依 `run.form`、swish/bank/lucky 依 ctx、近/貼→nearMul·遠→farMul 讀 `run.hoopAct.label` 首字、中框不吃;**與板魂相乘**;ctx.lucky 由 makeBasket 補)。`playerHurt` 開頭減傷(先於扣盾,`Math.min(0.45,…)`)。`enterStage` 每場 `stageStartHeal` 回血(clamp 0.15)。`onStageClear` 進 reward 前 `_rollRewards()`。headless:mods 初始化/抽3不重複/重繪穩定/疊滿排除/heal clamp+連點無效/shield+20/ironhide cap0.45×3/regen cap0.15×3/fireMul cap1.45×3/fire115·ice130·lightning145·normal不吃·swish·bank·lucky·近·貼·遠·中框不吃·板魂×獎勵=180/減傷100→55/每場回血+10。**未改** 五種判定 if 鏈/shotDamage/擦板蠻王/物理/hitbox/干擾/4-5b/5-1a 框位/閉環骨架/loadout/heroes/route/atlas;run 內有效、無永久成長、無全域 dmgMul。
+
 ## 11. 近期 commit(新→舊)
-`bdd5a60` Phase 5-1a 籃框遠近平衡 → `700bd03` Phase 5 第一幕閉環 → `4ac6fec` HANDOFF(4-6驗收/Phase4穩定) → `186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
+`484b156` Phase 5-1b 獎勵與成長系統 → `bdd5a60` Phase 5-1a 籃框遠近平衡 → `700bd03` Phase 5 第一幕閉環 → `4ac6fec` HANDOFF(4-6驗收/Phase4穩定) → `186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
 **Phase 4 戰鬥核心＝穩定版**；**Phase 5 第一幕閉環(第一版)已過實機驗收**(`700bd03`)，不再細修;獎勵頁＝功能版 UI、美術 polish 留待之後。
-**Phase 5-1a 籃框遠近平衡已完成**(`bdd5a60`)，待哈利實機驗收第一幕是否好投。**Phase 5-1(b) 獎勵與成長系統規劃已定案**(見 outputs MD:12獎勵池/+15%每層cap3/疊滿排除/run.mods/run.modStacks/掛 makeBasket attack 前·playerHurt·enterStage)，**尚未實作**,等哈利說「開始」。**未來可選方向**(待指示)：第2~5幕閉環、劇情、美術 polish。
+**Phase 5-1 全數完成**：5-1a 籃框遠近平衡(`bdd5a60`)+5-1b 獎勵與成長系統(`484b156`)，待哈利實機驗收。第一幕現有:遠近平衡框位 + 12 獎勵池三選一成長頁 + run.mods 本局成長 + 完整閉環。**未來可選方向**(待指示、先規劃)：第2~5幕閉環、劇情、獎勵頁美術 polish、更多獎勵/build 深化、英雄差異化等。
 **現行不動清單(沿用)**：投籃物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、籃框位置行為牌、loadout、heroes/route/atlas、Phase 5 第一幕閉環骨架。
