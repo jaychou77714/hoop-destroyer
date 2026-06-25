@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`cfce57b`(Phase 4-3 loadout 帶入戰鬥最小版)。push 後請更新本行。
+- **目前 HEAD**：`7889f3d`(Phase 4-4 擦板蠻王最小被動)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -77,7 +77,7 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 1 英雄頁**：✅ 完成(§10)。
 - **Phase 2 遠征頁**：✅ 完成(§10)。
 - **Phase 3 籃獄圖譜**：近 FINAL，只需收尾統一暗黑墓碑風，**不大改**。
-- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅(`1937f89`)**；**4-2 五種進球判定 ✅(`90041cf`)**；**4-3 loadout 帶入(只摘要+開局形態) ✅(`cfce57b`，見 §10)**；4-4 擦板蠻王最小被動;4-5 干擾補接+預告；4-6 籃框行為牌組+預告(預告在投下一球前顯示)。哈利定的開工順序＝4-1→4-2→…。
+- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。子階段：**4-1 HUD 重排 ✅(`1937f89`)**；**4-2 五種進球判定 ✅(`90041cf`)**；**4-3 loadout 帶入(只摘要+開局形態) ✅(`cfce57b`)**；**4-4 擦板蠻王最小被動 ✅(`7889f3d`，見 §10)**；4-5 干擾補接+預告；4-6 籃框行為牌組+預告(預告在投下一球前顯示)。哈利定的開工順序＝4-1→4-2→…。
 - **Phase 5 完整第一幕**(灰哨修院 4 關+怪物+Boss 三階段)。
 - **小階段(哈利提過)**：導航優化(目前遠征頁「點摘要回英雄頁」後，英雄頁返回是回 hub 非回遠征頁)；英雄美術(現用 7 張現成 `hero_*.png`，之後重繪)；遠征頁底圖(現程序底+暗黑框，之後新繪)。
 
@@ -113,8 +113,11 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 
 - **Phase 4-3 loadout 帶入戰鬥(最小版)**(`cfce57b`)：**只動 `startRun`+`drawHUD`**。`startRun` 新增 `run.loadout`(來源優先 `save.loadout`，全空才 fallback `save.relics`，補成 5 格含 null)；開局 `startForm` 改由 `run.loadout` 由左到右第一個帶 `form` 的聖物決定(abbey_ember→fire/sand_bow→arrow/citadel_battery→lightning/red_axe→axe/final_chill→ice，無則 normal)。`drawHUD` 英雄面板底部加「聖物」列：5 格唯讀 chip(`_clsCol(cls)`類別色+聖物首字、空格虛線「—」)+ BD 標籤(`_bdTags(run.loadout)`)；為留空間把球形態膠囊上移到 py+130、chip 列 py+176(仍在現有觸控排除 210 內，**故不必動 battleDown**)。**關鍵安全**：`run.relics`/`run.relicIds` 維持 `save.relics` 不變，5 聖物**不進** relicOnBasket/relicOnMiss → 任何聖物數值效果都不誤觸發。headless 驗證：loadout 正確帶入/relicIds 未被覆寫且不含 loadout id/八種開局形態全對/fallback OK/**回血反證**(blood_chalice 只在 loadout→進球 HP 不變50；放 relics→HP 52)/kings_seal 只在 loadout→擦板無護盾/HUD chip+BD 渲染不擋場景。**未動** stepBall/battleDown·Move·Up/collideHoop/makeBasket/五種判定/籃框行為/干擾/球途盤/球語/heroes/route/atlas/home/hub/部署。
 
+- **Phase 4-4 擦板蠻王最小被動**(`7889f3d`)：**只動 `startRun`+`makeBasket`+`drawHUD`**。`startRun` 初始化 `run._boardBuff=false`。`makeBasket` 順序 a→d：**(b)消耗**——若 `run._boardBuff && run.form∈{fire,ice,lightning}` 則 `ctx.dmg×1.3`、清 buff、浮字「板魂爆發!」(在 `BALL_FORMS.attack` 之前)；**(c)** form 攻擊；**(d)設定**——若 `run.heroId==='axer' && bank` 則攻擊後 `_boardBuff=true`(不自吃)。布林**不疊層**、固定 +30%。AoE 只認 fire/ice/lightning；normal/axe/arrow 不消耗。投失保留(未動 `endShot`)。`drawHUD` 聖物列右端加「⚔板魂蓄勢」徽章(僅 axer+buff，BD 標籤遇 buff 自動截短讓位)。headless 驗證：axer 擦板設 buff/+30% 實測(fire 1.313、lightning 1.325，ice 因 randi(3,5) 命中數隨機致比值雜訊但 cleared=true)/消耗後清除/swish·normal·lucky 不設/其他英雄不設/normal·axe·arrow 不消耗保留/投失保留/連續擦板不疊層/HUD 徽章渲染 OK。**未動** stepBall/battleDown·Move·Up/collideHoop/五種判定 if 鏈/loadout/聖物數值/heroes/route/atlas/球途盤/球語。
+- **`run._boardBuff` 現可用**(布林)；未來 4-5/4-6 或天賦樹要擴充擦板蠻王效果可沿用此旗標。
+
 ## 11. 近期 commit(新→舊)
-`cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排 → `9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段 → `a9fd9d5` 英雄頁第一階段。
+`7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排 → `9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段。
 
 ## 12. 下一步建議
-**Phase 4-4：擦板蠻王最小被動**(哈利定的順序，待哈利上傳企劃+說開始)。`axer` 被動「擦板球使下次範圍傷害提高」。最小做法：`makeBasket` 進球 `scoreType==='bank'`(現可讀)時設 `run._boardBuff` 旗標；下一次 form 範圍攻擊(`hurtGuard`)讀旗標 +X% 後清除。**不碰天賦樹數值**。注意這會動到 `makeBasket`(4-2 區)，務必逐項 headless 驗證。之後 4-5 干擾補接+預告、4-6 籃框行為牌組+預告。**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
+**Phase 4-5：怪物干擾補接 + 預告**(哈利定的順序，待哈利上傳企劃+說開始)。`INTERFERENCES` 六種已對齊企劃；現只 `gravity`/`maxPull` 接上效果，其餘 `shortTraj`(軌跡縮短，drawAim 的 dots 已部分讀)/`slowCharge`(拉弓變慢)/`hideLanding`(隱藏落點)/`drum`(小怪倒數+1) 需補效果，且全部要加「投下一球前」的預告 UI(英雄面板干擾槽)。注意 drawAim 已讀 shortTraj，動 drawAim/干擾套用要小心。之後 4-6 籃框行為牌組+預告(最大、動 host/hoop 換位)。**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
