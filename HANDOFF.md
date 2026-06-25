@@ -1,13 +1,60 @@
 # 籃框破壞神 HOOPBREAKER — 線上交接文件
 
-> 給下一個視窗的 Claude：讀完這份 + 你的 memory 就能接手。哈利是創意總監/體驗師(非工程師)，你是唯一工程師、直接接管 GitHub。全程繁體中文(台北用語)。SOP：哈利上傳企劃/指令 docx → 你先「只規劃、不實作」回覆 → 哈利定案說「開始」→ 你實作 → headless 驗證 → push → 截圖回報 → 哈利實機(iPhone 15)驗收。給選項用可點選 UI(ask_user_input)，不要純文字 A/B/C。**最新進度見 §10。**
+> 給下一個視窗的 Claude：讀完這份 + 你的 memory 就能接手。哈利是創意總監/體驗師(非工程師)，你是唯一工程師、直接接管 GitHub。全程繁體中文(台北用語)。SOP：哈利上傳企劃/指令 docx → 你先「只規劃、不實作」回覆 → 哈利定案說「開始」→ 你實作 → headless 驗證 → push → 截圖回報 → 哈利實機(iPhone 15)驗收。給選項用可點選 UI(ask_user_input)，不要純文字 A/B/C。**最新狀態見正下方「★★★ 最新 SESSION」段（V2 遠征頁逐幕 + 後台 tuner + 地圖頁）；舊階段(Phase 4–6 戰鬥/閉環)見 §10–§12。**
+
+## ★★★ 最新 SESSION（V2 遠征頁逐幕版位 + 後台 tuner 逐幕化 + 地圖頁微調）— 下個視窗先讀這段
+
+**目前 HEAD：`1bf75d6`**（地圖頁選中卡：進攻目標移底部橫幅+選取框收窄）。push 後更新本行。
+
+### 授權與環境（重要）
+- **GitHub PAT：哈利已刻意授權一組「90 天細粒度 token」給 Claude 直接接管 push**（本視窗確認仍在效期內、有效）。**token 字串絕不寫進此公開 repo**（會觸發 GitHub 推送保護被自動撤銷）；實際字串由哈利在對話內提供 / 在你的 memory 內。**不要提醒哈利 revoke/刪除 token。**
+- 新視窗請先 clone 並把 token 內嵌進 remote（沙箱是全新的、沒有舊 clone）：`git clone https://x-access-token:<PAT>@github.com/jaychou77714/hoop-destroyer.git`，工作目錄用 `/home/claude/hoop`。**每次 commit 前**：`git config user.email storyhomedesign@gmail.com`（否則 Vercel Hobby 擋部署）。
+- **Vercel**：push main 自動部署、約 1–2 分鐘。**沙箱連不到 `api.vercel.com`（egress proxy 回 `host_not_allowed`），無法查 Vercel 狀態或重新部署**。只能用 GitHub API 驗 HEAD：`curl -s -H "Authorization: Bearer <PAT>" https://api.github.com/repos/jaychou77714/hoop-destroyer/commits/main`。
+- **本 session 踩到的雷**：有一次 push 後 Vercel **webhook 漏接**（GitHub 有該 commit，但 Vercel 完全沒建立部署、清單找不到那筆）。解法＝**再推一筆（可空 commit `git commit --allow-empty -m …`）重新觸發**，新部署就會冒出。若再推仍無新部署→才可能是 Hobby 每日額度，請哈利在 Vercel 後台手動 Redeploy 或等隔日重置。
+
+### 改引擎流程（本 session 用法）
+- 引擎解出成 `/home/claude/engine.js`，用 `str_replace` 編輯 → Python repack 回 `hoop/index.html`（gzip mtime=0 + base64 + round-trip 斷言 + 更新 manifest size），engine chunk uuid `875365e8-8f11-4b79-9780-292f266babda`（repack 腳本見 §3）。
+- 驗證 harness 放 `/home/claude`：`allacts.js`（截遠征頁 2–5 幕）、`atlasshot.js`（截地圖頁）。viewport 852×393 dpr3、`waitUntil:'domcontentloaded'`（**勿用 networkidle0**）。admin：`G.save.admin=true`。
+
+### A. 遠征頁（`drawRoute`/`_drawRouteArt`）— ✅ 五幕逐幕版位完成
+- 座標系 `U=BW/1704, D=v=>v*U`（art-space 1704×786）。底圖逐幕 `assets/stage{N}_route_base_1704x786.webp`（`_ensureRouteBg(act)` 快取載入）；五幕背景**都已換成哈利新版金邊框架**。
+- **逐幕座標覆寫系統（本 session 核心）**：`_drawRouteArt` 內有 `RT_DEF`（基準＝第1幕）＋ **`RT_ACT={2:{…},3:{…},4:{…},5:{…}}`**（各幕專屬覆寫）。取值 `lv(key)` = `RT_ACT[this._selAct][key] || RT_DEF[key]`（逐幕優先）；連線起點也讀逐幕 `r{si}hi`。**五幕版位都已由哈利在後台逐幕調好、烘進 RT_ACT**（第1幕用 RT_DEF、第2–5幕各有覆寫）。
+- 元件粒度：每個文字/聖物格/節點/遮罩都是獨立 key（back/title/subtitle/portrait/heroName/heroEn/heroRole/relicLabel/bd/changeBtn/routeHeader/stonesHeader/summary/cta/relic0-4/r0-2name/r0-2desc/s0-5name/s0-5desc/node0-3/r0-2hi/s0-5hi）。
+- **⚠️ `bd` 有 `tagX:566` 額外欄、`*desc` 有 `w` 寬欄**：後台匯出**不含 tagX**，烘 RT_ACT 時若 bd 與基準相同**就別放進 RT_ACT**（讓它 fallback 到 RT_DEF 保住 tagX）；relicLabel/routeHeader/stonesHeader 同理（與基準相同就省略）。
+- **哈利調版位 SOP**：哈利進後台 tuner → 切到某幕 → 拖元件/十字鍵微調 → 匯出 JSON（開頭註明「第N幕」）→ 貼回 → 你把差異烘進 `RT_ACT[該幕]`（engine.js）＋ `RT_ACT_TUNER[該幕]`（tuner.html，讓後台顯示同步）→ repack + push。**只動該幕、其他幕完全不受影響**（這正是哈利要的「獨立」）。
+
+### B. 後台調校台（根目錄 `tuner.html`，靜態）— ✅ 逐幕化
+- 線上 `https://hoop-destroyer.vercel.app/tuner.html`。多分頁（遠征頁已接；首頁/板凳席/英雄選/地圖/玩法圖鑑/設定/結算 = 待接 placeholder）。
+- 遠征頁頂端有 **幕別切換（第1~5幕）**：切幕即換該幕背景＋標題＋進入鈕文字＋載入該幕版位。**逐幕獨立存讀**（localStorage `hb_tuner_route_a{N}`）。`RT_ACT_TUNER` 鏡射引擎 `RT_ACT`；`routeDef()` 把該幕覆寫疊到 `DEF_route()` 當起點。匯出 key=`rt.*`、註明第幾幕。
+- 用法：選分頁 → 點下方元件名/圖上綠點選元件 → 十字鍵微調、A± 字級、額外欄（W/H/dy…）± 鈕 → 匯出整段貼回。
+
+### C. 地圖頁（`drawAtlas`/atlas）— 本 session 微調，尚未接後台
+- 只動「選中卡標示」：**移除頂部緞帶**、「▶ 進攻目標」改放**底部橫幅框內置中**（art 座標 `855,681`、22px 金字 `#ffe6b0`；橫幅＝route 鈕框 `685,676,340,70`）、**選取發光框左右收窄**（`C.x+5 / C.w-10`，垂直維持 `-7/+14`）。
+- 結構：`CARDS`（5 幕卡，cx=[367,626,884,1130,1381]）＋ `UP={no,zh,en}`/`LO={boss,stat,relic}`/`NODEY` ＋ `_atlasNodes(cx,y,lit)` 畫 4 點。底圖 `atlas_base_clean_no_nodes_1704x786.webp`，座標系同 1704 art-space。
+- **地圖頁是 1704 固定空間 → 可接後台 tuner**（**下一步 TODO**：仿遠征頁做 `at.*` 逐元件 lv/HH + DEF_atlas + tuner「地圖」分頁可調）。
+
+### D. 英雄選頁（`drawHeroes`/heroes）— ❌ 不適合放固定後台調
+- 用**響應式版面**（`_heroesLayout` 以 `U=1/scale` + 安全區 inset 算座標、隨裝置變），**非固定 1704 畫布** → 不能在這個固定 1704 後台拖曳調準。要調英雄頁版位請用**遊戲內排版模式**（設定→排版模式，真實裝置空間）或直接改值。
+
+### E. 遊戲資料（哈利問過的小怪/菁英/王名單）
+- 各幕 5 節點 = 1 host（節點1-4＝菁英、節點5＝王）＋ `count` 隻小怪。**小怪總數固定、種類從 `stage.guards` 隨機平均抽**（非寫死配比）。資料在 `STAGES`（§8）、小怪名在 `GUARDS`（11 種）。路線：標準/腐化走全 5 關、速投線走 `[0,2,4]`、「無門捷徑」石板砍成 `[首,末]`。本 session 已把完整名單＋數量給過哈利；若要改寫死配比要改 `spawnWave`。
+
+### 下一步 TODO（哈利方向）
+1. **接地圖頁進後台 tuner**（哈利已要求，最可能的下一步）。
+2. 其餘 tuner 分頁（首頁/板凳席/玩法圖鑑/結算）視需要接。
+3. 戰鬥場景背景：已給哈利五幕 GPT 提示詞（空場、排除怪物/角色、1704×786 webp），等他出圖放 assets。
+
+### 本 session commit（新→舊）
+`1bf75d6` 地圖選中卡(進攻目標移底部橫幅+選取框收窄) → `740e632` 地圖進攻目標移卡底(已被上一筆取代) → `83ef641` 遠征頁第5幕版位 → `946d43e` 第4幕 → `d859edd` 第3幕 → `8c62518` 重觸發部署(空commit) → `46be6a6` 遠征頁逐幕覆寫RT_ACT+第2幕 → `870007e` 後台tuner接2-5幕(幕別切換) → `b53c1a1` 換2-5幕新版背景 → `94935d2` 加2-5幕背景 → `e76a9af` 第1幕美術版面套到全5幕。
+
+---
 
 ## 0. 基本資料
 - **Repo**：`jaychou77714/hoop-destroyer`(public)
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`(待push)`(遊戲內排版模式框架+遠征頁接上；設定頁開關，各頁綠手把選取·十字鍵微調·字級·循環·匯出座標。前一版 88d89f7 地圖選中發光)。push 後請更新本行。
+- **目前 HEAD**：`1bf75d6`（見最上方「★★★ 最新 SESSION」段）。push 後請更新本行與最上方段。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
