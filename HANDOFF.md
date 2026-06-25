@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`9364310`(Phase 6.1/6.2 進度系統重做；headless **34/34** + 全畫面 smoke 無例外，**待 iPhone 15 橫向實機驗收**)。前一版 `eb97ae0`(Phase 6 完整架構迴路)。push 後請更新本行。
+- **目前 HEAD**：`4db5d5b`(第1幕遠征頁美術皮+管理員模式；管理員9/9+全畫面smoke+回歸34/34，**待 iPhone 15 橫向實機驗收**)。前一版 `e5993c0`(Phase 6.1/6.2 進度系統重做)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
