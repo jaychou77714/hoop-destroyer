@@ -1,16 +1,17 @@
 # 籃框破壞神 HOOPBREAKER — 線上交接文件
 
-> 給下一個視窗的 Claude：讀完這份 + 你的 memory 就能接手。哈利是創意總監/體驗師(非工程師)，你是唯一工程師、直接接管 GitHub。全程繁體中文(台北用語)。SOP：你先做 → 哈利實機(iPhone 15)驗證 → 截圖回報。給選項用可點選 UI(ask_user_input)，不要純文字 A/B/C。
+> 給下一個視窗的 Claude：讀完這份 + 你的 memory 就能接手。哈利是創意總監/體驗師(非工程師)，你是唯一工程師、直接接管 GitHub。全程繁體中文(台北用語)。SOP：哈利上傳企劃/指令 docx → 你先「只規劃、不實作」回覆 → 哈利定案說「開始」→ 你實作 → headless 驗證 → push → 截圖回報 → 哈利實機(iPhone 15)驗收。給選項用可點選 UI(ask_user_input)，不要純文字 A/B/C。**最新進度見 §10。**
 
 ## 0. 基本資料
 - **Repo**：`jaychou77714/hoop-destroyer`(public)
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
-- **風格**：NANACA-CRASH 風籃球物理彈射，單檔靜態 web app
+- **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
+- **目前 HEAD**：`9102eac`(遠征頁第二階段 + 自適應修正)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
-- **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。
-- committer/author email 必須是 `storyhomedesign@gmail.com`(否則 Vercel Hobby 擋部署)。
+- **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
+- committer/author email 必須是 `storyhomedesign@gmail.com`(否則 Vercel Hobby 擋部署)。每次 commit 前 `git config user.email storyhomedesign@gmail.com`。
 - 交付一律完整檔(哈利刪舊上新)；非工程師不給 patch。
 - push 後立刻讀 `git/ref/heads/main` 驗 HEAD(contents API 讀取有時快取，ref 較準)。
 
@@ -18,58 +19,95 @@
 `index.html` = 啟動載入器 + 兩個 bundler script：
 - `<script type="__bundler/manifest">` JSON：兩個 gzip+base64 chunk。
   - uuid `af2147d2-3ac8-434b-bfe8-7a89eab8c035` = DC/React 框架(~55KB)
-  - **uuid `875365e8-8f11-4b79-9780-292f266babda` = 遊戲引擎**(export `start`→`window.HBStart`，設 `window.__HB`=Game 實例)
+  - **uuid `875365e8-8f11-4b79-9780-292f266babda` = 遊戲引擎**(`class Game{…}`，export `start`→`window.HBStart`，設 `window.__HB`=Game 實例)。**所有遊戲程式碼/資料都在這個 chunk**，是最大的那塊。
 - `<script type="__bundler/template">` JSON：遊戲頁 HTML(含自己的 head＋viewport)。改 viewport/CSS 要改這裡。
 - head 預載本地 `react.production.min.js`+`react-dom.production.min.js`(同源，**勿刪**)。
 
 ### 渲染/座標核心(畫 Canvas 一定要懂)
-- 設計空間 = **BW×BH，BH=1080 固定、BW 動態**(iPhone15 約 2342)。`resize()` 設 `scale=min(cw/BW,ch/BH)`、dpr 上限 2；`render()` 做 `setTransform(scale*dpr,…)`，**DPR 與 letterbox 全域處理好，畫的時候只管設計單位**。不要改 resize/render/input。
-- **CSS-px×U 換算法(五頁改版都用這個)**：設計稿座標都是 852×393 frame 的 CSS px，乘上 `U = 1/this.scale`(iPhone15 約 2.748)就得到設計單位(852×U=BW、393×U=1080)。設計字級 N 在畫面上 = N×scale CSS px，所以 `N*U` 設計 = N CSS px。安全區 `this.insL/insR/insT/insB` 已是設計單位。
-- 命中：`this.btn(x,y,w,h,id,cb)` 註冊矩形，`hitButtons` 由後往前掃。**畫的矩形與命中矩形必須同一份**。最小命中 `Math.max(44*U,h)`。輔助：`this._press(rect)` 即時按壓態、`this._clip(str,maxW,size,weight)` 省略號、`this._coverImg(img,x,y,w,h)` cover 滿版、`rr/panel/text/wrap/drawHero(id,cx,feetY,sc)`。
+- 設計空間 = **BW×BH，BH=1080 固定、BW 動態**(程式預設 `let BW=1920`，`resize()` 依裝置改成 iPhone15 約 **2342**)。`scale=min(cw/BW,ch/BH)`、dpr 上限 2；`render()` 做 `setTransform(scale*dpr,…)`，**DPR 與 letterbox 全域處理好，畫的時候只管設計單位**。不要改 resize/render/input。
+- **兩種頁面座標慣例(改版前先看該頁是哪種)**：
+  - **U-縮放頁(英雄/首頁/板凳席/圖鑑)**：座標經 `_xxxLayout()` 以 `U = 1/this.scale`(iPhone15 約 2.748)把 852×393 CSS frame 換算成設計單位。字級 `N*U` 設計 = N CSS px。安全區 `this.insL/insR/insT/insB` 已是設計單位。版面用 `LO` rect 共用、自適應置中。
+  - **Raw-1920/1080 頁(遠征 drawRoute、戰鬥等)**：直接用設計座標(0..BW, 0..1080)，**水平要用 BW 相對**(置中 `BW/2`、靠右 `BW-…`)才能在寬螢幕(2342)正確；垂直 0..1080 固定。⚠️ 別寫死像 1640/1040 這種只對 BW=1920 的數值(遠征頁踩過這坑，已改 BW 相對)。
+- 命中：`this.btn(x,y,w,h,id,cb)` 註冊矩形，由後往前掃。**畫的矩形與命中矩形必須同一份**。最小命中 `Math.max(44*U,h)`。輔助：`this._press(rect)`、`this._clip(str,maxW,size,weight)`、`rr/panel/text/wrap/button/drawHero(id,cx,feetY,sc)`、`this._fade(hex,a)`。
 
-## 3. 改引擎流程(每次必照做)
-1. 從 index.html manifest 解出引擎 chunk → `chunk_engine.js`(uuid 875365e8 的 data：base64→gunzip)。
-2. `str_replace` / Python replace 改 `chunk_engine.js`(中文多的段落用 `assert src.count(old)==1`)。
-3. `node --check chunk_engine.js`。
-4. **repack**：gzip(mtime=0)+base64 → 字串替換 manifest 舊引擎 base64 → 斷言 round-trip 一致 → 寫回 index.html(保留你對 template/viewport 的修改)。
-5. **headless 驗證**(見 §4) → 截圖 → 迭代。
-6. push(contents API 單檔 PUT 先抓 SHA；多檔用 Git Trees API 原子提交；committer email 同上)。
-
-## 4. Headless 驗證
-`/opt/google/chrome/chrome` + puppeteer-core。`export NODE_PATH=/home/claude/.npm-global/lib/node_modules/@mermaid-js/mermaid-cli/node_modules`。harness：`python3 -m http.server` 服務 repo，viewport 852×393(也測 844×390) dpr 3，`waitForFunction('!!window.__HB')` 後：
-```js
-G._safeProbe=null; G.insL=82; G.insR=44; G.insT=4; G.insB=92; G.go(screen); G.render();
+## 3. 改引擎流程(每次必照做) — Python repack
+```python
+import re,json,base64,gzip,io
+KEY='875365e8-8f11-4b79-9780-292f266babda'
+html=open('index.html',encoding='utf-8').read()
+m=re.search(r'(<script type="__bundler/manifest">)(.*?)(</script>)',html,re.S)
+manifest=json.loads(m.group(2)); js=gzip.decompress(base64.b64decode(manifest[KEY]['data'])).decode()
+# … str replace，每處 assert js.count(old)==1 …
+# 平衡檢查 ()/{}/[] 數量相等
+buf=io.BytesIO()
+with gzip.GzipFile(fileobj=buf,mode='wb',mtime=0) as g: g.write(js.encode())
+nb=base64.b64encode(buf.getvalue()).decode(); assert gzip.decompress(base64.b64decode(nb)).decode()==js
+manifest[KEY]['data']=nb
+if 'size' in manifest[KEY]: manifest[KEY]['size']=len(js.encode())
+open('index.html','w',encoding='utf-8').write(html[:m.start(2)]+json.dumps(manifest,separators=(',',':'),ensure_ascii=False)+html[m.end(2):])
 ```
-再 screenshot。要重現「Dynamic Island 在左」用 `insL=162`(約 59 CSS)驗證返回鍵/版面不被島遮。命中測試：`G.go(screen);G.render();const b=G.buttons.find(x=>x.id===ID);G.hitButtons(b.x+b.w/2,b.y+b.h/2);` 看 `G.screen`/`G._toast`。本機資產要放 `/home/claude/hoop/assets/…` 給 http server。
+要點：中文多的段落務必 `assert count==1`；改完查 `()/{}/[]` 平衡；gzip 一律 `mtime=0` 並 round-trip 斷言；改 `data` 後同步更新 `size`。push 用 contents API 單檔(先抓 SHA)或直接 `git commit/push`(本機 clone 已內嵌 token)。
 
-## 5. 五個 Canvas 主頁(都已改版上線，layout/hit 共用、安全區夾擠、DPR、hit≥44)
+## 4. Headless 驗證(兩種，擇一)
+Chromium `/opt/google/chrome/chrome` + **puppeteer-core 裝在 `/home/claude`(不是 /tmp，shoot 腳本要放這跑)**。
+- **(A) 真實遊戲**(推薦，渲染真頁)：`python3 -m http.server` 服務 repo，viewport 852×393 dpr 3，`waitForFunction('!!window.__HB')` 後 `G=window.__HB; G.go(screen); G.render()` → screenshot。可注入安全區 `G.insL/insR/insT/insB`。
+- **(B) 隔離 harness**(本次 session 用，只想驗單頁、不想完整啟動 DC 框架時)：用 Python 把該頁所需方法(由 `,methodName(` 大括號配對抽出)組成獨立 `G={…}` 物件，stub `drawHero`(畫簡單剪影)/`audio`/`btn`/`go`/`startRun`，補資料 const(HEROES/RELICS/…)，puppeteer 載入後 `window.__set(state)`→screenshot。**踩過的坑**：①英雄頁 harness `scale` 要設 **0.5**(否則 U 錯、卡片過高)②遠征頁 harness `BW=2342, BH=1080`③`backdrop('hub')` 會讀 `this.stars`，要 stub `stars:[]`④site3 工作目錄在 `/home/claude/site3`。
 
-| 畫面 | 函式 / go() | 重點 |
-|---|---|---|
-| 選擇英雄 | `drawHeroes` / `heroes` | `_heroesLayout` 共用 rect。左整合英雄卡(立繪+名/英文/角色+數據列 Lv/空心/打板/Miss+基礎技能一行+聖物 0/5 列)。右天賦樹三支線(攻擊橘/控制藍/增益綠，7 節點 Lv10–70，點節點→底部浮層)。手機字級 ≥22–26 設計單位。 |
-| 首頁 | `drawHome` / `home`(開機頁) | Version C：flat 場景圖 `assets/background/home_scene_flat_1704x786.webp` 滿版(左場景+角色+烙印 logo/副標)，Canvas 只畫互動層+死亡計數。`_homeMode` flat(出貨)/layered。死亡計數用真 state(`save.deaths/deathsDay/deathsDayKey`，`_recordDeath()` 在落敗時呼叫)。 |
-| 最後板凳席 | `drawHub` / `hub`(由首頁「進入板凳席」) | Final Bench：flat `assets/final_bench_menu/final_bench_menu_full_flat_1704x786.webp` 滿版(左 7 角色圍綠球+烙印標題)，右側 Canvas **不透明哥德面板**蓋掉烙印、畫動態當前投手卡(HEROES[save.hero])+碎金(coins)/無盡最佳(endlessBest)+四鍵。`_fbLayout` 共用。返回鍵前疊柔邊暗暈蓋掉 flat 烙印的返回鍵(避免雙返回)。**註：左下「∞ 無盡模式」鍵目前反灰停用(`fb_endless_locked`，點擊只 toast「即將開放」)，原「籃魂聖匣」入口已撤(drawRelics 仍在但 hub 進不去)。** |
-| 宿主圖鑑/玩法 | `drawCodex` / `codex`(由 hub「宿主圖鑑」、首頁「玩法」) | 惡搞暗黑地獄手冊：**無 flat 底圖**(規格要求文字可改、不可烤整頁)，看板/鍊條/角骷髏/交叉骨/綠史萊姆/骷髏觀眾/月亮/城堡/破籃框/塗鴉/列 icon **全部 Canvas 自繪**。唯一圖片素材 = 左下放大豆人 `assets/host_guide/bean_demon_minimal_transparent_512.png`(+向量備援)。`_hgLayout` 共用；看板右移留左側給豆人。**8 列文字源 = `_guideRows()`**(`['標題','說明','icon']`)，改文案只動這裡，過長自動一行省略。 |
+## 5. Canvas 主頁總覽
 
-> 其餘畫面(atlas 籃獄圖譜、戰鬥、drawRelics 聖匣、settings、drawEnd/drawReplace 等)未動。
+| 畫面 | 函式 / go() | 座標慣例 | 重點 |
+|---|---|---|---|
+| 選擇英雄 | `drawHeroes` / `heroes` | U-縮放 `_heroesLayout` | **已完成 phase-1 改版**(見 §10)。左英雄卡(立繪+新名/英文/定位+數據列+基礎技能+五聖物 loadout 列)、右天賦樹三線**破框/髒球/手感**(擦板蠻王 21 節點，其餘規劃中)。 |
+| 遠征頁 | `drawRoute` / `route` | Raw-1920/1080(BW 相對) | **已完成 phase-2 改版**(見 §10)。上幕別、右上英雄+5聖物+BD 唯讀摘要、左三路線、右六球路石板 2×3、底部出戰摘要+進場。由 atlas 進入。 |
+| 首頁 | `drawHome` / `home`(開機頁) | U-縮放 | flat 場景圖滿版；死亡計數真 state(`save.deaths…`)。`_homeMode` flat(出貨)。已移除「圖鑑」，只留 玩法/設定 2 鍵置中。 |
+| 最後板凳席 | `drawHub` / `hub` | U-縮放 `_fbLayout` | Final Bench flat 圖；右側不透明哥德面板畫當前投手卡(HEROES[save.hero])+碎金+四鍵。**「∞ 無盡」「天梯榜」反灰停用**(點擊 toast「即將開放」)，原聖匣入口已撤。 |
+| 宿主圖鑑/玩法 | `drawCodex` / `codex` | U-縮放 `_hgLayout` | 暗黑手冊全 Canvas 自繪；8 列文字源 = `_guideRows()`。返回回首頁。 |
+| 籃獄圖譜 | `drawAtlas` / `atlas` | — | **近 FINAL，勿大改**。5 幕卡片、每幕 4 節點、節點 canvas 自繪(`_atlasNodes`)。底圖 webp。選幕後 → 遠征頁。 |
 
-## 6. 聖物系統現況(重要：尚未串接)
-- **英雄頁「聖物 0/5」(`_relicRow`) = 純視覺佔位**：5 格 + 背包鍵，點了只 toast「後續開放」，**不讀寫 save、不綁英雄、不影響戰鬥**。
-- **真正運作 = 籃魂聖匣(`drawRelics`)**：save `relics:[null,null,null]`=**3 個「全英雄共用」裝備欄** + `library:[]`(聖物庫上限 30)。15 個聖物分三類 球核/手感/誓約(誓約=標誌聖物給開局起始球形)。開局 `run.relics=s.relics.filter(Boolean)` 帶進戰鬥。
-- **方向(哈利已定)**：聖物以**英雄頁 5 格實裝 + 30 背包**為主；hub 聖匣入口已撤。**待拍板**：5 格要做「全英雄共用(把 library/欄位 3→5)」還是「每英雄獨立(新 save 結構)」——兩種 save 遷移不同，動工前要先問。舊 `drawRelics` 程式保留未刪。
+> 其餘(戰鬥 battle/win/lose、drawRelics 舊聖匣、settings)本階段未動。
 
-## 7. 待辦 / 下一步
-- `heroes-tuner.html`：即時參數調整單頁工具(讓哈利調字級/顏色/邊框並匯出 JSON 給你套用)。哈利說「明天」做，**未開工**。
-- 聖物串接：卡在「共用 5 / 每英雄」決策(見 §6)。
-- 無盡模式：目前反灰佔位，真功能未做。
-- codex 8 列說明在實機若放不下 → 可把 `_clip` 省略改自動縮字。
-- codex 是否改用壓縮包的 8 格金邊 icon 條(`rule_row_icons_optional_strip_8x96.png`，順序與 8 列 1:1)取代現在自繪向量 —— 待哈利選。
+## 6. 聖物系統現況(phase-1 後已大改)
+- **英雄頁五聖物 loadout = 已實裝可用**：`save.loadout:[null×5]`(出戰前攜帶 5 個)。`_relicRow` 顯示「聖物 N/5」+5 格(類別色+首字)+BD 標籤+背包鍵；`drawRelicBag` 覆蓋層列全部 16 聖物(2 欄、依五類排序、★推薦、灰=未擁有、已裝亮框)，`_toggleRelic` 裝卸。第一階段**全部可選+標示擁有**(解鎖經濟後再限制只能裝已擁有)。
+- **聖物五類**：`cls` = `core 核心 / feel 手感 / oath 誓約 / gag 惡搞 / job 職業`。職業聖物有 `hero` 欄=**軟性推薦標籤**(UI 標★，非硬鎖，所有英雄都能裝)。
+- **BD 標籤** `_bdTags(load)`：由聖物 `form`(火/冰/雷/斧頭/箭/皮球)+desc 關鍵字(護盾/擦板/連擊/高風險/成長)推導；類別色/名 `_clsCol`/`_clsName`。
+- **⚠️ 尚未串接戰鬥**：`save.loadout`(5 格 loadout) 與 **舊的 `save.relics:[null,null,null]`(局內 3 通用欄，`drawRelics`/`startRun` 用)是兩套**。把 loadout 帶進戰鬥、取代/整合舊 3 欄 = **未來戰鬥階段**的工作，第一/二階段刻意不動。
 
-## 8. 資產路徑(repo 根 `/assets/…`，Vercel 靜態服務)
-- `assets/background/home_scene_flat_1704x786.webp` 等(首頁 Version C)
-- `assets/final_bench_menu/final_bench_menu_full_flat_1704x786.webp`(板凳席)
-- `assets/host_guide/bean_demon_minimal_transparent_512.png`(宿主圖鑑豆人)
-- PWA：`react/react-dom` 本地檔、icon-180/192/512、manifest.json
+## 7. v2 企劃 + 階段藍圖(哈利的凍結方向)
+v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD** × **英雄天賦樹** × 籃框宿主戰鬥。頁面順序：英雄選擇頁 → 遠征頁 → 籃獄圖譜 → 戰鬥畫面 → 完整第一幕。
+- **Phase 1 英雄頁**：✅ 完成(§10)。
+- **Phase 2 遠征頁**：✅ 完成(§10)。
+- **Phase 3 籃獄圖譜**：近 FINAL，只需收尾統一暗黑墓碑風，**不大改**。
+- **Phase 4 戰鬥畫面**：最大工程。左英雄/右怪群+籃框宿主、軌跡清楚、UI 簡化。**三個尚缺系統**要在此實裝：①**彈框幸運球**(第 4 種進球判定，現只有 空心/擦板/普通/Miss)②**籃框行為牌組**(10 種籃框移動行為，分普通/菁英/Boss)③把 loadout 5 聖物串進戰鬥。
+- **Phase 5 完整第一幕**(灰哨修院 4 關+怪物+Boss 三階段)。
+- **小階段(哈利提過)**：導航優化(目前遠征頁「點摘要回英雄頁」後，英雄頁返回是回 hub 非回遠征頁)；英雄美術(現用 7 張現成 `hero_*.png`，之後重繪)；遠征頁底圖(現程序底+暗黑框，之後新繪)。
 
-## 9. 近期 commit(新→舊)
-`64f9fe2c` codex 強化惡搞暗黑 → `f70c064f` codex 地獄手冊改版 → `ab426668` hub 無盡模式反灰 → `fabcae2a` hub 返回鍵暗暈修正 → `28a6d4e9` hub Final Bench → `fa83cba3` home Version C → `4a0b0314`/`ddd5333c` 選擇英雄改版。
+### 硬性禁止(企劃明列，務必遵守)
+不做技能按鈕戰鬥/不加底部技能列；聖物不做成傳統裝備(武器/頭盔/戒指/衣服)；天賦不做純數值加成；不移除拉弓投籃；籃框不固定也不亂跳(要公平可讀)；怪物不即時亂攻擊(每球一回合、有預告)；UI 不蓋軌跡；不重畫已近完成的 FINAL 頁。
+
+## 8. 關鍵資料結構(都在引擎 chunk，用 `,名稱(` 或 `const 名稱` 定位)
+- `HEROES`(7)：`{id,name,en,role,body,col,passive,tag,origin}`。`tag`=核心一句話、`origin`=原型備查(phase-1 加)。id：shade/bone/archer/axer/whistle/elem/beast。
+- `HERO_TALENTS`：以英雄 id 為 key；目前**只有 `axer`** 三線(`break/dirty/feel`)×7 格 `{name,desc}`；其餘 id 無 key → 視為「規劃中」。
+- `_talentLanes()`：三線 `break 破框系(橘⚔)/dirty 髒球系(藍❖)/feel 手感系(綠❀)`。
+- `RELICS`(16)：`{name,cls,form?,act?,hero?,desc}`。cls 五類見 §6。phase-1 改：ref_glasses→gag、kings_seal→job+hero:axer、新增 `board_brace`(板魂護腕,job,hero:axer)。
+- `ROUTE_STONES`(6)：`{id,name,desc}` = 無門捷徑/貪婪深路/追獵者誓約/不朽鎮印/遠望之徑/替補名單。遠征頁右側 2×3。
+- `ACTS`(5)：`{id,key,name,sub,sky…}`，A.name 例「灰哨修院」。
+- `STAGES`/`GUARDS`(11)/`INTERFERENCES`(6 干擾)/`BALL_FORMS`(6)/`ABILITIES`(球途盤 18,局內三選一)/`BALL_WORDS`(7 球語)：戰鬥/局內系統，**本階段未動**。
+- `defaultSave`：含 `hero`、`relics:[null,null,null]`(局內 3 欄,舊)、**`loadout:[null×5]`(phase-1 加,英雄頁)**、`library:[]`、`coins`、`stats{}`、`settings{}`。`loadSave` 會把 defaultSave 新 key 自動補進舊存檔(遷移安全)。
+- 持久化：改 save 後呼叫 `persist(this.save)`。
+
+## 9. 資產路徑(repo 根 `/assets/…`)
+- 英雄立繪 `assets/hero_*.png`(×7)、英雄頁底圖 `assets/hero_select/bg_clean.webp`
+- 首頁/板凳席/圖鑑 flat 圖、籃獄圖譜 `assets/atlas_base_clean_no_nodes_1704x786.webp`
+- 宿主圖鑑豆人 `assets/host_guide/bean_demon_minimal_transparent_512.png`
+- PWA：react/react-dom 本地檔、icon、manifest.json；`vercel.json` 讓 index.html `no-cache`
+
+## 10. 本次 session 完成(英雄頁 + 遠征頁)
+- **Phase 1 英雄頁**(`a9fd9d5`)：7 英雄改惡搞名+一句話；天賦三線改名+擦板蠻王 21 節點(其餘規劃中)；五聖物 loadout(`save.loadout`)+功能背包覆蓋層 `drawRelicBag`+BD 標籤；聖物重標五類+新增板魂護腕。
+- **Phase 2 遠征頁**(`9504199`→自適應修 `9102eac`)：drawRoute 重塑為出戰選擇頁。新增英雄+5聖物+BD 唯讀摘要(複用 `drawHero/_bdTags/_clsCol`)、空聖物提示回英雄頁、三路線(速投/標準/腐化)卡片化、六球路石板 2×3、底部出戰摘要+進場。**沿用 `startRun(act,route,stone)` 行為不變**。
+- 兩階段都**未動**：戰鬥/win/lose、物理引擎、籃獄圖譜、home/hub、球途盤三選一、球語、部署。
+
+## 11. 近期 commit(新→舊)
+`9102eac` 遠征頁自適應修正 → `9504199` 遠征頁第二階段 → `a9fd9d5` 英雄頁第一階段 → `b450439` 首頁/導航重構 → `25b4b89` 清舊版+webp+vercel no-cache → `2964b31`/`7f61c7d` 籃獄圖譜節點烤入+調校台。
+
+## 12. 下一步建議
+等哈利上傳下一份 docx。若進 Phase 3(圖譜收尾)走最小改動；若進 Phase 4(戰鬥)先回「只規劃」、把三尚缺系統(彈框幸運球/籃框行為牌組/loadout 串戰鬥)拆清楚再動，並注意這是動到戰鬥/物理的高風險區，務必逐項 headless 驗證。**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
