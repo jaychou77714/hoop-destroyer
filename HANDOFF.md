@@ -103,6 +103,12 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 
 ## 10. 本次 session 完成(英雄頁 + 遠征頁)
 
+### ★ 第1幕遠征頁美術皮 + 管理員模式(本次最新，HEAD 待 push)
+- **第1幕「灰哨修院」遠征選擇頁吃素材重繪**(`_drawRouteArt`)：底圖 `assets/stage1_route_base_1704x786.webp`(126KB，由哈利素材包 PNG 轉)畫滿 `(0,0,BW,BH)`，座標系 `U=BW/1704, D=v=>v*U`(同 drawAtlas/首頁/圖鑑慣例)。所有框/右側6石板icon/月亮/修院場景烘在底圖；文字與動態高亮全程式畫回：標題/副標、返回、英雄框(頭像圈 drawHero＋擦板蠻王/Boardbarian/定位＋攜帶聖物5/5彩色聖物格＋BD標籤＋點此回英雄頁更換)、左3路線卡、右6石板卡(2×3)、出戰摘要條、進入主鈕(火光呼吸)。selected=暖金微光+左側亮邊(路線)/右上勾選亮點(石板)；底圖不烙 selected。**版位用實測座標**(JSON 與烘圖有偏移、不可信)：石板 colCx=[1285,1490] rowTop=[308,445,580] cw196 ch122；英雄格 cxs=[553,623,693,763,833] cy184 sz52；兩區標題 y=290。**只第1幕**(`drawRoute` 判 `_selAct===1`&圖就緒→art，否則 `_drawRouteFlat` 舊版)。其他幕之後各別出圖再加。headless 截圖比對 accepted_direction_mockup 已吻合。
+- **管理員模式**(`save.admin`)：首頁左上角隱藏熱區→`_toggleAdmin()`→`window.prompt` 密碼 **071428** 開/關，開啟時左上顯示「🛠 管理員 ON」徽章。效果：①`_unlockedActs()` 回 5(全地圖，atlas 解鎖閘改用此函式)②`makeBasket` 進球即 `setTimeout(240ms)` 清空 guards+`onStageClear`(一球秒節點)③**不計成績**：`finishRun`/`_recordShot`/`gainXP` 永久等級存檔/`_recordDeath` 全部 `if(!admin)` 守衛(bestScore/acts/bossClears/marks/heat/memory/sessionStats/英雄等級/死亡/命中率都不寫)。純供哈利逐節點微調美術。
+- **驗證**：管理員 9/9(解鎖全幕/不寫bestScore/不解鎖acts/不存等級/不計死亡/不計命中率/關閉恢復/非admin正常寫)、全畫面 smoke 無例外、Phase6.1/6.2 回歸 34/34 仍綠。
+
+
 ### ★ Phase 6.1/6.2 進度系統重做(本次最新，HEAD 待 push)
 暗黑式累積：把 Phase 6 的「貨幣解天賦」改成「永久等級＋天賦點」，並上聖物隨機素質。哈利定案：① 每英雄永久累積等級(賽季歸零概念先留)②天賦方案 A(每英雄 3 主題線)③分解就是分解不給獎勵、商店先封存、遊戲內＝暗黑式累積 XP 升級。補充：核心球限 1、聖物隨機素質一次做完。
 - **移除**：碎金(`save.coins` 不再增加，板凳席欄改「今日命中率」per-hero 每日重置跟著選的英雄)、籃魂幣(`profile.coins` 整個退役)、商店(`_shouldOpenShop` 永遠 false、reward 後直接下一關，drawShop 碼留著休眠)、HUD 金幣 pill、reward/結算金幣字樣、分解給幣(兩處)。
