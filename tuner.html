@@ -86,6 +86,8 @@ function DEF_route(){const d={
  const shx=[1180,1385,1180,1385,1180,1385],shy=[314,314,451,451,588,588]; for(let i=0;i<6;i++)d['s'+i+'hi']={x:shx[i],y:shy[i],w:196,h:122};
  return d;
 }
+const RT_ACT_TUNER={ 2:{ back:{x:123,y:50,s:24}, title:{x:877,y:54,s:30}, subtitle:{x:877,y:95,s:17}, portrait:{x:182,y:186,r:52}, changeBtn:{x:1513,y:233,s:18}, summary:{x:864,y:696,s:20}, r0name:{x:194,y:354,s:27}, r1name:{x:192,y:475,s:27}, r2name:{x:194,y:602,s:27}, r2desc:{x:193,y:635,s:20,w:303}, s0name:{x:1310,y:380,s:18}, s0desc:{x:1305,y:404,s:19}, s1name:{x:1516,y:380,s:18}, s1desc:{x:1520,y:408,s:19}, s2name:{x:1310,y:517,s:18}, s2desc:{x:1305,y:543,s:19}, s3name:{x:1515,y:517,s:18}, s3desc:{x:1520,y:544,s:19}, s4name:{x:1309,y:652,s:18}, s4desc:{x:1307,y:678,s:19}, s5name:{x:1520,y:652,s:18}, s5desc:{x:1520,y:676,s:19}, node0:{x:620,y:381}, node1:{x:600,y:550}, node2:{x:939,y:442}, node3:{x:1005,y:632}, r0hi:{x:86,y:314,w:404,h:114}, r1hi:{x:85,y:442,w:405,h:108}, r2hi:{x:86,y:565,w:404,h:116}, s0hi:{x:1210,y:317,w:196,h:122}, s1hi:{x:1419,y:318,w:202,h:122}, s2hi:{x:1209,y:452,w:196,h:122}, s3hi:{x:1420,y:451,w:202,h:124}, s4hi:{x:1210,y:586,w:196,h:122}, s5hi:{x:1419,y:585,w:203,h:125} } };
+function routeDef(){ const d=DEF_route(); const ov=RT_ACT_TUNER[curAct]; if(ov){ for(const k in ov) d[k]=Object.assign({},d[k]||{},ov[k]); } return d; }
 const LABELS={back:'返回',title:'主標',subtitle:'副標',portrait:'頭像',heroName:'角色名',heroEn:'英文名',heroRole:'定位',relicLabel:'攜帶聖物字',bd:'BD',changeBtn:'回英雄頁',routeHeader:'路線標題',stonesHeader:'石板標題',summary:'出戰摘要',cta:'進入鈕字',relic0:'聖物1',relic1:'聖物2',relic2:'聖物3',relic3:'聖物4',relic4:'聖物5',r0name:'路線1名',r0desc:'路線1述',r1name:'路線2名',r1desc:'路線2述',r2name:'路線3名',r2desc:'路線3述',s0name:'石板1名',s0desc:'石板1述',s1name:'石板2名',s1desc:'石板2述',s2name:'石板3名',s2desc:'石板3述',s3name:'石板4名',s3desc:'石板4述',s4name:'石板5名',s4desc:'石板5述',s5name:'石板6名',s5desc:'石板6述',node0:'節點1',node1:'節點2',node2:'節點3',node3:'Boss節點',r0hi:'路線1遮罩',r1hi:'路線2遮罩',r2hi:'路線3遮罩',s0hi:'石板1遮罩',s1hi:'石板2遮罩',s2hi:'石板3遮罩',s3hi:'石板4遮罩',s4hi:'石板5遮罩',s5hi:'石板6遮罩'};
 
 let curTab='route', sel=null, step=5;
@@ -103,7 +105,7 @@ function loadTab(tk){ curTab=tk; sel=null;
  ['targets','val'].forEach(id=>document.getElementById(id).style.display=editable?'':'none');
  document.querySelector('.step').style.display=editable?'':'none'; document.querySelector('.pad').style.display=editable?'':'none'; document.getElementById('extras').style.display=editable?'':'none'; document.querySelector('.act').style.display=editable?'':'none';
  if(!editable){ document.getElementById('todo').innerHTML='【'+tab.label+'】此頁尚未接入調校。<br>跟 Claude 說「做 '+tab.label+' 的調校」我就把這頁的元件加進來。<br>（下方先顯示底圖預覽）'; }
- if(tk==='route'){ def=DEF_route(); L=load('route',def); buildTargets(); }
+ if(tk==='route'){ def=routeDef(); L=load('route_a'+curAct,def); buildTargets(); }
  document.getElementById('actbar').style.display=(tk==='route')?'flex':'none';
  // bg
  if(tab.bg && tk!=='route'){ if(!imgs[tk]){ const im=new Image(); imgs[tk]=im; im.onload=draw; im.onerror=()=>{document.getElementById('err').style.display='block';document.getElementById('err').textContent='底圖載入失敗: '+tab.bg;}; im.src=tab.bg; } }
@@ -111,7 +113,7 @@ function loadTab(tk){ curTab=tk; sel=null;
 }
 function load(tk,d){ let s={}; try{s=JSON.parse(localStorage.getItem('hb_tuner_'+tk)||'{}')||{};}catch(e){}
  const o={}; for(const k in d){ o[k]=Object.assign({},d[k], s[k]||{}); } return o; }
-function save(){ localStorage.setItem('hb_tuner_'+curTab, JSON.stringify(L)); }
+function save(){ const key=(curTab==='route')?('route_a'+curAct):curTab; localStorage.setItem('hb_tuner_'+key, JSON.stringify(L)); }
 function T(str,x,y,size,col,align,weight,baseline){ctx.font=(weight||'700')+' '+size+'px "Noto Serif TC",Georgia,serif';ctx.textAlign=align||'left';ctx.textBaseline=baseline||'alphabetic';ctx.fillStyle=col;ctx.fillText(str,x,y);}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 function wrapC(str,cx,y,maxw,lh,col,size){ctx.font='400 '+size+'px "Noto Serif TC",Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=col;let line='',yy=y;for(const ch of str){if(ctx.measureText(line+ch).width>maxw&&line){ctx.fillText(line,cx,yy);line=ch;yy+=lh;}else line+=ch;}if(line)ctx.fillText(line,cx,yy);}
@@ -154,7 +156,7 @@ function marks(){if(!sel&&!Object.keys(L).length)return;ctx.save();for(const k i
 const tabsEl=document.getElementById('tabs');
 TABS.forEach(t=>{const b=document.createElement('button');b.className='tab'+(t.impl?'':' todo')+(t.k==='route'?' on':'');b.textContent=t.label+(t.impl?'':' ·待接');b.dataset.k=t.k;b.onclick=()=>loadTab(t.k);tabsEl.appendChild(b);});
 const actbar=document.getElementById('actbar');
-ACT_NAMES.forEach((nm,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' on':'');b.textContent='第'+(i+1)+'幕';b.title=nm;b.dataset.act=(i+1);b.onclick=()=>{curAct=i+1;[...actbar.children].forEach(x=>x.classList.toggle('on',+x.dataset.act===curAct));draw();};actbar.appendChild(b);});
+ACT_NAMES.forEach((nm,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' on':'');b.textContent='第'+(i+1)+'幕';b.title=nm;b.dataset.act=(i+1);b.onclick=()=>{curAct=i+1;[...actbar.children].forEach(x=>x.classList.toggle('on',+x.dataset.act===curAct));def=routeDef();L=load('route_a'+curAct,def);sel=null;buildTargets();draw();};actbar.appendChild(b);});
 const tgEl=document.getElementById('targets');
 function buildTargets(){tgEl.innerHTML='';for(const k in def){const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=LABELS[k]||k;b.dataset.k=k;b.onclick=()=>{sel=k;refresh();};tgEl.appendChild(b);}}
 function refresh(){[...tgEl.children].forEach(b=>b.classList.toggle('on',b.dataset.k===sel));updVal();buildExtras();draw();}
@@ -168,8 +170,8 @@ document.querySelectorAll('.step button').forEach(b=>b.onclick=()=>{step=+b.data
 document.querySelectorAll('.pad button[data-d]').forEach(b=>b.onclick=()=>{if(!sel)return;const d=b.dataset.d;if(d==='C')L[sel].x=W/2;else{if(d==='L')L[sel].x-=step;if(d==='R')L[sel].x+=step;if(d==='U')L[sel].y-=step;if(d==='D')L[sel].y+=step;}save();updVal();draw();});
 
 document.getElementById('guide').onchange=draw;document.getElementById('markers').onchange=draw;
-document.getElementById('reset').onclick=()=>{if(confirm('重設本頁所有版位？')){localStorage.removeItem('hb_tuner_'+curTab);L=load(curTab,def);refresh();}};
-document.getElementById('exp').onclick=()=>{const ta=document.getElementById('out');ta.style.display='block';const o={};for(const k in L)o[curTab.replace('route','rt')+'.'+k]=L[k];ta.value='// '+curTab+' 版位 (貼回給 Claude)\n'+JSON.stringify(o,(k,v)=>typeof v==='number'?Math.round(v*10)/10:v,1);ta.select();try{document.execCommand('copy');}catch(e){}try{navigator.clipboard.writeText(ta.value);}catch(e){}};
+document.getElementById('reset').onclick=()=>{if(confirm('重設本頁所有版位？')){const key=(curTab==='route')?('route_a'+curAct):curTab;localStorage.removeItem('hb_tuner_'+key);def=(curTab==='route')?routeDef():def;L=load(key,def);refresh();}};
+document.getElementById('exp').onclick=()=>{const ta=document.getElementById('out');ta.style.display='block';const o={};for(const k in L)o[curTab.replace('route','rt')+'.'+k]=L[k];const tag=(curTab==='route')?('第'+curAct+'幕 route'):curTab;ta.value='// '+tag+' 版位 (貼回給 Claude)\n'+JSON.stringify(o,(k,v)=>typeof v==='number'?Math.round(v*10)/10:v,1);ta.select();try{document.execCommand('copy');}catch(e){}try{navigator.clipboard.writeText(ta.value);}catch(e){}};
 // 拖曳
 let drag=false,lx,ly;
 function toImg(e){const r=cv.getBoundingClientRect(),sx=W/r.width,sy=H/r.height,t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*sx,y:(t.clientY-r.top)*sy};}
