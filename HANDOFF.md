@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`5a8aa0f`(Phase 5-2 五幕閉環+軌跡難度曲線)。push 後請更新本行。
+- **目前 HEAD**：`5a8aa0f`(Phase 5-2 五幕閉環+軌跡難度曲線，**已過 iPhone 15 橫向實機驗收**)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -133,11 +133,13 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 5-1b 獎勵與成長系統**(`484b156`)：reward 頁從補給升級成 Roguelite 成長頁。新增 `REWARDS` **12 池**(生存4 heal/shield/ironhide/regen、投籃2 nearfocus/farfocus、攻擊6 fireup/frost/thunder/bankfaith/swishzeal/luckydisc)+`REWARD_IDS`。`startRun` 初始化 `run.mods`(10鍵:傷害類 1、生存類 0)+`run.modStacks{}`+`run.rewardChoices[]`。`_rollRewards()` 抽 3 不重複、**疊滿(maxStack3)排除**、heal/shield 即時類永遠可出。`drawReward` 改正式成長卡(類型標籤 生存綠/投籃藍/攻擊橘+名稱+短描述+`Lv n/3`,標題『選擇一項成長』)。`_pickReward` 套用即時(heal clamp/shield+20)或 mod(+0.15/+0.05、cap damageReduce0.45·stageStartHeal0.15·mult1.45、modStacks++)、防連點(rewardPending 一次性)。**`_applyRewardDamageMods(ctx)` 掛 `makeBasket` 的 `BALL_FORMS.attack` 前**(fire/ice/lightning 依 `run.form`、swish/bank/lucky 依 ctx、近/貼→nearMul·遠→farMul 讀 `run.hoopAct.label` 首字、中框不吃;**與板魂相乘**;ctx.lucky 由 makeBasket 補)。`playerHurt` 開頭減傷(先於扣盾,`Math.min(0.45,…)`)。`enterStage` 每場 `stageStartHeal` 回血(clamp 0.15)。`onStageClear` 進 reward 前 `_rollRewards()`。headless:mods 初始化/抽3不重複/重繪穩定/疊滿排除/heal clamp+連點無效/shield+20/ironhide cap0.45×3/regen cap0.15×3/fireMul cap1.45×3/fire115·ice130·lightning145·normal不吃·swish·bank·lucky·近·貼·遠·中框不吃·板魂×獎勵=180/減傷100→55/每場回血+10。**未改** 五種判定 if 鏈/shotDamage/擦板蠻王/物理/hitbox/干擾/4-5b/5-1a 框位/閉環骨架/loadout/heroes/route/atlas;run 內有效、無永久成長、無全域 dmgMul。
 
 - **Phase 5-2 五幕閉環擴張+投籃軌跡難度曲線**(`5a8aa0f`)：`STAGES` 全 5 幕重建,**各 4 普通+1 boss=5 關、boss 末位(idx4)**。Act1 灰哨修院(reorder boss 末位,gameplay 同)/Act2 鐵籃貧民窟(shield·drummer,tier2-4)/Act3 冷焰球具塔(frost·eye,tier3-4)/Act4 雷骨看台(chain·bat,tier4-5)/Act5 終焉籃堂(混合,tier4-5,boss waves4)。沿用現有 body/guards 素材。`ACTS` act2-5 改幕名+boss名(key/sky/relic 不變)。`startRun` std/corrupt path 統一 `[0,1,2,3,4]`、fast `[0,2,4]`(boss idx4 全幕;**移除 act1 特例**)。`_pickHoopCard` 擴 act2-5 分層(act2 近中+少遠[5,6]/act3 中為主遠增/act4 中遠混合不長連發/act5 更難但 `_farStreak>=2` 回近中;NEAR=[9,10,0,1]/MID=[2,3,4]/FAR=[5,6,7,8])。`_endStats` 加 `route`/`stone`。`drawEnd`:won&act<5→『前往第 N 幕』`startRun(act+1,route,stone)`;act5 won→『★全五幕遠征通關★』。**軌跡難度曲線**:新增 `_getAimPreviewPct()=clamp(1-((act-1)*5+pi)*0.05,0.55,1)`;`drawAim` `dots*=pct`(**只縮可視長度**、落點圈用迴圈末端 `_lx,_ly` 自動跟隨不暴露完整落點、與 shortTraj*0.5 疊加、`min7`、hideLanding 仍只隱藏圈);輔助文字加『軌跡 %』。headless:五幕各5關/boss末位/軌跡% a1p0=100·a1p4=80·a2p0=75·a2p4=55·a3+=55/各幕分層(act1 stage1 無遠·act5 streak<=2 有近中)/前往下一幕帶 route/act2 完整閉環/reward 傷害加成·5-1a 回歸。**未動** 物理/battleUp力道/stepBall/collideHoop/hitbox/五種判定/shotDamage/擦板蠻王/干擾核心/各干擾機制/殘影/REWARDS·run.mods 數值/抽選邏輯/loadout/heroes/atlas/聖物背包/天賦樹。**注意**:全幕 boss 統一 idx4;軌跡% 只影響 drawAim 可視點數,不影響球路/殘影記錄。
+  - **✅ 已過實機驗收(iPhone 15 橫向)**：Act1~Act5 各 4 普通+1 Boss(共 25 場結構成立)、Act1~Act4 通關可前往下一幕、Act5 通關顯全五幕遠征通關、軌跡難度曲線(100% 起每節點 -5% 最低 55%)可接受、shortTraj/hideLanding 與軌跡曲線疊加正常、5-1a 框位/5-1b 獎勵成長/Phase 4 戰鬥核心皆正常。**本階段不再細修。**
 
 ## 11. 近期 commit(新→舊)
 `5a8aa0f` Phase 5-2 五幕閉環+軌跡難度 → `484b156` Phase 5-1b 獎勵與成長系統 → `bdd5a60` Phase 5-1a 籃框遠近平衡 → `700bd03` Phase 5 第一幕閉環 → `4ac6fec` HANDOFF(4-6驗收/Phase4穩定) → `186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
 **Phase 4 戰鬥核心＝穩定版**；**Phase 5 第一幕閉環(第一版)已過實機驗收**(`700bd03`)，不再細修;獎勵頁＝功能版 UI、美術 polish 留待之後。
-**Phase 5-2 五幕閉環+軌跡難度曲線完成**(`5a8aa0f`)：5 幕×5 關(25 場)可完整測試、軌跡可視長度遞減(100%→55%)、前往下一幕串接、5-1a/5-1b 全幕適用。待哈利實機驗收 25 場流程。**未來可選方向**(待指示、先規劃)：跨幕遠征獎勵繼承、劇情、獎勵頁美術 polish、build 深化、英雄差異化、各幕專屬機制(目前後四幕僅資料難度差異)。
+**Phase 5-2 五幕閉環+軌跡難度曲線已過實機驗收**(`5a8aa0f`)：25 場結構成立、前往下一幕、全五幕遠征通關、軌跡曲線 100%→55%、5-1a/5-1b/Phase 4 全正常。本階段不再細修。
+**下一步＝等哈利指示**(先規劃、不直接實作)。**未來可選方向**(待指示)：跨幕遠征獎勵繼承、劇情、獎勵頁/各幕美術 polish、build 深化、英雄差異化、各幕專屬機制(目前後四幕僅資料難度差異)。
 **現行不動清單(沿用)**：投籃物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、籃框位置行為牌、loadout、heroes/route/atlas、Phase 5 第一幕閉環骨架。
