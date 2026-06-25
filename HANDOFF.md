@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`e90147c`(Phase 4-5 怪物干擾補接+預告)。push 後請更新本行。
+- **目前 HEAD**：`40f9a1d`(Phase 4-5a 頭頂預告可讀性)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -117,8 +117,10 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **`run._boardBuff` 現可用**(布林)；未來 4-5/4-6 或天賦樹要擴充擦板蠻王效果可沿用此旗標。
 - **Phase 4-5 怪物干擾補接+預告**(`e90147c`)：六種干擾**都有對應怪**(chain→gravity/bat→shortTraj/zombie→maxPull/frost→slowCharge/eye→hideLanding/drummer→drum)，機制**已是每球一回合制**(`advanceInterference` 每球推進怪 cast、頭頂 pips 預告)。本階段：新增 `_mainIntf()`(回本球唯一主要干擾)；`guardCast` 改 `run.intf=[{…}]` **只留 1 筆**(最新取代)、drum 不佔槽仍推進其他 intf 怪 cast+1；`drawHUD` 干擾槽改讀 `_mainIntf` 顯示 icon+名稱+剩餘球數(不再列多個)；`drawAim` 新增**落點圈**(預測末端、`hideLanding` active 時只隱藏此圈、軌跡點全保留)、加 `slowCharge → maxPull×1.15`；`battleUp` 同加 slowCharge `maxPull×1.15`(沿用現有 maxPull 管線、不改拉弓模型)；`drawGuardTags` 縮小 96×26→80×22 避免擋籃框。gravity(`_gravMul`×1.25)/shortTraj(dots×0.5)/maxPull(×0.85) 維持。headless 驗證：六種各進 intf(cap 1)/最新取代/drum 推進別人 cast+1 且不佔槽/gravMul 1.25/實測力道 none 2228·slowCharge 2045(×1.15 較低)·maxPull 2477(×0.85 較高)/落點圈顯示 vs hideLanding 隱藏(軌跡點仍全在)/干擾槽只顯 1 主要。**未動** stepBall/collideHoop/makeBasket 五種判定/擦板蠻王/loadout/heroes/route/atlas/home/hub/球途盤/球語/部署。
 
+- **Phase 4-5a 頭頂預告可讀性**(`40f9a1d`)：實機 iPhone 15 橫向看不清，**只改 `drawGuardTags`**。tag 80×22→108×30、icon 18px、cast 由文字改**圓點 pips**(直徑6/間距3、實心=已蓄/空心=剩餘)、深黑底~0.78、金描邊(casting 橘金#ffb24d+shadow 脈動)、上移6px、**近籃框/右緣自動左移66px**避免擋框、casting 加「!」。不顯長文字。**機制全不動**(slowCharge/maxPull/hideLanding/drum/落點圈/軌跡/物理/五種判定/擦板蠻王/loadout/heroes/route/atlas)。
+
 ## 11. 近期 commit(新→舊)
-`e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
+`40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
 **Phase 4-6：籃框行為牌組 + 預告**(哈利定的順序，待哈利上傳企劃+說開始)。最大子階段：籃框(host/hoop)行為牌——可能讓籃框移位/縮小/傾斜/換位等，且需「投下一球前」預告(畫面已有「下一籃框行為：—」底部欄位可沿用)。會動到 host/hoop 定位(`pickHoopPos`)與 drawHUD 底部欄。注意這是動 hoop 位置的最大改動，務必逐項 headless 驗證、先只規劃。**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
