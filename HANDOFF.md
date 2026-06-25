@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`bf103bb`(Phase 6 完整架構迴路，引擎 chunk；headless **48/48** + 全畫面 smoke 無例外，**待 iPhone 15 橫向實機驗收**)。前一穩定版 `5a8aa0f`(Phase 5-2，已過實機)。push 後請更新本行。
+- **目前 HEAD**：`(待 push 更新)`(Phase 6.1/6.2 進度系統重做；headless **34/34** + 全畫面 smoke 無例外，**待 iPhone 15 橫向實機驗收**)。前一版 `eb97ae0`(Phase 6 完整架構迴路)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -102,6 +102,18 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - PWA：react/react-dom 本地檔、icon、manifest.json；`vercel.json` 讓 index.html `no-cache`
 
 ## 10. 本次 session 完成(英雄頁 + 遠征頁)
+
+### ★ Phase 6.1/6.2 進度系統重做(本次最新，HEAD 待 push)
+暗黑式累積：把 Phase 6 的「貨幣解天賦」改成「永久等級＋天賦點」，並上聖物隨機素質。哈利定案：① 每英雄永久累積等級(賽季歸零概念先留)②天賦方案 A(每英雄 3 主題線)③分解就是分解不給獎勵、商店先封存、遊戲內＝暗黑式累積 XP 升級。補充：核心球限 1、聖物隨機素質一次做完。
+- **移除**：碎金(`save.coins` 不再增加，板凳席欄改「今日命中率」per-hero 每日重置跟著選的英雄)、籃魂幣(`profile.coins` 整個退役)、商店(`_shouldOpenShop` 永遠 false、reward 後直接下一關，drawShop 碼留著休眠)、HUD 金幣 pill、reward/結算金幣字樣、分解給幣(兩處)。
+- **永久等級**：`profile`(bump `hb_profile_v2`= `{heroes:{id:{level,xp,talents}},relicMeta:{},heroDay:{key,stats}}`)。`startRun` 載入該英雄 `_heroProg(id).level/xp`→`run.level/xp`，`xpNext=min(180,round(100*1.15^(lv-1)))` 軟上限(高等仍每幕升得到、升級三選一持續)。`gainXP`/`finishRun` 把 run 等級存回該英雄。遊戲內 HUD 等級＝英雄選單等級＝同一數字、不歸零。
+- **天賦點**：每 10 等 1 點(`_talentPtsEarned/Spent/Avail`)、無貨幣。每英雄 3 主題線×7 格(`HERO_LANES`+`_laneNodes()`→`TALENT_TREES` 共 21 節點，row2/4=mid、row6=big 英雄異變壓頂)。**逐格爬**：`_talentNodeLocked` 同線需先解上一格＋點數檢查。`drawTalents` 重寫為 3 線版面(線標題+逐格連線+天賦點顯示)。
+- **聖物隨機素質(6.2)**：`RELIC_AFFIXES`(13 詞綴 pool)+`_qualTier`+`QUAL_NAME/QUAL_COL`(普通白/精良藍/稀有金)。`_rollRelicMeta`(品質 q=5~50、tier 決定詞綴數 1~3、val 按 q/50 縮放)、`_relicMeta`(id 為 key、lazy roll、存 `profile.relicMeta`)、`_rerollRelicMeta`。`_applyRelicAffixesToRun`：loadout 聖物詞綴→`run.mods`/maxhp/shield(走既有 mod 系統，不改 relicOnBasket 戰鬥 hook)，由 `_applyTalentEffectsToRun` 末端呼叫。顯示：背包列品質色+品質名、結算 loot 卡品質色 border+「強度 q/50」+詞綴行(◆ label +val)。**已知簡化**：每 relic id 一個 roll(不支援同 relic 多實例)。
+- **核心球限 1**：`_toggleRelic` 裝帶 `form` 的聖物時先清掉既有 form 聖物(toast 替換)、最多帶 1 顆球。
+- **燃燒/持續傷害實裝**(原是真 bug：`burnDps*dt`→`Math.round` 變 0 既噴 0 又沒扣血)：生效 `updateGuards` 改每 0.5s tick `hurtGuard(max(1,round(burnDps*0.5)))`。axe/arrow 視覺 projectile(dmg:0)三處加 `if(p.dmg>0)` 守衛、不再噴 0(實際傷害已由技能結算器一次給足)。
+- **驗證**：headless **34/34**(天賦樹 21/3 線、永久等級載入存檔、天賦點每 10 等 1 點+逐格 gating+無貨幣、今日命中率 per-hero、聖物素質 q5~50+詞綴+套用 mods、shop 封存、核心球限 1 替換、燃燒真實扣血、回歸 stepBall/collideHoop/battleUp/mods 結構)。全畫面 smoke(home/heroes/3 線 talents/板凳席命中率/品質背包/codex/route/battle 無金幣 HUD/30 幀 step/reward/win 詞綴卡/lose)無例外。**未動**：同 Phase 6 不動清單(投籃物理/battleUp/stepBall/collideHoop/hitbox/五判定/擦板蠻王/干擾/殘影/籃框位置牌/五幕閉環/mods 基本結構/軌跡曲線/手機橫向)。
+- **遺留死碼可由 Codex 清**：`ABILITIES`/`REWARDS`/`chooseForm`/`chooseAbility`/`FORM_CHOICES`/`TALENT_SMALL`·`TALENT_MID`·`HERO_MUT`(舊版被取代)。`run.gold` 仍累積(商店未來回歸用)。
+
 - **Phase 1 英雄頁**(`a9fd9d5`)：7 英雄改惡搞名+一句話；天賦三線改名+擦板蠻王 21 節點(其餘規劃中)；五聖物 loadout(`save.loadout`)+功能背包覆蓋層 `drawRelicBag`+BD 標籤；聖物重標五類+新增板魂護腕。
 - **Phase 2 遠征頁**(`9504199`→自適應修 `9102eac`)：drawRoute 重塑為出戰選擇頁。新增英雄+5聖物+BD 唯讀摘要(複用 `drawHero/_bdTags/_clsCol`)、空聖物提示回英雄頁、三路線(速投/標準/腐化)卡片化、六球路石板 2×3、底部出戰摘要+進場。**沿用 `startRun(act,route,stone)` 行為不變**。
 - 兩階段都**未動**：戰鬥/win/lose、物理引擎、籃獄圖譜、home/hub、球途盤三選一、球語、部署。
