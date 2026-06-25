@@ -40,6 +40,7 @@
 <h1>HOOPBREAKER · 全頁面調校後台</h1>
 <p class="hint">上方選頁籤 → 點下方元件名稱（或圖上綠點）選元件 → 十字鍵微調 / A± 調字級 → 「匯出參數」整段貼回給 Claude。每個元件都可<b>個別</b>調。</p>
 <div class="tabs" id="tabs"></div>
+<div class="tabs" id="actbar" style="display:none"></div>
 <div id="stage"><canvas id="cv" width="1704" height="786"></canvas><div id="err"></div></div>
 <div id="todo" style="display:none"></div>
 
@@ -90,6 +91,9 @@ const LABELS={back:'返回',title:'主標',subtitle:'副標',portrait:'頭像',h
 let curTab='route', sel=null, step=5;
 let L={}, def={};
 const imgs={};
+const ACT_NAMES=['灰哨修院','鐵籃貧民窟','冷焰球具塔','雷骨看台','終焉籃堂'];
+let curAct=1; const routeImgs={};
+function ensureRouteImg(act){ if(!routeImgs[act]){ const im=new Image(); routeImgs[act]=im; im.onload=draw; im.onerror=()=>{}; im.src=A+'/assets/stage'+act+'_route_base_1704x786.webp'; } return routeImgs[act]; }
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 function loadTab(tk){ curTab=tk; sel=null;
  const tab=TABS.find(t=>t.k===tk);
@@ -100,8 +104,9 @@ function loadTab(tk){ curTab=tk; sel=null;
  document.querySelector('.step').style.display=editable?'':'none'; document.querySelector('.pad').style.display=editable?'':'none'; document.getElementById('extras').style.display=editable?'':'none'; document.querySelector('.act').style.display=editable?'':'none';
  if(!editable){ document.getElementById('todo').innerHTML='【'+tab.label+'】此頁尚未接入調校。<br>跟 Claude 說「做 '+tab.label+' 的調校」我就把這頁的元件加進來。<br>（下方先顯示底圖預覽）'; }
  if(tk==='route'){ def=DEF_route(); L=load('route',def); buildTargets(); }
+ document.getElementById('actbar').style.display=(tk==='route')?'flex':'none';
  // bg
- if(tab.bg){ if(!imgs[tk]){ const im=new Image(); imgs[tk]=im; im.onload=draw; im.onerror=()=>{document.getElementById('err').style.display='block';document.getElementById('err').textContent='底圖載入失敗: '+tab.bg;}; im.src=tab.bg; } }
+ if(tab.bg && tk!=='route'){ if(!imgs[tk]){ const im=new Image(); imgs[tk]=im; im.onload=draw; im.onerror=()=>{document.getElementById('err').style.display='block';document.getElementById('err').textContent='底圖載入失敗: '+tab.bg;}; im.src=tab.bg; } }
  draw();
 }
 function load(tk,d){ let s={}; try{s=JSON.parse(localStorage.getItem('hb_tuner_'+tk)||'{}')||{};}catch(e){}
@@ -113,7 +118,7 @@ function wrapC(str,cx,y,maxw,lh,col,size){ctx.font='400 '+size+'px "Noto Serif T
 function wrapL(str,x,y,maxw,lh,col,size){ctx.font='400 '+size+'px "Noto Serif TC",Georgia,serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle=col;let line='',yy=y;for(const ch of str){if(ctx.measureText(line+ch).width>maxw&&line){ctx.fillText(line,x,yy);line=ch;yy+=lh;}else line+=ch;}if(line)ctx.fillText(line,x,yy);}
 
 function draw(){ ctx.clearRect(0,0,W,H);
- const tab=TABS.find(t=>t.k===curTab), im=imgs[curTab];
+ const tab=TABS.find(t=>t.k===curTab); const im=(curTab==='route')?ensureRouteImg(curAct):imgs[curTab];
  if(im&&im.complete&&im.naturalWidth) ctx.drawImage(im,0,0,W,H); else { ctx.fillStyle='#0d0a12'; ctx.fillRect(0,0,W,H); }
  if(document.getElementById('guide').checked){ctx.strokeStyle='rgba(0,255,180,0.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();}
  if(curTab==='route') drawRoute();
@@ -121,7 +126,7 @@ function draw(){ ctx.clearRect(0,0,W,H);
 }
 function drawRoute(){ const g=k=>L[k];
  T('← 返回',g('back').x,g('back').y,g('back').s,'#e9d9ad','center',700,'middle');
- T('第 1 幕 · 灰哨修院',g('title').x,g('title').y,g('title').s,'#f0e3c6','center',800,'middle');
+ T('第 '+curAct+' 幕 · '+ACT_NAMES[curAct-1],g('title').x,g('title').y,g('title').s,'#f0e3c6','center',800,'middle');
  T('出戰準備，選擇遠征路線與球路石板',g('subtitle').x,g('subtitle').y,g('subtitle').s,'#b6a888','center',400,'middle');
  {const p=g('portrait');ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fillStyle='rgba(255,200,112,0.1)';ctx.fill();ctx.strokeStyle='rgba(255,200,112,0.5)';ctx.lineWidth=2;ctx.stroke();T('頭像',p.x,p.y,20,'#ffcf80','center',700,'middle');ctx.restore();}
  T('擦板蠻王',g('heroName').x,g('heroName').y,g('heroName').s,'#f1e7cf','left',800,'middle');
@@ -140,7 +145,7 @@ function drawRoute(){ const g=k=>L[k];
  {const rh=g('r1hi');const fx=rh.x+rh.w,fy=rh.y+rh.h/2;ctx.save();ctx.strokeStyle='rgba(244,210,120,.75)';ctx.lineWidth=3.5;ctx.setLineDash([4,9]);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(fx,fy);ctx.lineTo(ns[0].x,ns[0].y);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(fx,fy,5,0,TAU);ctx.fillStyle='#f4d27a';ctx.fill();ctx.restore();}
  for(let i=0;i<4;i++){const n=ns[i],boss=(i===3),rad=boss?30:24;ctx.save();ctx.translate(n.x,n.y);ctx.rotate(Math.PI/4);rr(-rad,-rad,rad*2,rad*2,6);ctx.fillStyle=boss?'#5a1f18':'rgba(26,20,12,.95)';ctx.fill();ctx.lineWidth=2.6;ctx.strokeStyle=boss?'#e0563a':'#caa23a';ctx.stroke();ctx.restore();if(boss){ctx.strokeStyle='#ffcab8';ctx.lineWidth=3.5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(n.x-9,n.y-9);ctx.lineTo(n.x+9,n.y+9);ctx.moveTo(n.x+9,n.y-9);ctx.lineTo(n.x-9,n.y+9);ctx.stroke();}else{ctx.beginPath();ctx.arc(n.x,n.y,6,0,TAU);ctx.fillStyle='#e6c068';ctx.fill();}}
  T('出戰摘要 ｜ 擦板蠻王　·　標準遠征　·　無門捷徑',g('summary').x,g('summary').y,g('summary').s,'#d8cba8','center',700,'middle');
- T('進入第 1 幕',g('cta').x,g('cta').y,g('cta').s,'#ffe6b0','center',800,'middle');
+ T('進入第 '+curAct+' 幕',g('cta').x,g('cta').y,g('cta').s,'#ffe6b0','center',800,'middle');
 }
 function anchor(k){const e=L[k];return{x:e.x,y:e.y};}
 function marks(){if(!sel&&!Object.keys(L).length)return;ctx.save();for(const k in L){const a=anchor(k),on=(k===sel);ctx.beginPath();ctx.arc(a.x,a.y,on?13:8,0,TAU);ctx.fillStyle=on?'#39ff88':'rgba(57,255,136,.5)';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#0b3';ctx.stroke();if(on){ctx.beginPath();ctx.arc(a.x,a.y,20,0,TAU);ctx.strokeStyle='#39ff88';ctx.stroke();}}ctx.restore();}
@@ -148,6 +153,8 @@ function marks(){if(!sel&&!Object.keys(L).length)return;ctx.save();for(const k i
 // UI
 const tabsEl=document.getElementById('tabs');
 TABS.forEach(t=>{const b=document.createElement('button');b.className='tab'+(t.impl?'':' todo')+(t.k==='route'?' on':'');b.textContent=t.label+(t.impl?'':' ·待接');b.dataset.k=t.k;b.onclick=()=>loadTab(t.k);tabsEl.appendChild(b);});
+const actbar=document.getElementById('actbar');
+ACT_NAMES.forEach((nm,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' on':'');b.textContent='第'+(i+1)+'幕';b.title=nm;b.dataset.act=(i+1);b.onclick=()=>{curAct=i+1;[...actbar.children].forEach(x=>x.classList.toggle('on',+x.dataset.act===curAct));draw();};actbar.appendChild(b);});
 const tgEl=document.getElementById('targets');
 function buildTargets(){tgEl.innerHTML='';for(const k in def){const b=document.createElement('button');b.className='tbtn'+(k===sel?' on':'');b.textContent=LABELS[k]||k;b.dataset.k=k;b.onclick=()=>{sel=k;refresh();};tgEl.appendChild(b);}}
 function refresh(){[...tgEl.children].forEach(b=>b.classList.toggle('on',b.dataset.k===sel));updVal();buildExtras();draw();}
