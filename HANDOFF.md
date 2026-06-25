@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`5b45664`(Phase 4-5b 投籃輔助+殘影+頭頂預告放大)。push 後請更新本行。
+- **目前 HEAD**：`5b45664`(Phase 4-5b 投籃輔助+殘影+頭頂預告放大，**已過 iPhone 15 橫向實機驗收**)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -120,9 +120,13 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
 - **Phase 4-5a 頭頂預告可讀性**(`40f9a1d`)：實機 iPhone 15 橫向看不清，**只改 `drawGuardTags`**。tag 80×22→108×30、icon 18px、cast 由文字改**圓點 pips**(直徑6/間距3、實心=已蓄/空心=剩餘)、深黑底~0.78、金描邊(casting 橘金#ffb24d+shadow 脈動)、上移6px、**近籃框/右緣自動左移66px**避免擋框、casting 加「!」。不顯長文字。**機制全不動**(slowCharge/maxPull/hideLanding/drum/落點圈/軌跡/物理/五種判定/擦板蠻王/loadout/heroes/route/atlas)。
 
 - **Phase 4-5b 投籃輔助+殘影+頭頂預告放大**(`5b45664`)：(1)`drawAim` 底部中央『力道%　弧線(平射/標準/高拋)』僅瞄準中、力道=拉弓/maxPull、弧線由 `ang` 分類(<30平射/<55標準/else高拋)。(2)**上一球前50%殘影**：`startRun` 初始化 `run.prevTraj`、`battleUp` 後 `_recordPrevTraj(b)` 用發射 vx/vy 模擬弧取前50%、`drawAim` 灰虛線 alpha0.3 畫在預測下層、投進投失皆保留、spawnBall 後保留、hideLanding 不影響。(3)`drawGuardTags` 放大 108×30→132×36、icon 18→22、pips d6→d8/間距3→4、casting 描邊加粗+橘金#ffc266+『!』更明顯、近籃框自動左移80。**機制全不動**。
+  - **✅ 已過實機驗收(iPhone 15 橫向)**：投籃輔助資訊／上一球殘影／小怪頭頂預告**先保留現況**；**頭頂預告留待未來美術 polish 階段統一調整**。**4-5 系列不再細修**。
 
 ## 11. 近期 commit(新→舊)
 `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
-**Phase 4-6：籃框行為牌組 + 預告**(哈利定的順序，待哈利上傳企劃+說開始)。最大子階段：籃框(host/hoop)行為牌——可能讓籃框移位/縮小/傾斜/換位等，且需「投下一球前」預告(畫面已有「下一籃框行為：—」底部欄位可沿用)。會動到 host/hoop 定位(`pickHoopPos`)與 drawHUD 底部欄。注意這是動 hoop 位置的最大改動，務必逐項 headless 驗證、先只規劃。**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
+**4-5 系列已凍結**(4-5/4-5a/4-5b 全過實機驗收，不再細修；頭頂預告等未來美術 polish 統一處理)。
+**下一步＝Phase 4-6：籃框行為牌組 + 預告**(哈利已指示可進，但**先只做規劃、不要直接實作**)。最大子階段：籃框(host/hoop)行為牌——可能讓籃框移位/縮小/傾斜/換位等，需「投下一球前」預告(畫面已有底部「下一籃框行為：—」欄位可沿用)。會動到 host/hoop 定位(`pickHoopPos`)與 drawHUD 底部欄，是動 hoop 位置的最大改動，務必逐項 headless 驗證。
+**4-6 規劃時的不動清單(哈利現行指示)**：物理核心、五種進球判定、擦板蠻王被動、loadout、heroes/route/atlas。
+**動工前一律先「只規劃、不實作」，等哈利上傳企劃並說「開始」。**
