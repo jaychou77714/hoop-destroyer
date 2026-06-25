@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`700bd03`(Phase 5 第一幕灰哨修院閉環 第一版)。push 後請更新本行。
+- **目前 HEAD**：`700bd03`(Phase 5 第一幕灰哨修院閉環 第一版，**已過 iPhone 15 橫向實機驗收**)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -126,12 +126,12 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
   - **✅ 已過實機驗收(iPhone 15 橫向)**：右下「進球後框位」正常顯示、進球後換位可接受、投失留原地＋上一球殘影修正方向**保留**。**不再追加**縮框/斜框/旋轉/飛行中移動。**已知小問題**：浮字在籃框附近略擁擠 → **記入未來美術 polish / FX polish，不在本階段處理**。**Phase 4 戰鬥核心目前視為穩定版。**
 
 - **Phase 5 第一幕灰哨修院閉環(第一版)**(`700bd03`)：`STAGES[1]` 補 1 普通關(禁聲長廊,body smith,guards zombie/shield,count13)湊滿 **4普通+1boss=5場**。`startRun` std 僅 act1 `path=[all0,all1,all2,all4,all3]`(新關 all4 插在 boss all3 前;**fast/corrupt 不動**仍 boss=all3)+初始化 `run.rewardPending=false`/`run.actCleared=false`。`onStageClear` 插入獎勵流程:**保留最後關保護**(`pi+1>=path.length`→`actCleared=true`+`finishRun(true)` 不進獎勵)否則 `rewardPending=true`+`go('reward')`。新增 `screen='reward'` 分派 + `drawReward()` 三選一(回血25%maxhp/護盾+20/加分+200,複用 `heal`·`shield`·`score`)+`_pickReward(id)` **防連點**(`rewardPending` 一次性,選一次即 false)。回血用 `heal()` 自帶 clamp 到 maxhp。`drawEnd` 沿用 ACTS 名顯示『灰哨修院 通關』。headless 驗證:5場(血汗/亂葬/地獄/禁聲長廊/地下籃堂 boss@idx4)、普通關清關→reward、回血90→100 clamp、連點無效、護盾+20、加分+200、各進下一關、boss 清關→win 不進 reward、全程 5 場。**未動** stepBall/collideHoop/makeBasket五種判定/擦板蠻王/干擾/4-5b/籃框位置牌/loadout/heroes/route/atlas;無新 BD/boss 專屬系統。**關鍵**:`onStageClear` 換場有 800ms setTimeout;測試需強制 `run.spawned=run.guardsTotal` 跳過 boss 波再 clear。
+  - **✅ 已過實機驗收(iPhone 15 橫向)**：第一幕可跑 4普通+1boss 共5場、前4關通關進三選一獎勵頁、回血/護盾/加分可接受、Boss 通關直接進通關結果。Phase 4 戰鬥核心仍穩定版。**獎勵頁目前為功能版 UI，美術 polish 留待之後**。**Phase 5 第一版不再細修。**
 
 ## 11. 近期 commit(新→舊)
 `700bd03` Phase 5 第一幕閉環 → `4ac6fec` HANDOFF(4-6驗收/Phase4穩定) → `186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
-**Phase 4 戰鬥核心＝穩定版**；**Phase 5 第一幕閉環(第一版)已完成**(`700bd03`,4普通+1boss+三選一獎勵頁+通關結果)，待哈利實機驗收。
-**未來可選方向**(全待哈利指示、先規劃)：獎勵頁擴充(更多選項/聖物/天賦)、第2~5幕閉環、劇情/美術 polish、第一幕內容深化等。
-**現行不動清單(沿用)**：投籃物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、籃框位置行為牌、loadout、heroes/route/atlas。
-**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
+**Phase 4 戰鬥核心＝穩定版**；**Phase 5 第一幕閉環(第一版)已過實機驗收**(`700bd03`)，不再細修;獎勵頁＝功能版 UI、美術 polish 留待之後。
+**下一步＝下一階段規劃**(哈利指示先進規劃、**不要直接實作**)。等哈利上傳下一階段企劃 docx，Claude 先盤點現有相關系統、提最小可用方案與選項(用 ask_user_input)，等「開始」才實作。**未來可選方向**(待指示)：獎勵頁美術 polish/擴充、第2~5幕閉環、劇情、第一幕內容深化等。
+**現行不動清單(沿用)**：投籃物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、籃框位置行為牌、loadout、heroes/route/atlas、Phase 5 第一幕閉環骨架。
