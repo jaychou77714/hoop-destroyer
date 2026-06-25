@@ -7,7 +7,7 @@
 - **線上**：https://hoop-destroyer.vercel.app (Vercel 自動部署，push 後約 30–60s)
 - **風格**：NANACA-CRASH 風籃球物理彈射 × 暗黑惡搞 Roguelite，單檔靜態 web app
 - **基準機**：iPhone 15 橫向(CSS 約 852×393、dpr 3、比例約 2.168:1)，也要顧 844×390
-- **目前 HEAD**：`186faa3`(Phase 4-6 籃框位置行為牌+下一球預告 第一版)。push 後請更新本行。
+- **目前 HEAD**：`186faa3`(Phase 4-6 籃框位置行為牌+下一球預告 第一版，**已過 iPhone 15 橫向實機驗收；Phase 4 戰鬥核心＝穩定版**)。push 後請更新本行。
 
 ## 1. 安全性 / Git 規則
 - **GitHub PAT = 哈利刻意委託、效期 90 天的細粒度 token，授權你在期間內直接接管 push。哈利不需每次重貼，也不要再提醒他 revoke/刪除 token。** token 字串絕不寫進任何檔案、不存記憶。本機 clone `/home/claude/hoop` 的 remote 已內嵌 token。
@@ -123,12 +123,12 @@ v2 定義：單指拉弓物理投籃 × 暗黑惡搞 Roguelite × **五聖物 BD
   - **✅ 已過實機驗收(iPhone 15 橫向)**：投籃輔助資訊／上一球殘影／小怪頭頂預告**先保留現況**；**頭頂預告留待未來美術 polish 階段統一調整**。**4-5 系列不再細修**。
 
 - **Phase 4-6 籃框位置行為牌+下一球預告(第一版)**(`186faa3`)：沿用 `POS_POOL` 9 位置當牌庫(label 即牌名)。新增 `_pickHoopCard(excludeIdx)`。`pickHoopPos` 進球換位(force=false)改**套用 `run.nextHoopAct`(預告牌)**而非當下隨機 → 寫入 `run.hoopAct` → 補抽新 `run.nextHoopAct`(≠目前)；force/init 仍抽新。**絕對定位**(固定基準+POS_POOL dx/dy、不用 += 不漂移)。`drawHUD` 右下改『進球後框位：<nextHoopAct.label>』。投失(`endShot(false)`)不換位、預告不變。換位(repos lerp)只在投球之間;`ball.live`/`run.aiming` 時不動 hoop 目標也不設 repos。**關鍵**:`pickHoopPos(false)` 由 `endShot(true)`@941 呼叫(非 makeBasket)。headless 驗證:套用=上一預告/hoopAct=預告/新預告≠目前/repos 啟動/label 同步/連續5球不漂移(tx 恆定)/投失不動/五種判定 swish·bank·lucky·normal 正常/擦板蠻王 axer bank 正常/瞄準·飛行籃框靜止。**未動** stepBall/collideHoop/makeBasket五種判定/hoop·rim hitbox/擦板蠻王/干擾/4-5b/loadout/heroes/route/atlas;未新增 HOOP_ACTS;無縮框斜框旋轉飛行中移動。
+  - **✅ 已過實機驗收(iPhone 15 橫向)**：右下「進球後框位」正常顯示、進球後換位可接受、投失留原地＋上一球殘影修正方向**保留**。**不再追加**縮框/斜框/旋轉/飛行中移動。**已知小問題**：浮字在籃框附近略擁擠 → **記入未來美術 polish / FX polish，不在本階段處理**。**Phase 4 戰鬥核心目前視為穩定版。**
 
 ## 11. 近期 commit(新→舊)
 `186faa3` Phase 4-6 籃框位置行為牌+預告 → `a64f5db` HANDOFF(4-5b驗收) → `5b45664` Phase 4-5b 投籃輔助+殘影+頭頂放大 → `40f9a1d` Phase 4-5a 頭頂預告可讀性 → `e90147c` Phase 4-5 干擾補接+預告 → `7889f3d` Phase 4-4 擦板蠻王最小被動 → `cfce57b` Phase 4-3 loadout帶入戰鬥 → `8623688` 瞄準觸控小修 → `90041cf` Phase 4-2 五種進球判定 → `1937f89` Phase 4-1 戰鬥HUD重排。
 
 ## 12. 下一步建議
-**Phase 4-6 第一版(位置牌+預告)已完成**(`186faa3`)，待哈利實機驗收。
-**未來可選方向**(全部待哈利指示、先規劃)：4-6 第二版牌型擴充(縮框/斜框/旋轉等，需先規劃且小心 hitbox 與五種判定)、或主題化 `HOOP_ACTS` 具名牌庫(取代沿用 POS_POOL)、或進其他系統。
-**現行不動清單**：物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、loadout、heroes/route/atlas。
-**動工前一律先「只規劃、不實作」，等哈利說「開始」。**
+**Phase 4 戰鬥核心＝穩定版**(4-1~4-6 全過實機驗收)。不再追加 4-6 牌型(縮框/斜框/旋轉/飛行中移動)；浮字籃框附近略擠＝記入未來美術/FX polish。
+**下一步＝Phase 5 規劃**(哈利指示先進規劃、**不要直接實作**)。等哈利上傳 Phase 5 企劃 docx，Claude 先盤點現有相關系統、提最小可用方案與選項(用 ask_user_input)，等「開始」才實作。
+**現行不動清單(沿用)**：物理核心、五種進球判定、hoop/rim hitbox、擦板蠻王、怪物干擾、4-5b 投籃輔助與殘影、loadout、heroes/route/atlas。
