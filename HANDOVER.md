@@ -129,6 +129,8 @@ git push "https://<PAT>@github.com/jaychou77714/hoop-destroyer.git" main
 - **詳細資訊 Modal**（戰鬥中）：六區晶片（攻擊/元素/投籃/生存/聖物/干擾），**按住晶片 Hold-to-Preview** 跳大卡；球形態膠囊也可長按看攻擊說明。面板高度依內容自動收合。
 - **聖物背包 Modal**（英雄頁，全螢幕）：頂部 5 裝備欄 + 依稀有度分區（稀有→精良→普通→未擁有）圖示格 + 底部詳情列；**點選**聖物顯示詳情並裝備/卸下。圖示為 **L3 光徽**（無框、發光線稿，`_drawRelicIcon` + `_relicGlyph` 每聖物專屬線符）。點空白**不**關閉，僅 ✕ 可關。
 - **roguelite 成長**：12+ 獎勵（生存/投籃/攻擊），`run.mods` 乘算傷害；通用升級池（`allDmgMul`、`flatExtraHit`、元素附魔）。
+- **精英手段（蓄招, v1）**：精英 = 每 5（一般）/4（Boss）隻一隻（`spawnGuard` 內 idx 判定，1.22×體型/1.8×血/★金條）。`ELITE_MOVES[type]` 給每隻精英一個招（`g.eliteMove/eliteEff/eliteName`），複用 `g.cast/castMax/casting` 逐球蓄力（`advanceInterference`），蓄滿呼叫 `eliteCast(g)`。招式：拽拉(重力)/濃霧(短軌)/黏球(拉力)/凍框(蓄力慢)/凝視(遮落點+`_eliteStrike`主動射)/戰鼓(全場其他怪 cast+1)/鐵壁(護甲, charge 0)，其餘類型 fallback `蠻擊`(主動射)。**反制**：空心命中蓄招精英 → `g.cast-1`（在 `hurtGuard` 內，`c.swish`）；擊殺取消；精英護甲（`g.elite&&g.shieldUp`）只有空心/擦板能破（`hurtGuard`）。預告：右上面板 `▶/⚠招名 cast/castMax` + 場上 `drawEliteTelegraphs()` 浮蓄力條。
+- **Boss 招牌機制（每幕一招, v2）**：`enterStage` 內 `stage.boss` 時建 `run.boss={shots,bellCount,bellArmed,taxCount,missStreak,foulCount,foulType}`。`bossShotTick(scored,b)`（在 `endShot` 內逐球呼叫）依 `run.act` 與 `run.host.phase` 跑該幕招，門檻 `every=max(2,4-(phase-1))` 隨階段變兇。act1 鐘響(限時進球否則 `_bossStrike`)／act2 收租(收護盾→扣連擊)／act3 記分板(連續失誤達門檻爆擊)／act4 判罰(`foulType` 禁空心/擦板, 在 `bossOnScore` 結算: 中→反傷扣連擊, 避→+120)／act5 終焉(`_bossSub()` 依 phase 輪替前四招 + `bossOnScore` 隨機狂暴干擾)。預告：頂部置中 `drawBossThreat()` 招名+倒數條。`_bossStrike(dmg)` 由 host 位置射 enemyShot。
 
 ---
 
@@ -167,4 +169,4 @@ git push "https://<PAT>@github.com/jaychou77714/hoop-destroyer.git" main
 
 ---
 
-*最後更新：隨 commit `7ecdbf8` 後建立。後續重大改動請更新本表與第 6 節。*
+*最後更新：v1 精英蓄招手段 + v2 五幕 Boss 招牌機制（commit `f02ec86`）。亦含：英雄頁數據改每英雄獨立、金幣相關死能力替換（archer 賞金→獵殺、聖物金幣詞綴→全傷害）、今日命中率 icon 改靶心。後續重大改動請更新本表與第 6 節。*
