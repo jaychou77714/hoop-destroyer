@@ -1,3 +1,212 @@
+# HANDOFF.md — 交接給 Codex（HOOPBREAKER 籃框破壞神）
+
+> 本文件公開，**嚴禁寫入任何 token / 金鑰 / 密碼**。PAT 一律以 `<PAT>` 佔位符表示。
+> 最後更新：速投（沙包生存）session 之後，HEAD `b9e8290`。
+> 給 Codex：讀完這份就能接手。哈利是創意總監／體驗師（非工程師），你是唯一工程師、直接接管 GitHub push，全程繁體中文（台北用語），決策用互動式選項。
+
+---
+
+## ⚠️ 先讀：架構與交接範本不一致（很重要）
+
+`交接給Codex.docx` 範本描述的是一個 **Vite + React + TypeScript + Zod schema + Zustand store + IndexedDB 自動存檔 + Service Worker PWA**、目錄為 `src/app`、`src/features/atlas|menu|town`、`src/game`、`src/data`、`src/store`、且「第一階段不得實作卡牌戰鬥／節點只顯示 Encounter Placeholder」的專案。
+
+**本 repo（`jaychou77714/hoop-destroyer`）不是那個專案。** 本 repo 是：
+
+- **單檔 vanilla canvas 遊戲**：整個遊戲打包在 `index.html` 內的 gzip+base64 chunk。
+- **沒有** `src/` 模組化目錄、**沒有** React 元件樹（React 僅作極薄外殼）、**沒有** Zod、**沒有** Zustand、**沒有** IndexedDB、**沒有** Service Worker、**沒有** `npm build/test/lint/e2e`。
+- 戰鬥**早已完整實作**（籃框主機投籃戰鬥），不是 placeholder；也沒有「卡牌戰鬥」概念。
+
+下面我**依範本的章節結構**回答，但內容一律是本專案的**實況**；範本假設的東西若不存在，我會明確寫「不適用／無」。
+**如果你（哈利）的 docx 其實是要給另一個 Vite/React 重構版專案用的，那個專案不在這個 session／這個 repo 裡 —— 把它的 repo 指給我，我再針對真實程式碼重寫一份。**
+
+---
+
+## 目前專案狀態
+
+- **做到哪裡**：可上線、可玩的暗黑戲謔籃球 roguelite。線上：`https://hoop-destroyer.vercel.app`。主要測試機 iPhone 15 橫向。
+- **已完成的主要功能**：
+  - 首頁 / 英雄選擇頁（7 名英雄、3 天賦線、21 節點天賦樹）。
+  - 五聖物 loadout（5 格裝備 + 全螢幕聖物背包 Modal，依稀有度分區、L3 光徽圖示）。
+  - 遠征路線頁（`fast` 速投線 / `std` 標準 / `corrupt` 腐化；每幕座標覆寫 `RT_ACT[1–5]` + 後台 `tuner.html` 逐幕微調器）。
+  - 籃獄圖譜頁（分層素材組裝）。
+  - 籃框主機投籃戰鬥：自由浮動籃框、右上 HP 面板、每階怪群 `group.webp`、五幕背景到齊、球形態攻擊系統（normal/fire/ice/lightning/axe/arrow）、戰鬥中詳細資訊 Modal（六區晶片 + Hold-to-Preview）。
+  - roguelite 成長（12+ 獎勵、`run.mods` 乘算傷害、通用升級池）。
+  - 5 幕封閉迴路 + 無盡模式解鎖。
+  - **模式進度獨立化**（`modeProg={fast,std,corrupt}`，各自 acts/marks/bossClears/heat/nodeProg）。
+  - **速投（沙包生存）模式**（本 session 主要工作，見「最近重要變更」）。
+- **尚未完成 / 待補**：
+  - 第 2–5 幕的速投沙包美術只到 act1–act5 各一張；一般戰鬥第 2–5 幕怪群圖已到齊。
+  - 後台 tuner 僅遠征頁已接，其餘分頁（首頁/板凳席/英雄選/地圖/玩法圖鑑/設定/結算）仍是 placeholder。
+  - 新核心球（每幕第 2 顆，共 5 顆）的數值平衡尚未經哈利實機定案。
+- **可否啟動 / build / test / lint**：見下方「測試狀態」。本專案**無建置步驟**（純靜態，瀏覽器直接開 `index.html` 即跑）；驗證靠 `node --check engine.js` + puppeteer headless。
+
+---
+
+## 最近重要變更
+
+> 本 session 全部圍繞**速投（速投線 / 沙包生存）模式**。所有變更只動 `engine.js`，重打包進 `index.html` 後 push（見「開發流程」）。下列 commit 由新到舊：
+
+| commit | 內容 |
+|---|---|
+| `4e28121` | 速投五項調整：①沒投進直接扣血（1/5 maxHP，不用等超時）②10 秒沒出手也扣血 ③出手倒數**只在球在手上時**遞減（球飛行/落地/回手前凍結，拿到球重置 10 秒）④玩家攻擊改打**沙包**（不是籃框）⑤瞄準線縮短級距 0.015→0.025（約 20 球縮到一半）。HUD「違例 N/5」改為依血量顯示「機會 X」。 |
+| `74e3fa6` | 沙包貼齊畫面最右緣（站後方）；籃框每進一球隨機移動（新 `_speedHoopPos`，在左/中半場隨機定位、避開貼右沙包）。 |
+| `fa8f9a0` | 路線頁新增**速投專屬節點**（獨立、不連線）：速投線時亮、標準/腐化時轉灰；點灰色速投節點會切到速投線。 |
+| `e2e1a23` | 修速投進場 bug（路線頁 `_selNode` 恆有值致 `nodeMode` 永真，把速投擋成一般戰鬥）→ 改成 `fast` 一律進速投、`run.nodeMode=false`。 |
+| `1aa4f41` | 換 App icon（惡魔破裂籃球）icon-180/192/512。 |
+| `e27e10e` | 模式進度獨立化 `modeProg` + 安全遷移 + 路線頁擋未解鎖；標準/腐化掉落品質定位（腐化→稀有、標準→≤精良）；每幕第 2 顆核心球共 5 顆；速投 15 球解鎖下一幕；標準/腐化通 5 幕解鎖無盡。 |
+| `a704f17` | 速投初版：瞄準線隨進球縮短取代縮秒、結算依進球數 roll 核心聖物等。 |
+
+**改到的程式區（engine.js，行號會漂移，用符號搜尋）**：
+- `enterSpeedStage()` — 速投開場：建 host、`makeHoop`、**生成被動無敵「沙包替身」guard**（`sandbag:true,_static:true`，讓既有形態攻擊打在沙包上）、`_speedHoopPos(true)`、`spawnBall()`。
+- `_speedHoopPos(force)` — 速投專屬籃框隨機定位（左/中半場、避開貼右沙包；`force` 立即定位、否則 `repos=0.7` 動畫）。
+- `updateBattle()` 速投時鐘段 — 只在 `run.ball.held && !run.ball.live` 時 `shotClock-=dt`；歸零→扣血。
+- `spawnBall()` — 速投時把 `shotClock` 重置為 `shotClockMax`（球回到手上才重新計時）。
+- `endShot()` — 速投：未進球 `playerHurt(maxhp/5)`；進球呼叫 `_speedHoopPos(false)` 換框。
+- `updateGuards()` — **注意：專案內有兩個 `updateGuards` 定義，實際生效的是後面那個（約 line 3052，用 `host.x + g.bx + wobX` 相對偏移 + `g.slot`）**。已在該版加 `if(g._static){ g.x=g.bx; g.y=g.by; continue; }` 把沙包替身 pin 在絕對座標（否則替身缺 `slot` 會算出 NaN、攻擊抓不到目標）。
+- `hurtGuard()` — `if(g.sandbag) g.hp=g.maxhp`（沙包永不死）。`killGuard()` — `if(g.dead||g.sandbag)return`。
+- `drawSandbag()` — 沙包貼右緣繪製 + 每幀把替身 guard 同步到沙包實際中心（`sg.x=sg.bx=cx` 等）。
+- `drawSpeedHUD()` — 進球數 + 出手倒數條 + 「機會 X」。
+- `_getAimPreviewPct()` — 速投分支 `clamp(1 - speedScore*0.025, 0.5, 1)`。
+- 路線頁 `_drawRouteArt()` 節點區 — 速投節點 `rnodespeed` + `isFast` 灰化標準節點/連線。
+
+**尚未 commit 的變更**：對「已部署產物」而言**沒有**。`index.html`（唯一上線來源）已完整 push 到 `main`。本機 `git status` 顯示的 `??` 全是**未追蹤的開發暫存檔**（`engine.js` 解包工作檔、各種 `*.mjs` puppeteer 測試腳本、`node_modules/`、`package*.json`），這些**刻意不提交**。
+
+**branch / commit / PR 狀態**：
+- branch：`main`
+- HEAD：`b9e8290`（`chore: 觸發 Vercel 重新部署` 空 commit；其前 `4e28121` 為速投五項調整）
+- PR：**無**。哈利的流程是**直接 push 到 `main`**，不開 PR。
+
+---
+
+## 架構與資料流
+
+> 範本的 `src/app`、`src/features/atlas|menu|town`、`src/game`、`src/data`、`src/store` 目錄在本專案**不存在**。本專案的對應如下：
+
+- **單檔 bundler**：`index.html` 內有 `<script type="__bundler/manifest">`（各 chunk 的 gzip+base64）與 `<script type="__bundler/template">`（遊戲頁 HTML、含 viewport，改 viewport/CSS 改這裡）。
+  - 引擎 chunk uuid `875365e8-8f11-4b79-9780-292f266babda` = **`engine.js`（約 3,640 行，所有遊戲程式碼與資料都在這）**。
+  - 另一個 chunk = React/DC 薄框架（極少動）。
+- **啟動**：引擎掛出 `window.HBStart` → 頁面 component 拿到 `HBStart` 與 canvas 後呼叫 `HBStart(canvas, root)`，回傳的 `Game` 實例即核心。
+- **常數**：`BH=1080` 固定；**`BW` 動態**（依裝置長寬比，iPhone landscape ≈ 2341；`onResize` 內 `BW=clamp(BH*cw/ch, 1920, 3200)`）。畫布在手機被縮小 → modal 字級要開大（22–40）。
+- **遊戲狀態儲存**：純 **`localStorage`**（**不是 IndexedDB**）。
+  - `persist(s){ localStorage.setItem(SAVE_KEY, JSON.stringify(s)); }`，存的是整個 `this.save` 物件。
+  - 載入 `loadSave()` 會從舊 key 遷移並備份（`OLD_KEY+'_backup'`），並建 `modeProg`。
+  - **自動存檔觸發點**＝在關鍵事件後呼叫 `persist(this.save)`：教學完成、過關/結算（`finishRun`）、解鎖、開發者模式切換、設定變更等。沒有背景定時存檔；是「事件驅動立即寫入」。
+- **哪些資料是「資料驅動」**：在 `engine.js` 內以**大物件常數**定義（非外部 JSON、非 Zod）：`RELICS`、`BALL_FORMS`、`ACTS`/`STAGES`、`GUARDS`、`HEROES`/`TALENT_TREES`/`HERO_LANES`、`POS_POOL`、`SANDBAGS`、`ROUTE_STONES`、`RT_DEF`/`RT_ACT` 等。美術為外部檔（`assets/**`）。
+- **核心邏輯函式**：`update/updateBattle`、`stepBall`（物理 + 進球判定 line ~947）、`makeBasket`（進球 → 形態攻擊 + 聖物觸發）、`endShot`、`finishRun`、`pickHoopPos`/`_speedHoopPos`、`hurtGuard`/`killGuard`/`updateGuards`、`startRun`、`loadSave`/`persist`。
+
+---
+
+## 圖譜與節點系統
+
+- **節點資料**：
+  - 遠征路線頁：`_drawRouteArt()` 內 `ns=[lv('node0'..'node4')]` 五個硬座標節點（1704 art-space），可被 `RT_ACT[幕]` 逐幕覆寫；逐關進度 `_nodeProg(act)`（讀 `modeProg[route].nodeProg`）。**速投專屬節點**為獨立節點 `rnodespeed`（不在 5 連節點路徑上）。
+  - 籃獄圖譜頁：`drawAtlas()` 的 `CARDS`（5 幕卡）+ `_atlasNodes(cx,y,lit)`（每卡 4 點，純展示）。
+- **道路/連線資料**：路線頁的虛線是 `_drawRouteArt()` 內**程式畫的**（`ctx.moveTo(ns[0])→lineTo(ns[i])` 連 5 節點 + 路線卡到 node0 的引導線）。**沒有獨立的 graph/road 資料結構**；速投節點刻意不連線。
+- **可抵達判定**：**不是圖論可達性**，是**線性逐關 + 逐模式解鎖**：
+  - 進入某幕：`_modeActs(route) < _selAct` → 擋下並 toast。
+  - 節點可玩：`_playable = (i <= _nodeProg)`（要先清前一關）。速投線時標準節點一律灰化（`isFast`）。
+- **點擊節點流程**：節點 btn `rnode{i}`/`rnodespeed` → 設 `_selNode`（或切 `_selRoute='fast'`）→ 主按鈕 `go` → `startRun(_selAct, _selRoute, _selStone, _selNode)`。速投線忽略 `_selNode`、強制走 `enterSpeedStage`。
+- **移動目前位置與自動存檔**：過關/結算在 `finishRun` 內更新 `modeProg[route]`（acts/marks/bossClears/nodeProg）後 `persist`；速投 15 球在結算解鎖 `fast` 下一幕。
+- **底部資訊抽屜**：路線頁底部有「出戰摘要」橫列（英雄·路線·石板）；戰鬥中另有「詳細資訊 Modal」（六區晶片 + Hold-to-Preview 大卡）。沒有獨立的可拉抽屜元件。
+
+---
+
+## 手機橫向與響應式狀態
+
+- **基準機**：iPhone 15 橫向，CSS 約 **852×393**、dpr 3；同時顧 **844×390**。`BW` 依長寬比動態算，理論上適應其他比例。
+- **範本列的斷點**（`915×412`、`844×390`、`1280×720`、`1440×900`）：只有 **844×390** 有特別顧過；其餘**未逐一審視**（headless 驗證固定用 852×393 dpr3）。建議 Codex 若要支援平板/桌面比例，逐一截圖檢查 modal 字級與安全區。
+- **直向旋轉提示**：**已完成**。`this.portrait = ch > cw*1.04`；直向時 `render()` 直接 `drawRotate()` 並 return，且 `onDown` 等輸入在直向時全部 `return`（停用觸控）。
+- **觸控拖曳 / 點擊**：投籃為拖曳放開（`battleDown/Move/Up`）。**雙指縮放**：遊戲本身是固定畫布、無自訂 pinch-zoom（地圖/圖譜為固定 1704 畫布，非可縮放地圖）。
+- **已知版面注意**：iOS landscape 位址列收合會造成 viewport 漂移 → 程式內已對點擊座標做過校正（見 `onResize`/`ck` 區的註解）。
+
+---
+
+## PWA 狀態
+
+- **manifest**：`manifest.json` 存在（含 icon-180/192/512）→ 可「加到主畫面」。
+- **Service Worker**：**無**。本專案**沒有 SW、沒有離線快取**。`vercel.json` 對 `/` 與 `/index.html` 設 `Cache-Control: no-cache, must-revalidate`。
+- **build 後可否安裝/離線**：可安裝（有 manifest），但**無離線能力**（無 SW）。實機看不到新版多半是 iOS PWA 把舊版留在記憶體 → 從主畫面**刪除圖示重加**或 Safari 開 `?v=N` 跳快取。
+- **PWA 相關設定檔**：`manifest.json`、`index.html`（template chunk 內的 `<head>`/viewport/icon link）、`vercel.json`。
+
+---
+
+## 測試狀態
+
+本專案**沒有** `npm run build/test/lint/e2e`（`package.json` 的 `scripts` 是空的，唯一 dep 是 `puppeteer-core`，純供 headless 驗證）。對應結果：
+
+- `npm run build`：**未設置 / 不適用**（純靜態，無建置步驟；瀏覽器直接開即跑）。
+- `npm test`：**未設置 / 不適用**。
+- `npm run lint`：**未設置 / 不適用**。
+- `npm run e2e`：**未設置 / 不適用**。
+
+**本專案實際採用的驗證（本 session 已執行、全綠）**：
+- `node --check engine.js`：語法通過 ✅
+- puppeteer headless（852×393 dpr2/3，攔 `window.HBStart` 取 `window.__game`）逐項驗速投五項：
+  - 沒進球扣血 100→80 ✅／超時扣血 100→80 ✅
+  - 時鐘：持球遞減 ✅／飛行暫停 ✅／回手重置 ✅
+  - 瞄準線 score=20→0.5 ✅
+  - 攻擊打沙包：`_nearestGuard` 命中替身、`_mobHitFlash>0`、沙包不死 ✅（截圖確認火球從籃框射向沙包）
+- **尚未執行 / 待真人驗收**：哈利實機（iPhone 15）對速投手感與新核心球平衡的驗收尚未回報。
+
+---
+
+## 已知問題
+
+- **兩個 `updateGuards` 定義**：line ~1224 那個是**死碼**（被後面 line ~3052 的 Object.assign 覆蓋）。改怪物移動/pin 行為**要改 3052 那個**；改錯會無效。本 session 踩過這雷（沙包替身 NaN）。
+- **速投沙包與一般戰鬥共用 guard 系統**：沙包是「被動無敵替身 guard」。若日後改 `updateGuards`/`_enemyStrike`/`hurtGuard`，務必保留 `_static`/`sandbag` 分支，否則替身會亂動或被打死。
+- **第 2–5 幕速投沙包美術**：目前各幕一張，缺多階變化。
+- **Vercel webhook 偶爾漏觸發**：push 後新部署沒冒出來 → 補一筆空 commit 重觸發。**沙箱連不到 `api.vercel.com`**，只能用 GitHub API 驗 HEAD。
+- **新核心球（5 顆）數值未定案**：實作是合理初版，平衡待哈利實機。
+- **行號會漂移**：交接內所有行號僅供參考，請用符號（函式名）搜尋。
+
+---
+
+## 下一步建議（依優先順序）
+
+1. **哈利實機驗收速投手感**，依回饋微調：扣血量（目前 maxHP/5＝5 次機會）、出手倒數秒數（10s）、瞄準線級距（0.025）、籃框漫遊範圍（左→約 0.58 BW）、沙包位置。
+2. 補**第 2–5 幕速投沙包美術**（多階/受擊變化），以及一般戰鬥缺漏素材。
+3. **新 5 顆核心球做平衡 pass**（餘燼聖球/鐵索鉤球/冷焰連電球/雷骨碎裂球/絕對零度球）。
+4. **接地圖頁進後台 tuner**（哈利先前已要求；仿遠征頁做 `at.*` 逐元件 lv/HH + tuner「地圖」分頁）。
+5. 其餘 tuner 分頁（首頁/板凳席/玩法圖鑑/結算）視需要接。
+6. 速投結算頁打磨（目前沿用一般結算；可做專屬「投進 N 球」展示）。
+7. 評估是否要把 `engine.js` 內的大資料表（RELICS/STAGES 等）抽成可維護結構（**但本專案是單檔，無建置流程；任何重構都要維持「解包→改→重打包→push」可行**）。
+
+---
+
+## 重要限制（給 Codex）
+
+**本單檔專案的實際限制（一定要遵守）：**
+- **改引擎流程**：`index.html` 解出 `engine.js` → `str_replace` 編輯 → `node --check engine.js` → Python repack（gzip `mtime=0` + base64 + round-trip 斷言 + 更新 manifest `size`）→ `git add index.html`（**絕不 commit `engine.js`/`*.mjs`/`node_modules`**）→ commit → push → 補空 commit 重觸發 Vercel。
+- **committer email 必須是 `storyhomedesign@gmail.com`**（否則 Vercel Hobby 擋部署）。
+- **PAT 絕不寫進 repo / 檔案 / 紀錄**（公開 repo，GitHub secret scanning 會立即撤銷）；推送指令只用 `<PAT>` 佔位符。哈利已刻意授權 90 天細粒度 token，**不要提醒他 revoke**。
+- **版本升級不要弄丟舊存檔**：`save` 結構變動要在 `loadSave` 做 migrate（已有 `modeProg` 遷移先例）。
+- **`save` 必須保持 JSON 可序列化**（走 `localStorage` `JSON.stringify`）。
+- **手機橫向是第一優先體驗**；改任何 UI 先想 852×393 dpr3。
+- 預設交付＝**直接改引擎 + 重打包 + push**（非丟檔案給哈利）；要完整檔時哈利會刪舊上新。
+- 不要輸出進度報告式 markdown（本交接文件為**刻意例外**）。
+
+**範本（`交接給Codex.docx`）原列、針對 Vite/React 重構版的限制——若哈利之後要啟動重構才適用：**
+- 第一階段不得實作卡牌戰鬥；節點戰鬥只顯示 Encounter Placeholder。
+- 遊戲規則不要寫死在 React 元件。
+- 新資料先擴充 Zod schema → 再加 JSON → 再補測試。
+- Zustand store 必須保持 JSON 可序列化。
+
+> ☝️ 以上四點在**目前的單檔 vanilla 專案不適用**（無卡牌戰鬥概念、戰鬥已完整、無 React 規則層、無 Zod/Zustand）。列出來是保留哈利的設計意圖，供未來若做 Vite/React 重構時參考。
+
+---
+
+## 回報（哈利要的四點）
+
+1. **目前 branch**：`main`
+2. **最新 commit hash**：`b9e8290`（其前 `4e28121` 為速投五項調整）
+3. **是否有未 commit 的變更**：對上線產物（`index.html`）**沒有**，已全部 push。本機只有未追蹤的開發暫存檔（engine.js 工作檔、`*.mjs` 測試、node_modules），刻意不提交。
+4. **建議 Codex 從哪裡開始**：先讀本檔 →（若有真人回饋）從「下一步建議 1：速投手感微調」進；要熟悉程式先看 `enterSpeedStage`/`_speedHoopPos`/`updateBattle` 速投段，並記住「**改 line ~3052 的 `updateGuards`、不是 line ~1224 那個**」。
+
+---
+<br>
+
+> 以下為**前一份交接文件（保留參考，內容較舊，HEAD 停在 `1bf75d6` 速投 session 之前）**：
+
 # 籃框破壞神 HOOPBREAKER — 線上交接文件
 
 > 給下一個視窗的 Claude：讀完這份 + 你的 memory 就能接手。哈利是創意總監/體驗師(非工程師)，你是唯一工程師、直接接管 GitHub。全程繁體中文(台北用語)。SOP：哈利上傳企劃/指令 docx → 你先「只規劃、不實作」回覆 → 哈利定案說「開始」→ 你實作 → headless 驗證 → push → 截圖回報 → 哈利實機(iPhone 15)驗收。給選項用可點選 UI(ask_user_input)，不要純文字 A/B/C。**最新狀態見正下方「★★★ 最新 SESSION」段（V2 遠征頁逐幕 + 後台 tuner + 地圖頁）；舊階段(Phase 4–6 戰鬥/閉環)見 §10–§12。**
