@@ -895,6 +895,271 @@ Object.assign(Game.prototype,{
     }
   },
 });
+
+// === bench leaderboard: daily shooting ladder ===
+(function(){
+  const MIN_QUALIFIED_SHOTS = 10;
+  const oldRecordShot = Game.prototype._recordShot;
+  const oldSubmitLogin = Game.prototype._submitLogin;
+  const oldRender = Game.prototype.render;
+
+  function pct(makes, shots){
+    return shots > 0 ? makes / shots : 0;
+  }
+
+  Object.assign(Game.prototype,{
+    _playerDayTotals(){
+      const p=this._loadProfile ? this._loadProfile() : null;
+      const k=this._dayKey ? this._dayKey() : '';
+      if(!p || !p.heroDay) return {key:k,shots:0,makes:0};
+      if(p.heroDay.key!==k){ p.heroDay.key=k; p.heroDay.stats={}; if(this._saveProfile)this._saveProfile(); }
+      const stats=p.heroDay.stats||{};
+      let shots=0,makes=0;
+      for(const id of Object.keys(stats)){
+        const d=stats[id]||{};
+        shots += Math.max(0, Number(d.shots)||0);
+        makes += Math.max(0, Number(d.makes)||0);
+      }
+      makes=Math.min(makes,shots);
+      return {key:k,shots,makes};
+    },
+    _fairAccScore(makes,shots){
+      shots=Math.max(0,Number(shots)||0); makes=clamp(Number(makes)||0,0,shots);
+      if(!shots) return 0;
+      const p=makes/shots, z=1.64;
+      const denom=1+z*z/shots;
+      const center=p+z*z/(2*shots);
+      const margin=z*Math.sqrt((p*(1-p)+z*z/(4*shots))/shots);
+      return Math.max(0,(center-margin)/denom);
+    },
+    _leaderboardLocalRow(){
+      const t=this._playerDayTotals();
+      const L=this.save&&this.save.login?this.save.login:{};
+      const name=String((L.name||'').trim()||'本機玩家');
+      return {player_name:name,today_key:t.key,today_shots:t.shots,today_makes:t.makes,_local:true};
+    },
+    _normalLeaderboardRow(row){
+      if(!row) return null;
+      const name=String(row.player_name||row.name||'').trim();
+      if(!name) return null;
+      const shots=Math.max(0,Number(row.today_shots!=null?row.today_shots:row.shots)||0);
+      const makes=clamp(Number(row.today_makes!=null?row.today_makes:row.makes)||0,0,shots);
+      return {
+        name,
+        shots,
+        makes,
+        local:!!row._local,
+        updated:row.last_login_at||row.updated_at||'',
+        qualified:shots>=MIN_QUALIFIED_SHOTS,
+        acc:pct(makes,shots),
+        score:this._fairAccScore(makes,shots)
+      };
+    },
+    _leaderboardRows(){
+      const rows=[];
+      const add=(row)=>{
+        const r=this._normalLeaderboardRow(row);
+        if(!r) return;
+        const key=r.name.toLowerCase();
+        const i=rows.findIndex(x=>x.name.toLowerCase()===key);
+        if(i<0) rows.push(r);
+        else {
+          const cur=rows[i];
+          if(r.local || r.shots>cur.shots || (r.shots===cur.shots && r.makes>cur.makes)) rows[i]=Object.assign(cur,r,{local:cur.local||r.local});
+        }
+      };
+      const cache=Array.isArray(this._leaderboardCache)?this._leaderboardCache:[];
+      for(const r of cache) add(r);
+      add(this._leaderboardLocalRow());
+      rows.sort((a,b)=>{
+        if(a.qualified!==b.qualified) return a.qualified?-1:1;
+        if(b.score!==a.score) return b.score-a.score;
+        if(b.acc!==a.acc) return b.acc-a.acc;
+        if(b.shots!==a.shots) return b.shots-a.shots;
+        return a.name.localeCompare(b.name,'zh-Hant');
+      });
+      let rank=1;
+      for(const r of rows){ r.rank=r.qualified?rank++:'觀察'; }
+      return rows.slice(0,50);
+    },
+    _syncLeaderboardStats(force){
+      if(this.save&&this.save.admin) return;
+      if(this._leaderboardSyncTimer){ clearTimeout(this._leaderboardSyncTimer); this._leaderboardSyncTimer=null; }
+      const run=()=>this._syncLeaderboardNow().catch(e=>{ this._leaderboardSyncError=e; });
+      if(force) run(); else this._leaderboardSyncTimer=setTimeout(run,800);
+    },
+    async _syncLeaderboardNow(){
+      const cfg=this._supabaseCfg ? this._supabaseCfg() : {};
+      const L=this.save&&this.save.login?this.save.login:{};
+      const name=String((L.name||'').trim());
+      if(!cfg.url||!cfg.key||!name) return false;
+      const t=this._playerDayTotals();
+      const base=cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts');
+      const payload={
+        player_name:name,
+        today_key:t.key,
+        today_shots:t.shots,
+        today_makes:t.makes,
+        last_login_at:new Date().toISOString()
+      };
+      const res=await fetch(base+'?on_conflict=player_name',{
+        method:'POST',
+        headers:{apikey:cfg.key,Authorization:'Bearer '+cfg.key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error(await res.text());
+      return true;
+    },
+    _openLeaderboard(){
+      this._leaderboardOpen=true;
+      this._leaderboardLoading=true;
+      this._leaderboardStatus='載入雲端排行榜...';
+      this._syncLeaderboardStats(true);
+      this._fetchLeaderboard();
+      this.render();
+    },
+    _closeLeaderboard(){
+      this._leaderboardOpen=false;
+      this.render();
+    },
+    async _fetchLeaderboard(){
+      const cfg=this._supabaseCfg ? this._supabaseCfg() : {};
+      if(!cfg.url||!cfg.key){
+        this._leaderboardLoading=false;
+        this._leaderboardStatus='目前顯示本機成績';
+        this.render();
+        return;
+      }
+      try{
+        const base=cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts');
+        const q='?select=player_name,today_key,today_shots,today_makes,last_login_at&today_key=eq.'+encodeURIComponent(this._dayKey())+'&order=today_shots.desc&limit=100';
+        const res=await fetch(base+q,{headers:{apikey:cfg.key,Authorization:'Bearer '+cfg.key}});
+        if(!res.ok) throw new Error(await res.text());
+        this._leaderboardCache=await res.json();
+        this._leaderboardStatus=(this._leaderboardCache&&this._leaderboardCache.length)?'雲端排行榜已更新':'今天還沒有雲端成績';
+      }catch(e){
+        this._leaderboardCache=[];
+        this._leaderboardStatus='雲端排行榜欄位未建立，先顯示本機成績';
+        try{ console.warn('[HB leaderboard]',e); }catch(_e){}
+      }finally{
+        this._leaderboardLoading=false;
+        this.render();
+      }
+    },
+    _drawLeaderboardButton(x,y,w,h,label,id,cb,primary){
+      const ctx=this.ctx;
+      this.rr(x,y,w,h,12);
+      const g=ctx.createLinearGradient(0,y,0,y+h);
+      if(primary){ g.addColorStop(0,'#c7ff3a'); g.addColorStop(1,'#5d9416'); }
+      else { g.addColorStop(0,'rgba(40,28,16,0.96)'); g.addColorStop(1,'rgba(14,9,6,0.98)'); }
+      ctx.fillStyle=g; ctx.fill();
+      ctx.lineWidth=2;
+      ctx.strokeStyle=primary?'#d7a945':'rgba(215,169,69,0.62)';
+      this.rr(x,y,w,h,12); ctx.stroke();
+      this.text(label,x+w/2,y+h/2,26,primary?'#111706':'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+      this.btn(x,y,w,h,id,cb);
+    },
+    drawLeaderboardModal(){
+      const ctx=this.ctx;
+      const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+      ctx.save();
+      ctx.fillStyle='rgba(3,1,7,0.92)';
+      ctx.fillRect(-4000,-4000,BW+8000,BH+8000);
+      ctx.restore();
+      this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+
+      const x=IL+46,y=IT+34,w=BW-IL-IR-92,h=BH-IT-IB-68;
+      ctx.save();
+      this.rr(x,y,w,h,22);
+      const bg=ctx.createLinearGradient(0,y,0,y+h);
+      bg.addColorStop(0,'rgba(23,16,12,0.98)');
+      bg.addColorStop(0.5,'rgba(10,8,11,0.99)');
+      bg.addColorStop(1,'rgba(6,4,9,0.99)');
+      ctx.fillStyle=bg; ctx.fill();
+      ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+      ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.35)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+      ctx.restore();
+
+      const titleY=y+74;
+      this.text('今日命中排行榜',x+w/2,titleY,48,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+      this.text('正式排名需滿 '+MIN_QUALIFIED_SHOTS+' 球；排名採保守命中率，避免 1/1 霸榜',x+w/2,titleY+46,22,'#c8b894',{align:'center',baseline:'middle',weight:'700'});
+      this._drawLeaderboardButton(x+w-156,y+28,112,52,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+      this._drawLeaderboardButton(x+44,y+28,112,52,'刷新','leaderboard_refresh',()=>{ this._leaderboardLoading=true; this._leaderboardStatus='重新整理...'; this._fetchLeaderboard(); this.render(); },true);
+
+      const tx=x+60, ty=y+154, tw=w-120, rowH=58;
+      const cols={rank:tx+46,name:tx+170,shot:tx+tw*0.62,acc:tx+tw-120};
+      ctx.save();
+      this.rr(tx,ty,tw,54,12); ctx.fillStyle='rgba(215,169,69,0.12)'; ctx.fill();
+      ctx.strokeStyle='rgba(215,169,69,0.35)'; ctx.lineWidth=1.5; this.rr(tx,ty,tw,54,12); ctx.stroke();
+      ctx.restore();
+      this.text('排行',cols.rank,ty+28,22,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('玩家名稱',cols.name,ty+28,22,'#d7a945',{baseline:'middle',weight:'900'});
+      this.text('投球/進球',cols.shot,ty+28,22,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('命中率',cols.acc,ty+28,22,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+
+      const rows=this._leaderboardRows();
+      const maxRows=Math.max(5,Math.floor((h-260)/rowH));
+      for(let i=0;i<Math.min(rows.length,maxRows);i++){
+        const r=rows[i], ry=ty+66+i*rowH;
+        ctx.save();
+        this.rr(tx,ry,tw,rowH-8,10);
+        if(r.local) ctx.fillStyle='rgba(159,224,36,0.16)';
+        else ctx.fillStyle=i%2?'rgba(255,255,255,0.035)':'rgba(0,0,0,0.14)';
+        ctx.fill();
+        ctx.strokeStyle=r.local?'rgba(185,255,47,0.55)':'rgba(215,169,69,0.18)';
+        ctx.lineWidth=1.2; this.rr(tx,ry,tw,rowH-8,10); ctx.stroke();
+        ctx.restore();
+        const rankText=String(r.rank);
+        const accText=r.shots?Math.round(r.acc*100)+'%':'0%';
+        const muted=r.qualified?'#efe3ca':'#9e9178';
+        this.text(rankText,cols.rank,ry+25,22,r.qualified?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+        this.text(this._clip((r.local?'★ ':'')+r.name,tw*0.34,24,'900'),cols.name,ry+25,24,r.local?'#d8ff44':muted,{baseline:'middle',weight:'900'});
+        this.text(r.shots+' / '+r.makes,cols.shot,ry+25,23,muted,{align:'center',baseline:'middle',weight:'800'});
+        this.text(accText,cols.acc,ry+25,24,r.qualified?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+        if(!r.qualified && r.shots>0) this.text('未滿'+MIN_QUALIFIED_SHOTS+'球',cols.acc+88,ry+25,15,'#9fe024',{baseline:'middle',weight:'800'});
+      }
+      if(!rows.length){
+        this.text('今天還沒有投球資料',x+w/2,y+h/2,34,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+      }
+      const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
+      this.text(status,x+w/2,y+h-44,20,'#9e9178',{align:'center',baseline:'middle',weight:'700'});
+    },
+    _drawFbStatCards(LO){
+      const U=LO.U,s=this.save,total=this._playerDayTotals();
+      const acc=total.shots?Math.round(total.makes/total.shots*100):0;
+      this._gothCard(LO.statL,U); this._statIcon('target',LO.statL.x+18*U,LO.statL.y+LO.statL.h*0.62,7*U);
+      this.text('今日命中', LO.statL.x+14*U, LO.statL.y+16*U, 11*U,'#a2926e');
+      this.text(acc+'%', LO.statL.x+32*U, LO.statL.y+LO.statL.h*0.58, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+      this.text(total.shots+' / '+total.makes, LO.statL.x+LO.statL.w-16*U, LO.statL.y+LO.statL.h*0.58, 10*U,'#9fe024',{align:'right',baseline:'middle',weight:'800'});
+      this.text('排行榜 ›', LO.statL.x+LO.statL.w-14*U, LO.statL.y+18*U, 9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+      this.btn(LO.statL.x,LO.statL.y,LO.statL.w,Math.max(44*U,LO.statL.h),'fb_leaderboard',()=>this._openLeaderboard());
+      this._gothCard(LO.statR,U); this._statIcon('crown',LO.statR.x+18*U,LO.statR.y+LO.statR.h*0.62,7*U);
+      this.text('無盡最佳', LO.statR.x+14*U, LO.statR.y+16*U, 11*U,'#a2926e');
+      this.text(String(s.endlessBest|0), LO.statR.x+32*U, LO.statR.y+LO.statR.h*0.62, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    }
+  });
+
+  Game.prototype._recordShot=function(id,made,type){
+    const r=oldRecordShot.apply(this,arguments);
+    this._syncLeaderboardStats(false);
+    return r;
+  };
+  if(oldSubmitLogin){
+    Game.prototype._submitLogin=async function(){
+      const r=await oldSubmitLogin.apply(this,arguments);
+      this._syncLeaderboardStats(true);
+      return r;
+    };
+  }
+  Game.prototype.render=function(){
+    oldRender.apply(this,arguments);
+    if(this.portrait || !this._leaderboardOpen) return;
+    const ctx=this.ctx,dpr=this.dpr;
+    ctx.setTransform(this.scale*dpr,0,0,this.scale*dpr,this.ox*dpr,this.oy*dpr);
+    this.drawLeaderboardModal();
+    ctx.setTransform(1,0,0,1,0,0);
+  };
+})();
 // === part 5 below ===
 // ============================================================
 // PART 5 — run lifecycle, host, guards, shot input + physics
@@ -3154,6 +3419,23 @@ Object.assign(Game.prototype, {
     // Local cleanup masks: cover the baked poster UI only behind live controls,
     // leaving the bench illustration and title visible.
     ctx.save();
+    const colX=Math.min(LO.player.x,LO.statL.x,LO.statR.x,LO.prim.x,LO.sel.x,LO.bL.x,LO.bR.x)-22*U;
+    const colY=LO.player.y-20*U;
+    const colR=Math.max(LO.player.x+LO.player.w,LO.statR.x+LO.statR.w,LO.prim.x+LO.prim.w,LO.sel.x+LO.sel.w,LO.bR.x+LO.bR.w)+70*U;
+    const colB=Math.max(LO.bL.y+LO.bL.h,LO.bR.y+LO.bR.h,LO.sel.y+LO.sel.h)+30*U;
+    const strip=ctx.createLinearGradient(colX-56*U,0,colX+50*U,0);
+    strip.addColorStop(0,'rgba(7,5,12,0)');
+    strip.addColorStop(0.45,'rgba(7,5,12,0.82)');
+    strip.addColorStop(1,'rgba(7,5,12,0.96)');
+    ctx.fillStyle=strip;
+    ctx.fillRect(colX-56*U,colY,Math.max(0,colR-colX+56*U),Math.max(0,colB-colY));
+    const core=ctx.createLinearGradient(0,colY,0,colB);
+    core.addColorStop(0,'rgba(9,6,12,0.94)');
+    core.addColorStop(0.52,'rgba(7,5,10,0.98)');
+    core.addColorStop(1,'rgba(5,4,8,0.95)');
+    ctx.fillStyle=core;
+    this.rr(colX,colY,Math.max(0,colR-colX),Math.max(0,colB-colY),18*U);
+    ctx.fill();
     const clean=(r,p=8*U)=>{ this.rr(r.x-p,r.y-p,r.w+p*2,r.h+p*2,14*U); ctx.fillStyle='rgba(7,5,12,0.92)'; ctx.fill(); };
     for(const r of [LO.player,LO.statL,LO.statR,LO.prim,LO.sel,LO.bL,LO.bR].concat(LO.endless?[LO.endless]:[])) clean(r);
     const eg=ctx.createRadialGradient(LO.prim.x+LO.prim.w*0.82,LO.prim.y+LO.prim.h/2,20*U,LO.prim.x+LO.prim.w*0.82,LO.prim.y+LO.prim.h/2,180*U);
