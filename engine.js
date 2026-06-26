@@ -896,6 +896,32 @@ Object.assign(Game.prototype,{
   },
 });
 
+// === final activation: daily leaderboard on the final bench screen ===
+(function(){
+  const baseRecordShot = Game.prototype._recordShot;
+  Game.prototype._recordShot=function(id,made,type){
+    const result = baseRecordShot ? baseRecordShot.apply(this,arguments) : undefined;
+    if(this._syncLeaderboardStats) this._syncLeaderboardStats(false);
+    return result;
+  };
+  Game.prototype._drawFbStatCards=function(LO){
+    const U=LO.U,s=this.save,total=this._playerDayTotals?this._playerDayTotals():{shots:0,makes:0};
+    const acc=total.shots?Math.round(total.makes/total.shots*100):0;
+    this._gothCard(LO.statL,U);
+    this._statIcon('target',LO.statL.x+18*U,LO.statL.y+LO.statL.h*0.62,7*U);
+    this.text('今日命中', LO.statL.x+14*U, LO.statL.y+16*U, 11*U,'#a2926e');
+    this.text(acc+'%', LO.statL.x+32*U, LO.statL.y+LO.statL.h*0.58, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text((total.shots||0)+' / '+(total.makes||0), LO.statL.x+LO.statL.w-16*U, LO.statL.y+LO.statL.h*0.58, 10*U,'#9fe024',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›', LO.statL.x+LO.statL.w-14*U, LO.statL.y+18*U, 9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statL.x,LO.statL.y,LO.statL.w,Math.max(44*U,LO.statL.h),'fb_leaderboard',()=>this._openLeaderboard&&this._openLeaderboard());
+
+    this._gothCard(LO.statR,U);
+    this._statIcon('crown',LO.statR.x+18*U,LO.statR.y+LO.statR.h*0.62,7*U);
+    this.text('無盡最佳', LO.statR.x+14*U, LO.statR.y+16*U, 11*U,'#a2926e');
+    this.text(String(s.endlessBest|0), LO.statR.x+32*U, LO.statR.y+LO.statR.h*0.62, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+  };
+})();
+
 // === bench leaderboard: daily shooting ladder ===
 (function(){
   const MIN_QUALIFIED_SHOTS = 10;
@@ -4144,3 +4170,29 @@ Object.assign(Game.prototype,{
     this.button(BW/2-160,BH-86,320,64,'返回英雄頁','talback',()=>{ this.go('heroes'); },{size:28});
   },
 });
+
+// === final activation: daily leaderboard on the final bench screen ===
+(function(){
+  const baseRecordShot = Game.prototype._recordShot;
+  Game.prototype._recordShot=function(id,made,type){
+    const result = baseRecordShot ? baseRecordShot.apply(this,arguments) : undefined;
+    if(this._syncLeaderboardStats) this._syncLeaderboardStats(false);
+    return result;
+  };
+  Game.prototype._drawFbStatCards=function(LO){
+    const U=LO.U,s=this.save,total=this._playerDayTotals?this._playerDayTotals():{shots:0,makes:0};
+    const acc=total.shots?Math.round(total.makes/total.shots*100):0;
+    this._gothCard(LO.statL,U);
+    this._statIcon('target',LO.statL.x+18*U,LO.statL.y+LO.statL.h*0.62,7*U);
+    this.text('今日命中', LO.statL.x+14*U, LO.statL.y+16*U, 11*U,'#a2926e');
+    this.text(acc+'%', LO.statL.x+32*U, LO.statL.y+LO.statL.h*0.58, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text((total.shots||0)+' / '+(total.makes||0), LO.statL.x+LO.statL.w-16*U, LO.statL.y+LO.statL.h*0.58, 10*U,'#9fe024',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›', LO.statL.x+LO.statL.w-14*U, LO.statL.y+18*U, 9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statL.x,LO.statL.y,LO.statL.w,Math.max(44*U,LO.statL.h),'fb_leaderboard',()=>this._openLeaderboard&&this._openLeaderboard());
+
+    this._gothCard(LO.statR,U);
+    this._statIcon('crown',LO.statR.x+18*U,LO.statR.y+LO.statR.h*0.62,7*U);
+    this.text('無盡最佳', LO.statR.x+14*U, LO.statR.y+16*U, 11*U,'#a2926e');
+    this.text(String(s.endlessBest|0), LO.statR.x+32*U, LO.statR.y+LO.statR.h*0.62, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+  };
+})();
