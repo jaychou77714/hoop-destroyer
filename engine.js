@@ -6330,3 +6330,494 @@ Object.assign(Game.prototype,{
     ctx.restore();
   };
 })();
+
+// === final activation: hero relic backpack interaction polish ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const RELIC_UI_VER='20260628_relic_fix_v1';
+  const RELIC_UI_PATH='/assets/relic_ui/';
+  const RELIC_UI_NAMES=['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png'];
+  const LOADING_SPLASH='/assets/ui/loading_splash_hoopbreaker.png?v=20260628_loading_splash_v1';
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const TABS=[['全部',''],['籃球','ball'],['護腕','wrist'],['球鞋','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+  const TIER_COL=['#6fb0e8','#9fe024','#b980ff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳說','神話'];
+
+  function uniqIds(ids){
+    const out=[];
+    for(const id of ids||[]){
+      if(id&&RELICS[id]&&!out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+  function tierCol(it){ return TIER_COL[(it&&it.tier)|0]||'#e6c068'; }
+  function tierName(it){ return TIER_NAME[(it&&it.tier)|0]||'普通'; }
+  function validSlot(i){ return Number.isInteger(i)&&i>=0&&i<5; }
+
+  Game.prototype._hbRelicUiUrl=function(name){ return RELIC_UI_PATH+name+'?v='+RELIC_UI_VER; };
+  Game.prototype._relicUiImg=function(name){
+    this._relicUi=this._relicUi||{};
+    const key=name+'?v='+RELIC_UI_VER;
+    if(this._relicUi[key]!==undefined) return this._relicUi[key];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=this._hbRelicUiUrl(name);
+      this._relicUi[key]=im;
+      return im;
+    }catch(e){
+      this._relicUi[key]=null;
+      return null;
+    }
+  };
+  Game.prototype._preloadRelicUiAssets=function(){
+    for(const name of RELIC_UI_NAMES) this._relicUiImg(name);
+  };
+
+  Game.prototype._hbOwnedRelicIds=function(includeEquipped){
+    const s=this.save||{};
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    if(!s.library) s.library=[];
+    const base=includeEquipped?[...s.loadout.filter(Boolean),...s.library]:[...s.library];
+    return uniqIds(base);
+  };
+  Game.prototype._hbRelicDisplay=function(id){
+    const it=this._relicDisplay?this._relicDisplay(id,true):null;
+    if(it&&TYPE_LABEL[it.type]) it.core=TYPE_LABEL[it.type];
+    return it;
+  };
+  Game.prototype._hbSlotCandidates=function(slot){
+    const s=this.save||{};
+    const load=s.loadout||[];
+    return this._hbOwnedRelicIds(false).filter(id=>!load.includes(id));
+  };
+  Game.prototype._hbCompareTargetFor=function(item){
+    if(!item) return null;
+    const load=(this.save&&this.save.loadout)||[];
+    for(const id of load){
+      if(!id||id===item.id) continue;
+      const d=this._hbRelicDisplay(id);
+      if(d&&d.type===item.type) return id;
+    }
+    return null;
+  };
+  Game.prototype._selectedEquipFor=function(item){
+    return this._hbCompareTargetFor(item);
+  };
+  Game.prototype._openRelicCompare=function(rid,opts){
+    opts=opts||{};
+    const s=this.save||{};
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    const item=this._hbRelicDisplay(rid);
+    if(!item) return;
+    this._bagSel=rid;
+    const equippedSlot=s.loadout.indexOf(rid);
+    if(equippedSlot>=0){
+      this._relicCompare={rid,current:null,slot:equippedSlot,inspect:true,equipped:true};
+    }else{
+      const current=opts.current!==undefined?opts.current:this._hbCompareTargetFor(item);
+      this._relicCompare={rid,current:current||null,slot:validSlot(opts.slot)?opts.slot:(validSlot(this._relicSlotTarget)?this._relicSlotTarget:-1),inspect:!current,equipped:false};
+    }
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render();
+  };
+  Game.prototype._hbUnequipRelic=function(rid){
+    const s=this.save;
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    if(!s.library) s.library=[];
+    const i=s.loadout.indexOf(rid);
+    if(i<0) return;
+    if(!s.library.includes(rid) && s.library.length<40) s.library.push(rid);
+    s.loadout[i]=null;
+    persist(s);
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render();
+  };
+  Game.prototype._hbDiscardRelic=function(rid){
+    const s=this.save;
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    if(!s.library) s.library=[];
+    if(!rid||!RELICS[rid]) return;
+    if(s.loadout.includes(rid)){
+      this.toast&&this.toast('先卸下再丟棄','已裝備聖物不會直接刪除');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render();
+      return;
+    }
+    const before=s.library.length;
+    s.library=s.library.filter(id=>id!==rid);
+    if(before===s.library.length){
+      this.toast&&this.toast('庫存沒有此聖物');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render();
+      return;
+    }
+    persist(s);
+    this._relicCompare=null;
+    this._bagSel=null;
+    this.audio&&this.audio.sfx&&this.audio.sfx('coin');
+    this.toast&&this.toast('已丟棄聖物');
+    this.render();
+  };
+  Game.prototype._hbConfirmDiscardRelic=function(rid){
+    const it=this._hbRelicDisplay(rid);
+    if(!it) return;
+    const s=this.save||{};
+    const load=s.loadout||[];
+    if(load.includes(rid)){
+      this.toast&&this.toast('先卸下再丟棄','已裝備聖物不會直接刪除');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render();
+      return;
+    }
+    this.confirm('確定丟棄「'+it.name+'」？此動作無法復原。',()=>this._hbDiscardRelic(rid));
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render();
+  };
+  Game.prototype._hbEquipRelic=function(rid,opts){
+    opts=opts||{};
+    const s=this.save;
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    if(!s.library) s.library=[];
+    if(!rid||!RELICS[rid]) return;
+    const load=s.loadout;
+    const have=load.indexOf(rid);
+    if(have>=0){
+      this._relicCompare=null;
+      this._relicSlotTarget=null;
+      this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+      this.render();
+      return;
+    }
+
+    let slot=validSlot(opts.slot)?opts.slot:-1;
+    if(opts.current&&load.includes(opts.current)) slot=load.indexOf(opts.current);
+    if(!validSlot(slot)){
+      const same=this._hbCompareTargetFor(this._hbRelicDisplay(rid));
+      if(same&&load.includes(same)) slot=load.indexOf(same);
+    }
+    if(!validSlot(slot)) slot=load.indexOf(null);
+    if(!validSlot(slot)){
+      this.toast&&this.toast('聖物已滿','先點已裝備聖物卸下，或選同類型替換');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this._relicCompare=null;
+      this.render();
+      return;
+    }
+
+    const def=RELICS[rid];
+    if(def&&def.form){
+      for(let k=0;k<load.length;k++){
+        const ex=load[k];
+        if(k!==slot&&ex&&RELICS[ex]&&RELICS[ex].form) load[k]=null;
+      }
+    }
+
+    load[slot]=rid;
+    persist(s);
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this._bagSel=rid;
+    this.audio&&this.audio.sfx&&this.audio.sfx('select');
+    this.render();
+  };
+  Game.prototype._equipFromCompare=function(){
+    const c=this._relicCompare;
+    if(!c) return;
+    this._hbEquipRelic(c.rid,{slot:c.slot,current:c.current});
+  };
+
+  Game.prototype.drawRelicBag=function(){
+    const ctx=this.ctx, s=this.save;
+    if(!s.loadout) s.loadout=[null,null,null,null,null];
+    if(!s.library) s.library=[];
+    this.btn(0,0,BW,BH,'hero_bag_blocker',()=>{});
+
+    const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png');
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH);
+    else {
+      ctx.save();
+      ctx.fillStyle='#08050c';
+      ctx.fillRect(0,0,BW,BH);
+      const rg=ctx.createRadialGradient(BW*0.75,BH*0.14,20,BW*0.75,BH*0.14,BW*0.65);
+      rg.addColorStop(0,'rgba(126,60,190,0.24)');
+      rg.addColorStop(0.6,'rgba(40,14,72,0.18)');
+      rg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=rg;
+      ctx.fillRect(0,0,BW,BH);
+      ctx.restore();
+    }
+
+    const safeL=this.insL||0, safeR=this.insR||0, safeT=this.insT||0;
+    this.text('聖物背包',safeL+58,safeT+62,48,'#ffe7a6',{weight:'900',glow:14});
+    this.text('已裝備 '+s.loadout.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',safeL+250,safeT+64,24,'#c8b894',{baseline:'middle',weight:'900'});
+    this.button(BW-safeR-176,safeT+32,126,58,'返回','hero_bag_close',()=>this._closeHeroRelicBag(),{size:28,color:'#f0c0b0'});
+
+    const tab=this._relicTabHero||'';
+    const tabX=safeL+42, tabY=safeT+112, tabW=132, tabH=42, tabGap=11;
+    for(let i=0;i<TABS.length;i++){
+      const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type;
+      this.rr(tabX,y,tabW,tabH,12);
+      ctx.fillStyle=on?'rgba(184,255,47,0.20)':'rgba(10,7,8,0.70)';
+      ctx.fill();
+      ctx.lineWidth=2;
+      ctx.strokeStyle=on?'#bfff2f':'rgba(215,169,69,0.42)';
+      ctx.stroke();
+      this.text(label,tabX+tabW/2,y+tabH/2+1,19,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((t)=>this.btn(tabX,y,tabW,tabH,'hero_relic_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type);
+    }
+
+    const tpl=(ax,ay,aw,ah)=>({x:ax*BW/1672,y:ay*BH/941,w:aw*BW/1672,h:ah*BH/941});
+    const slots=[
+      tpl(353,105,142,126),
+      tpl(562,105,142,126),
+      tpl(772,105,142,126),
+      tpl(977,105,142,126),
+      tpl(1181,105,142,126)
+    ];
+    for(let i=0;i<5;i++){
+      const rid=s.loadout[i], r=slots[i], target=this._relicSlotTarget===i;
+      if(rid){
+        const it=this._hbRelicDisplay(rid);
+        this._drawRelicLoadoutIcon?this._drawRelicLoadoutIcon(it,r.x,r.y,r.w,r.h,{selected:this._bagSel===rid||target}):this._drawRelicCard(it,r.x,r.y,r.w,r.h,{equipped:true,selected:this._bagSel===rid||target});
+        ((id,slot,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'hero_bag_eq_'+slot,()=>this._openRelicCompare(id,{slot,inspect:true})))(rid,i,r);
+      }else{
+        ctx.save();
+        if(target){
+          this.rr(r.x,r.y,r.w,r.h,14);
+          ctx.fillStyle='rgba(184,255,47,0.10)';
+          ctx.fill();
+          ctx.lineWidth=3;
+          ctx.strokeStyle='#bfff2f';
+          ctx.stroke();
+        }
+        ctx.restore();
+        this.text('+',r.x+r.w/2,r.y+r.h/2-8,48,target?'#d8ff44':'rgba(215,169,69,0.56)',{align:'center',baseline:'middle',weight:'800'});
+        this.text(target?'選擇中':'空欄',r.x+r.w/2,r.y+r.h/2+33,18,target?'#d8ff44':'rgba(200,190,170,0.48)',{align:'center',baseline:'middle',weight:'900'});
+        ((slot,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'hero_bag_empty_'+slot,()=>{ this._relicSlotTarget=slot; this._bagSel=null; this._relicCompare=null; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(i,r);
+      }
+    }
+
+    const load=s.loadout||[];
+    let ids=validSlot(this._relicSlotTarget)?this._hbSlotCandidates(this._relicSlotTarget):this._hbOwnedRelicIds(true);
+    if(tab) ids=ids.filter(id=>{ const it=this._hbRelicDisplay(id); return it&&it.type===tab; });
+    const visible=ids.map(id=>this._hbRelicDisplay(id)).filter(Boolean).slice(0,32);
+
+    const grid=tpl(285,302,1100,392);
+    const cols=8, rows=4, cg=12*BW/1672, rg=10*BH/941;
+    const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows;
+    for(let i=0;i<visible.length&&i<cols*rows;i++){
+      const it=visible[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg);
+      this._drawRelicCard(it,x,y,cellW,cellH,{compact:true,equipped:load.includes(it.id),selected:this._bagSel===it.id});
+      ((id,slot,xx,yy)=>this.btn(xx,yy,cellW,cellH,'hero_bag_item_'+id,()=>this._openRelicCompare(id,{slot})))(it.id,this._relicSlotTarget,x,y);
+    }
+    if(!visible.length){
+      const msg=validSlot(this._relicSlotTarget)?'此分類沒有可裝入的庫存聖物':'尚未取得此分類聖物';
+      this.text(msg,grid.x+grid.w/2,grid.y+grid.h/2,30,'rgba(240,226,190,0.58)',{align:'center',baseline:'middle',weight:'900'});
+    }
+
+    const detail=tpl(302,724,1068,130);
+    this.rr(detail.x,detail.y,detail.w,detail.h,16);
+    ctx.fillStyle='rgba(7,5,8,0.72)';
+    ctx.fill();
+    ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(215,169,69,0.44)';
+    ctx.stroke();
+    const selIds=new Set(ids);
+    if(this._bagSel&&!selIds.has(this._bagSel)) this._bagSel=null;
+    const sel=(this._bagSel&&selIds.has(this._bagSel)?this._hbRelicDisplay(this._bagSel):null)||(visible[0]||null);
+    if(sel){
+      this._drawRelicSheetIcon(sel.type,sel.idx,detail.x+24,detail.y+18,92,92,1);
+      this.text(sel.name,detail.x+142,detail.y+44,31,tierCol(sel),{weight:'900'});
+      this.text(this._hbRelicSummary(sel)+(load.includes(sel.id)?'  ·  已裝備':''),detail.x+142,detail.y+78,20,'#c8b894',{weight:'800'});
+      if(sel.desc) this.text(this._clip(sel.desc,detail.w-520,20,'800'),detail.x+515,detail.y+66,21,'#efe3ca',{baseline:'middle',weight:'800'});
+    }else{
+      this.text('完成遠征或速投挑戰後，已取得的聖物才會出現在背包。',detail.x+detail.w/2,detail.y+detail.h/2,26,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+
+    if(this._relicCompare) this.drawRelicCompare();
+  };
+
+  Game.prototype._hbRelicSummary=function(it){
+    return tierName(it)+' · '+(TYPE_LABEL[it&&it.type]||it.core||'聖物')+(it&&it.q?(' · 強度 '+it.q+'/50'):'');
+  };
+  Game.prototype._hbDrawModalCard=function(it,x,y,w,h,title,col){
+    const ctx=this.ctx;
+    this.text(title,x+w/2,y-24,26,col,{align:'center',baseline:'middle',weight:'900'});
+    this.rr(x,y,w,h,18);
+    ctx.fillStyle='rgba(5,4,8,0.62)';
+    ctx.fill();
+    ctx.lineWidth=3;
+    ctx.strokeStyle=it?tierCol(it):'rgba(160,150,130,0.35)';
+    ctx.stroke();
+    if(!it){
+      this.text('空欄',x+w/2,y+h/2,34,'rgba(210,200,180,0.56)',{align:'center',baseline:'middle',weight:'900'});
+      return;
+    }
+    const side=Math.min(w*0.5,h*0.42);
+    this._drawRelicSheetIcon(it.type,it.idx,x+w/2-side/2,y+34,side,side,1);
+    this.text(this._clip(it.name,w-68,32,'900'),x+w/2,y+h*0.56,32,tierCol(it),{align:'center',baseline:'middle',weight:'900'});
+    this.text(this._hbRelicSummary(it),x+w/2,y+h*0.65,21,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    const lines=(it.affixes||[]).slice(0,3).map(a=>'◆ '+a.label+' +'+(a.pct?Math.round(a.val*100)+'%':a.val));
+    if(!lines.length&&it.desc) lines.push(this._clip(it.desc,w-92,19,'800'));
+    for(let i=0;i<Math.min(3,lines.length);i++) this.text(lines[i],x+48,y+h*0.74+i*38,20,'#efe3ca',{baseline:'middle',weight:'800'});
+  };
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare;
+    if(!c) return;
+    const ctx=this.ctx;
+    const selected=this._hbRelicDisplay(c.rid);
+    if(!selected) return;
+    const current=c.current?this._hbRelicDisplay(c.current):null;
+    const single=c.inspect||!current||current.id===selected.id;
+
+    ctx.save();
+    ctx.fillStyle='rgba(2,1,5,0.74)';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(0,0,BW,BH,'cmp_scrim',()=>{});
+
+    if(single){
+      const w=Math.min(850,BW-220), h=Math.min(700,BH-170), x=BW/2-w/2, y=BH/2-h/2+8;
+      this.rr(x,y,w,h,24);
+      ctx.fillStyle='rgba(8,5,10,0.96)';
+      ctx.fill();
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.78)';
+      ctx.stroke();
+      this.text(c.equipped?'已裝備聖物':'聖物詳情',x+w/2,y+58,42,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+      const icon=Math.min(220,w*0.34);
+      this._drawRelicSheetIcon(selected.type,selected.idx,x+w/2-icon/2,y+96,icon,icon,1);
+      this.text(this._clip(selected.name,w-120,38,'900'),x+w/2,y+346,38,tierCol(selected),{align:'center',baseline:'middle',weight:'900'});
+      this.text(this._hbRelicSummary(selected),x+w/2,y+390,23,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+      const lines=(selected.affixes||[]).slice(0,4).map(a=>'◆ '+a.label+' +'+(a.pct?Math.round(a.val*100)+'%':a.val));
+      if(selected.desc) lines.push(this._clip(selected.desc,w-150,20,'800'));
+      for(let i=0;i<Math.min(5,lines.length);i++) this.text(lines[i],x+82,y+442+i*36,21,'#efe3ca',{baseline:'middle',weight:'800'});
+      const bw=240,bh=70,by=y+h-98;
+      if(c.equipped){
+        this.button(x+w/2-bw-24,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:28});
+        this.button(x+w/2+24,by,bw,bh,'卸下','cmp_unequip',()=>this._hbUnequipRelic(selected.id),{size:30,color:'#f0c0b0',weight:'900'});
+      }else{
+        const canDiscard=(this.save.library||[]).includes(selected.id);
+        if(canDiscard){
+          const sbw=205,gap=18,total=sbw*3+gap*2,sx=x+w/2-total/2;
+          this.button(sx,by,sbw,bh,'丟棄','cmp_discard',()=>this._hbConfirmDiscardRelic(selected.id),{danger:true,size:27,color:'#fff0e8',weight:'900'});
+          this.button(sx+sbw+gap,by,sbw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:27});
+          this.button(sx+(sbw+gap)*2,by,sbw,bh,validSlot(c.slot)?('裝入第 '+(c.slot+1)+' 欄'):'裝備','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:26,weight:'900'});
+        }else{
+          this.button(x+w/2-bw-24,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:28});
+          this.button(x+w/2+24,by,bw,bh,validSlot(c.slot)?('裝入第 '+(c.slot+1)+' 欄'):'裝備','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:29,weight:'900'});
+        }
+      }
+      return;
+    }
+
+    const w=Math.min(1320,BW-180), h=Math.min(740,BH-160), x=BW/2-w/2, y=BH/2-h/2+8;
+    const im=this._relicUiImg('compare_modal.png');
+    if(im&&im.complete&&im.naturalWidth&&!im._err) ctx.drawImage(im,x,y,w,h);
+    else {
+      this.rr(x,y,w,h,24);
+      ctx.fillStyle='rgba(8,5,10,0.96)';
+      ctx.fill();
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.78)';
+      ctx.stroke();
+    }
+    this.text('裝備比較',x+w/2,y+58,42,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+    const cardW=Math.min(500,(w-260)/2), cardH=Math.min(470,h-245);
+    this._hbDrawModalCard(current,x+96,y+145,cardW,cardH,'目前裝備','#bfff2f');
+    this._hbDrawModalCard(selected,x+w-96-cardW,y+145,cardW,cardH,'準備裝備','#b980ff');
+    this.text('VS',x+w/2,y+360,52,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:10});
+    const bw=280,bh=74,by=y+h-108;
+    const canDiscard=(this.save.library||[]).includes(selected.id)&&!((this.save.loadout||[]).includes(selected.id));
+    if(canDiscard){
+      const sbw=240,gap=24,total=sbw*3+gap*2,sx=x+w/2-total/2;
+      this.button(sx,by,sbw,bh,'丟棄','cmp_discard',()=>this._hbConfirmDiscardRelic(selected.id),{danger:true,size:30,color:'#fff0e8',weight:'900'});
+      this.button(sx+sbw+gap,by,sbw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
+      this.button(sx+(sbw+gap)*2,by,sbw,bh,'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:32,weight:'900'});
+    }else{
+      this.button(x+w/2-bw-34,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
+      this.button(x+w/2+34,by,bw,bh,'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:34,weight:'900'});
+    }
+  };
+
+  const ENTRY_PRELOAD_ASSETS=[
+    LOADING_SPLASH,
+    '/assets/background/home_scene_flat_1704x786.webp',
+    '/assets/home/home_logo_clean.png',
+    '/assets/home/home_primary_start.png',
+    '/assets/home/home_primary_start_pressed.png',
+    '/assets/home/home_primary_start_hover.png',
+    '/assets/home/home_secondary_panel.png',
+    '/assets/home/home_secondary_panel_pressed.png',
+    '/assets/home/home_secondary_panel_hover.png',
+    '/assets/home/home_status_panel.png',
+    '/assets/background/hub_scene_flat.webp',
+    '/assets/background/hero_page_bg.webp',
+    '/assets/background/atlas_screen_flat.webp',
+    '/assets/background/route_screen_flat.webp',
+    '/assets/background/settings_screen_flat.webp',
+    '/assets/background/gameover_scene_flat.webp',
+    '/assets/battle/act1_bg.webp',
+    '/assets/battle/act2_bg.webp',
+    '/assets/battle/act3_bg.webp',
+    '/assets/battle/act4_bg.webp',
+    '/assets/battle/act5_bg.webp',
+    '/assets/mob/stage1/group.webp',
+    '/assets/mob/act2/stage1/group.webp',
+    '/assets/mob/act3/stage1/group.webp',
+    '/assets/mob/act4/stage1/group.webp',
+    '/assets/mob/act5/stage1/group.webp',
+    '/assets/mob/speed/act1.webp',
+    '/assets/mob/speed/act2.webp',
+    '/assets/mob/speed/act3.webp',
+    '/assets/mob/speed/act4.webp',
+    '/assets/mob/speed/act5.webp',
+    '/assets/ui/login_panel_user_trans.png',
+    '/hero_shade.png',
+    '/hero_axer.png',
+    '/hero_elem.png',
+    '/hero_bone.png',
+    '/hero_archer.png',
+    '/hero_beast.png',
+    '/hero_whistle.png',
+    ...RELIC_UI_NAMES.map(name=>RELIC_UI_PATH+name+'?v='+RELIC_UI_VER)
+  ];
+
+  Game.prototype._preloadEntryAssets=async function(){
+    if(!this._preloadImage) return;
+    const st=this._assetLoading||{};
+    const total=ENTRY_PRELOAD_ASSETS.length;
+    let done=0;
+    const loadOne=async(src)=>{
+      st.label=src.includes('/relic_ui/')?'載入聖物背包':(src.includes('loading_splash')?'載入啟動畫面':'載入場景資源');
+      st.detail=(src.split('/').pop()||src).split('?')[0];
+      st.progress=Math.min(0.985,done/total);
+      this.render&&this.render();
+      try{ await this._preloadImage(src); }
+      catch(e){ try{ console.warn('[HB preload asset]',src,e); }catch(_e){} }
+      done++;
+      st.progress=Math.min(0.995,done/total);
+      this.render&&this.render();
+    };
+    let idx=0;
+    const worker=async()=>{
+      while(idx<ENTRY_PRELOAD_ASSETS.length){
+        const src=ENTRY_PRELOAD_ASSETS[idx++];
+        await loadOne(src);
+      }
+    };
+    await Promise.all([worker(),worker(),worker()]);
+    this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    this._preloadRelicUiAssets&&this._preloadRelicUiAssets();
+    st.label='準備開球';
+    st.detail='Hoopbreaker';
+    st.progress=1;
+    this.render&&this.render();
+  };
+})();
