@@ -5433,3 +5433,412 @@ Object.assign(Game.prototype,{
     return r;
   };
 })();
+
+// === final activation: cloud sync, relic backpack, and contact audio fixes ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const deepClone=v=>{ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} };
+  const ACCOUNT_SELECT='id,player_name,jersey_code,profile_json,profile_updated_at,today_key,today_shots,today_makes,last_login_at';
+  const shortErr=e=>{
+    const s=String((e&&(e.message||e))||'unknown');
+    if(/row-level security|42501/i.test(s)) return 'Supabase RLS policy blocked writes';
+    if(/duplicate key|23505/i.test(s)) return 'duplicate account row';
+    if(/profile_json/i.test(s)) return 'profile_json column missing';
+    return s.slice(0,160);
+  };
+  const uuid=()=>('10000000-1000-4000-8000-100000000000').replace(/[018]/g,c=>
+    (Number(c) ^ ((crypto.getRandomValues(new Uint8Array(1))[0]) & (15 >> (Number(c)/4)))).toString(16)
+  );
+  const accountFilter=(name,code)=>'?player_name=eq.'+encodeURIComponent(name)+'&jersey_code=eq.'+encodeURIComponent(code||'');
+
+  Game.prototype._cloudHeaders=function(extra){
+    const u=this._cloudProgressUrl&&this._cloudProgressUrl();
+    const h={apikey:u.cfg.key,Authorization:'Bearer '+u.cfg.key};
+    if(extra) for(const k in extra) h[k]=extra[k];
+    return h;
+  };
+
+  Game.prototype._fetchCloudProgress=async function(name,code){
+    const u=this._cloudProgressUrl&&this._cloudProgressUrl();
+    if(!u||!name) return {ok:false,reason:'no-config'};
+    const q='?select='+ACCOUNT_SELECT+'&player_name=eq.'+encodeURIComponent(name)+'&jersey_code=eq.'+encodeURIComponent(code||'')+'&limit=1';
+    const res=await fetch(u.base+q,{headers:this._cloudHeaders()});
+    if(!res.ok) throw new Error(await res.text());
+    const rows=await res.json();
+    return {ok:true,row:rows&&rows[0]||null};
+  };
+
+  Game.prototype._writeCloudAccount=async function(name,code,payload){
+    const u=this._cloudProgressUrl&&this._cloudProgressUrl();
+    if(!u||!name) return {ok:false,reason:'no-config'};
+    const rowPayload=Object.assign({},payload||{},{
+      player_name:name,
+      jersey_code:code||'',
+      remember:true,
+      last_login_at:new Date().toISOString()
+    });
+    const existing=await this._fetchCloudProgress(name,code);
+    let res;
+    if(existing.ok&&existing.row&&existing.row.id){
+      res=await fetch(u.base+'?id=eq.'+encodeURIComponent(existing.row.id),{
+        method:'PATCH',
+        headers:this._cloudHeaders({'Content-Type':'application/json',Prefer:'return=minimal'}),
+        body:JSON.stringify(rowPayload)
+      });
+    } else {
+      if(!rowPayload.id) rowPayload.id=(crypto&&crypto.randomUUID)?crypto.randomUUID():uuid();
+      res=await fetch(u.base,{
+        method:'POST',
+        headers:this._cloudHeaders({'Content-Type':'application/json',Prefer:'return=minimal'}),
+        body:JSON.stringify(rowPayload)
+      });
+    }
+    if(!res.ok) throw new Error(await res.text());
+    this._cloudProgressMissing=false;
+    return {ok:true};
+  };
+
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    if(!remote||typeof remote!=='object') return false;
+    const rs=remote.save&&typeof remote.save==='object'?remote.save:null;
+    let changed=false;
+    if(rs){
+      const keepLogin=this.save&&this.save.login?deepClone(this.save.login):{name:'',code:'',remember:true};
+      const keepSettings=this.save&&this.save.settings?deepClone(this.save.settings):null;
+      const keepAdmin=!!(this.save&&this.save.admin);
+      const keys=['coins','tutorialDone','hero','relics','loadout','library','acts','marks','heat','memory','bossClears','nodeProg','modeProg','endless','endlessBest','deaths','deathsDay','deathsDayKey','stats'];
+      for(const k of keys){
+        if(k in rs){ this.save[k]=deepClone(rs[k]); changed=true; }
+      }
+      this.save.login=keepLogin;
+      if(keepSettings) this.save.settings=keepSettings;
+      this.save.admin=keepAdmin;
+      if(!Array.isArray(this.save.loadout)) this.save.loadout=[null,null,null,null,null];
+      if(!Array.isArray(this.save.library)) this.save.library=[];
+      persist(this.save);
+    }
+    if(remote.profile&&typeof remote.profile==='object'){
+      this.profile=deepClone(remote.profile);
+      try{ saveProfileRaw(this.profile); }catch(e){}
+      changed=true;
+    }
+    return changed;
+  };
+
+  Game.prototype._pushCloudProgress=async function(name,code){
+    if(!name) return false;
+    const snap=this._progressSnapshot();
+    const payload={
+      profile_json:snap,
+      profile_updated_at:snap.updatedAt,
+      today_key:this._dayKey&&this._dayKey()
+    };
+    const totals=this._playerDayTotals?this._playerDayTotals():null;
+    if(totals){ payload.today_shots=totals.shots; payload.today_makes=totals.makes; }
+    await this._writeCloudAccount(name,code,payload);
+    return true;
+  };
+
+  Game.prototype._scheduleCloudProgressSync=function(force){
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()), code=String((L.code||'').trim());
+    if(!name||this._cloudProgressApplying) return;
+    if(this._cloudProgressTimer){ clearTimeout(this._cloudProgressTimer); this._cloudProgressTimer=null; }
+    const run=()=>this._pushCloudProgress(name,code).catch(e=>{try{console.warn('[HB cloud progress]',e);}catch(_e){}});
+    if(force) run(); else this._cloudProgressTimer=setTimeout(run,900);
+  };
+
+  try{
+    const oldPersist=persist;
+    persist=function(s){
+      const r=oldPersist(s);
+      try{
+        const g=(typeof window!=='undefined'&&window.__HB)||null;
+        if(g&&g.save===s&&g._scheduleCloudProgressSync&&!g._cloudProgressApplying) g._scheduleCloudProgressSync(false);
+      }catch(e){}
+      return r;
+    };
+  }catch(e){}
+
+  Game.prototype._syncLeaderboardNow=async function(){
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()), code=String((L.code||'').trim());
+    if(!name) return false;
+    const t=this._playerDayTotals();
+    await this._writeCloudAccount(name,code,{
+      today_key:t.key,
+      today_shots:t.shots,
+      today_makes:t.makes
+    });
+    return true;
+  };
+
+  Game.prototype._submitLogin=async function(){
+    if(this._loginDraft&&this._loginDraft.busy) return;
+    this._syncLoginFields&&this._syncLoginFields();
+    const d=this._loginDraft||{}, name=String(d.name||'').trim(), code=String(d.code||'').trim();
+    this._loginPressUntil=this.t+0.45;
+    if(!name){ this.audio.sfx('hurt'); this.toast('請輸入名字','帳號請填你的名字'); this.render(); return; }
+    if(!code){ this.audio.sfx('hurt'); this.toast('請輸入代號','代號可用背號，避免使用個人密碼'); this.render(); return; }
+    d.busy=true; d.msg='同步中...'; this.render();
+    if(this._loginEls){ try{this._loginEls.name.blur(); this._loginEls.code.blur();}catch(_e){} }
+    this.save.login={name,code,remember:true,lastLoginAt:new Date().toISOString()};
+    persist(this.save);
+    let cloudOk=false, cloudMsg='本機已記住';
+    try{
+      const remote=await this._fetchCloudProgress(name,code);
+      let loaded=false;
+      if(remote.ok&&remote.row&&remote.row.profile_json){
+        this._cloudProgressApplying=true;
+        loaded=this._applyCloudProgressSnapshot(remote.row.profile_json);
+        this._cloudProgressApplying=false;
+      }
+      cloudOk=await this._pushCloudProgress(name,code);
+      cloudMsg=loaded?'已載入雲端進度並同步':'已建立/更新雲端存檔';
+    }catch(e){
+      this._cloudProgressApplying=false;
+      cloudMsg='雲端同步失敗：'+shortErr(e);
+      try{console.warn('[HB login sync]',e);}catch(_e){}
+    }
+    d.busy=false;
+    this._closeLogin&&this._closeLogin(false);
+    this.toast(cloudOk?'登入成功':'已登入，本機保存',cloudMsg);
+    if(this._entryLoadingToHub) await this._entryLoadingToHub(cloudMsg);
+    else this.go('hub');
+  };
+
+  const RELIC_UI='/assets/relic_ui/';
+  const RELIC_VER='20260628_relic_fix_v1';
+  const RELIC_ASSETS=['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png'];
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'鞋靴',charm:'護符',mask:'面具',hoop:'籃框'};
+  const QUAL_COL=['#6fb0e8','#9fe024','#b980ff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const QUAL_NAME=['普通','精良','稀有','史詩','傳說','神話'];
+  const oldGo=Game.prototype.go;
+
+  Game.prototype._relicUiImg=function(name){
+    this._relicUi=this._relicUi||{};
+    const key=name+'?v='+RELIC_VER;
+    if(this._relicUi[key]!==undefined) return this._relicUi[key];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{try{ if(this.screen==='relics'||this._relicCompare) this.render(); }catch(_e){}};
+      im.onerror=()=>{ im._err=true; try{ if(this.screen==='relics') this.render(); }catch(_e){} };
+      im.src=RELIC_UI+name+'?v='+RELIC_VER;
+      this._relicUi[key]=im;
+      return im;
+    }catch(e){ this._relicUi[key]=null; return null; }
+  };
+
+  Game.prototype._preloadRelicUiAssets=function(){
+    for(const a of RELIC_ASSETS) this._relicUiImg(a);
+  };
+
+  Game.prototype.go=function(s){
+    const r=oldGo.call(this,s);
+    if(s==='relics') this._preloadRelicUiAssets();
+    return r;
+  };
+
+  Game.prototype._drawRelicBackpackFallback=function(){
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.fillStyle='#08050c'; ctx.fillRect(0,0,BW,BH);
+    const rg=ctx.createRadialGradient(BW*0.78,BH*0.08,30,BW*0.78,BH*0.08,BW*0.55);
+    rg.addColorStop(0,'rgba(126,60,190,0.24)');
+    rg.addColorStop(0.45,'rgba(40,14,72,0.18)');
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,BW,BH);
+    const panel=(x,y,w,h,r)=>{
+      this.rr(x,y,w,h,r||18);
+      ctx.fillStyle='rgba(7,5,8,0.72)'; ctx.fill();
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(121,82,150,0.72)'; ctx.stroke();
+      ctx.lineWidth=1.2; ctx.strokeStyle='rgba(190,255,47,0.26)'; this.rr(x+8,y+8,w-16,h-16,Math.max(4,(r||18)-6)); ctx.stroke();
+    };
+    panel(220,80,1320,176,20);
+    panel(220,292,1320,560,18);
+    panel(1600,80,210,770,22);
+    ctx.restore();
+  };
+
+  Game.prototype.drawRelics=function(){
+    const ctx=this.ctx, s=this.save;
+    if(!s.loadout)s.loadout=[null,null,null,null,null];
+    if(!s.library)s.library=[];
+    this.backdrop('hub');
+    const bg=this._relicUiImg('backpack_bg.png');
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH);
+    else this._drawRelicBackpackFallback();
+    const safeL=this.insL||0,safeR=this.insR||0,safeT=this.insT||0;
+    this.text('聖物背包',safeL+50,safeT+60,46,'#ffe7a6',{weight:'900',glow:14});
+    this.text('裝備 '+s.loadout.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',safeL+250,safeT+62,22,'#c8b894',{baseline:'middle',weight:'900'});
+    this.button(BW-safeR-126,safeT+30,78,56,'×','relic_back',()=>this.go('hub'),{size:36,color:'#f0c0b0'});
+
+    const tabs=[['全部',''],['籃球','ball'],['護腕','wrist'],['鞋靴','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+    const cur=this._relicTab2||'';
+    let tx=safeL+48, ty=safeT+112;
+    for(const [label,type] of tabs){
+      const w=label==='全部'?96:102;
+      this.rr(tx,ty,w,44,12);
+      ctx.fillStyle=cur===type?'rgba(184,255,47,0.2)':'rgba(10,7,8,0.72)';
+      ctx.fill(); ctx.lineWidth=2;
+      ctx.strokeStyle=cur===type?'#bfff2f':'rgba(215,169,69,0.42)';
+      ctx.stroke();
+      this.text(label,tx+w/2,ty+22,20,cur===type?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((t,x0)=>this.btn(x0,ty,w,44,'relic_tab2_'+label,()=>{this._relicTab2=t;this.render();}))(type,tx);
+      tx+=w+12;
+    }
+
+    const eqY=safeT+178, eqX=safeL+244, eqW=218, eqH=138, gap=26;
+    for(let i=0;i<5;i++){
+      const rid=s.loadout[i], x=eqX+i*(eqW+gap), y=eqY;
+      if(rid){
+        const it=this._relicDisplay(rid,true);
+        it.core=TYPE_LABEL[it.type]||it.core;
+        this._drawRelicCard(it,x,y,eqW,eqH,{equipped:true,selected:this._bagSel===rid});
+        ((id,xx,yy)=>this.btn(xx,yy,eqW,eqH,'eq_'+i,()=>this._openRelicCompare(id)))(rid,x,y);
+      } else {
+        ctx.save(); this.rr(x,y,eqW,eqH,16); ctx.fillStyle='rgba(7,5,9,0.62)'; ctx.fill();
+        ctx.setLineDash([9,9]); ctx.lineWidth=2; ctx.strokeStyle='rgba(215,169,69,0.34)'; ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+        this.text('+',x+eqW/2,y+eqH/2-8,52,'rgba(215,169,69,0.42)',{align:'center',baseline:'middle',weight:'700'});
+        this.text('空槽',x+eqW/2,y+eqH/2+34,18,'rgba(200,190,170,0.45)',{align:'center',baseline:'middle',weight:'800'});
+      }
+    }
+
+    const owned=[...new Set([...(s.loadout||[]).filter(Boolean),...(s.library||[])])].filter(id=>RELICS[id]).map(id=>{const it=this._relicDisplay(id,true); it.core=TYPE_LABEL[it.type]||it.core; return it;});
+    let catalog=this._allRelicCatalog().map(it=>Object.assign({},it,{core:TYPE_LABEL[it.type]||it.core}));
+    if(cur) catalog=catalog.filter(it=>it.type===cur);
+    const ownedType=new Set(owned.map(it=>it.type+':'+it.idx));
+    const locked=catalog.filter(it=>!ownedType.has(it.type+':'+it.idx));
+    const gridX=safeL+198, gridY=safeT+358, cols=8, rows=4, cellW=150, cellH=116, cg=18, rg=18;
+    const visible=owned.concat(locked).slice(0,cols*rows);
+    for(let i=0;i<visible.length;i++){
+      const it=visible[i], x=gridX+(i%cols)*(cellW+cg), y=gridY+((i/cols)|0)*(cellH+rg), lockedItem=!!it.catalog;
+      this._drawRelicCard(it,x,y,cellW,cellH,{compact:true,locked:lockedItem,selected:this._bagSel===it.id});
+      if(!lockedItem) ((id,xx,yy)=>this.btn(xx,yy,cellW,cellH,'bag_'+id,()=>this._openRelicCompare(id)))(it.id,x,y);
+    }
+    if(!visible.length){
+      this.text('尚未取得聖物',BW/2,BH/2,40,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+    if(this._relicCompare) this.drawRelicCompare();
+  };
+
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare; if(!c) return;
+    const ctx=this.ctx;
+    const selected=this._relicDisplay(c.rid,true);
+    const current=c.current?this._relicDisplay(c.current,true):null;
+    if(selected) selected.core=TYPE_LABEL[selected.type]||selected.core;
+    if(current) current.core=TYPE_LABEL[current.type]||current.core;
+    ctx.save(); ctx.fillStyle='rgba(2,1,5,0.74)'; ctx.fillRect(-4000,-4000,BW+8000,BH+8000); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'cmp_scrim',()=>{});
+    const im=this._relicUiImg('compare_modal.png'), w=1580,h=830,x=BW/2-w/2,y=BH/2-h/2+10;
+    if(im&&im.complete&&im.naturalWidth&&!im._err) ctx.drawImage(im,x,y,w,h);
+    else { ctx.save(); this.rr(x,y,w,h,24); ctx.fillStyle='rgba(8,5,10,0.96)'; ctx.fill(); ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.78)'; ctx.stroke(); ctx.restore(); }
+    this.text('裝備比較',BW/2,y+64,46,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+    const card=(it,rx,ry,rw,rh,title,col)=>{
+      this.text(title,rx+rw/2,ry-26,28,col,{align:'center',baseline:'middle',weight:'900'});
+      this.rr(rx,ry,rw,rh,18); ctx.fillStyle='rgba(5,4,8,0.58)'; ctx.fill();
+      ctx.lineWidth=3; ctx.strokeStyle=it?(QUAL_COL[it.tier]||col):'rgba(160,150,130,0.35)'; ctx.stroke();
+      if(it){
+        const side=Math.min(rw*0.52,rh*0.44);
+        this._drawRelicSheetIcon(it.type,it.idx,rx+rw/2-side/2,ry+34,side,side,1);
+        this.text(it.name,rx+rw/2,ry+rh*0.57,34,QUAL_COL[it.tier]||'#e6c068',{align:'center',baseline:'middle',weight:'900'});
+        this.text((QUAL_NAME[it.tier]||'普通')+' · '+it.core,rx+rw/2,ry+rh*0.65,22,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+        const af=(it.affixes||[]).slice(0,3);
+        for(let i=0;i<3;i++){
+          const yy=ry+rh*0.73+i*42;
+          const txt=af[i]?('◆ '+af[i].label+' +'+(af[i].pct?Math.round(af[i].val*100)+'%':af[i].val)):(i===0?this._clip(it.desc,rw-90,19,'800'):'');
+          if(txt)this.text(txt,rx+54,yy,21,'#efe3ca',{baseline:'middle',weight:'800'});
+        }
+      } else {
+        this.text('空槽',rx+rw/2,ry+rh/2,34,'rgba(210,200,180,0.56)',{align:'center',baseline:'middle',weight:'900'});
+      }
+    };
+    card(current,x+120,y+150,560,500,'裝備中','#bfff2f');
+    card(selected,x+w-680,y+150,560,500,'選取聖物','#b980ff');
+    this.text('VS',BW/2,y+390,54,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:10});
+    const bw=300,bh=78,by=y+h-120;
+    this.button(BW/2-bw-36,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
+    this.button(BW/2+36,by,bw,bh,current&&current.id===selected.id?'卸下':'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:34,weight:'900'});
+  };
+
+  if(typeof Audio!=='undefined'){
+    const prevSfx=Audio.prototype.sfx;
+    Audio.prototype._hbStopBallContactSamples=function(){
+      this._ensureSamples&&this._ensureSamples();
+      const pools=this._samplePools||{};
+      for(const key of ['rim','floor']){
+        const pool=pools[key]||[];
+        for(const a of pool){ try{ a.pause(); a.currentTime=0; }catch(_e){} }
+      }
+    };
+    Audio.prototype.sfx=function(n){
+      const now=(typeof performance!=='undefined'?performance.now():Date.now());
+      if(n==='hit' && this._hbSuppressHitUntil && now<this._hbSuppressHitUntil) return;
+      if(n==='rim'){ this._hbSuppressHitUntil=now+220; if(this._playSample&&this._playSample('rim',1.25)) return; }
+      if(n==='board'){ this._hbSuppressHitUntil=now+180; if(this._playSample&&this._playSample('rim',0.85)) return; }
+      if(n==='bank'||n==='score'){ this._hbSuppressHitUntil=now+260; if(this._playSample&&this._playSample('score',0.78)) return; }
+      if(n==='swish'){ this._hbSuppressHitUntil=now+300; if(this._playSample&&this._playSample('swish',1.0)) return; }
+      if(n==='floor'){ if(this._playSample&&this._playSample('floor',0.78)) return; }
+      return prevSfx.call(this,n);
+    };
+  }
+
+  const oldSpawnBall=Game.prototype.spawnBall;
+  Game.prototype.spawnBall=function(){
+    if(this.audio&&this.audio._hbStopBallContactSamples) this.audio._hbStopBallContactSamples();
+    return oldSpawnBall.apply(this,arguments);
+  };
+  const oldEndShot=Game.prototype.endShot;
+  Game.prototype.endShot=function(scored){
+    if(this.audio&&this.audio._hbStopBallContactSamples) this.audio._hbStopBallContactSamples();
+    return oldEndShot.call(this,scored);
+  };
+
+  Game.prototype.collideHoop=function(b){
+    const run=this.run, H=run&&run.hoop; if(!H||!b||!b.live) return;
+    const boardX=H.x+H.rimR+8, bt=H.y-H.boardH*0.55, bb=H.y+H.boardH*0.45;
+    let boardTouch=false;
+    if(b.x+b.r>boardX&&b.x-b.r<boardX+H.boardW&&b.y>bt&&b.y<bb&&b.vx>0){
+      b.x=boardX-b.r; b.vx*=-0.6; b.vy*=0.92; b.hitBoard=true; boardTouch=true;
+      if(!b._boardLatch){
+        b._boardLatch=true;
+        this.audio.sfx('board');
+        const rc=ACTS[run.act-1].rune;
+        this.flashFx(boardX,b.y,rc,130,0.12);
+        this.burst(boardX,b.y,11,rc,250,0.42,{kind:'shard',glow:true,r:4,g:180});
+        this.ringFx(boardX,b.y,rc,0.24,{r0:8,r1:150,width:8});
+        run.shake=Math.max(run.shake||0,6); H.glow=0.85;
+      }
+    }
+    if(!boardTouch) b._boardLatch=false;
+    const lx=H.x-H.rimR, rx=H.x+H.rimR;
+    let rimTouch=false, rimX=H.x;
+    for(const rxp of [lx,rx]){
+      const d=dist(b.x,b.y,rxp,H.y);
+      if(d<b.r+H.rimThick){
+        const nx=(b.x-rxp)/(d||1), ny=(b.y-H.y)/(d||1), ov=b.r+H.rimThick-d;
+        b.x+=nx*ov; b.y+=ny*ov;
+        const dot=b.vx*nx+b.vy*ny;
+        b.vx-=1.6*dot*nx; b.vy-=1.6*dot*ny; b.vx*=0.78; b.vy*=0.78;
+        b.hitRim=true; rimTouch=true; rimX=rxp; H.glow=0.75;
+      }
+    }
+    if(rimTouch){
+      if(!b._rimLatch){
+        b.rimBounces=(b.rimBounces||0)+1; b._rimLatch=true;
+        this.audio.sfx('rim');
+        const rc=ACTS[run.act-1].rune;
+        this.burst(rimX,H.y,12,rc,310,0.34,{kind:'streak',glow:true,r:4,g:240,len:42});
+        this.ringFx(rimX,H.y,rc,0.22,{r0:4,r1:118,width:7});
+        run.shake=Math.max(run.shake||0,7);
+      }
+    } else b._rimLatch=false;
+    if(!b.scored && b.vy>0 && b._py!=null){
+      if(b._py<=H.y && b.y>=H.y && b.x>lx+6 && b.x<rx-6){ this.makeBasket(); H.net=18; }
+    }
+    b._py=b.y;
+  };
+})();
