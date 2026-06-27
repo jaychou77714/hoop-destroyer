@@ -1,6 +1,6 @@
 // 《地獄籃不住：籃獄圖譜》HOOPocalypse: Atlas of the Damned Rim
 // Single-finger physics basketball × dark-comedy roguelite × boss hunt × relic collection.
-// Data-driven rebuild. Self-contained, no network. Bean-style art. export start(canvas, root).
+// Data-driven rebuild. Self-contained, no network. Bean-style art. exposes start(canvas, root).
 
 function resetLocalDataIfRequested(){
   try{
@@ -17,7 +17,7 @@ function resetLocalDataIfRequested(){
     return true;
   }catch(e){ return false; }
 }
-export function start(canvas, root){ const didReset=resetLocalDataIfRequested(); const G=new Game(canvas,root); G.boot(); try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){} if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} } return G; }
+function start(canvas, root){ const didReset=resetLocalDataIfRequested(); const G=new Game(canvas,root); G.boot(); try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){} if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} } return G; }
 try{ window.HBStart = start; }catch(e){}
 
 // ---------- math / util ----------
