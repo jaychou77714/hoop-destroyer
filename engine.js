@@ -933,6 +933,395 @@ Object.assign(Game.prototype,{
   };
 })();
 
+// === mobile login, entry preload, cloud progress, readable leaderboard, and tactile audio ===
+(function(){
+  const ENTRY_ASSETS=[
+    '/assets/background/home_scene_flat_1704x786.webp',
+    '/assets/background/home_bg_dark_1704x786.webp',
+    '/assets/final_bench_menu/final_bench_menu_full_flat_1704x786.webp',
+    '/assets/hero_select/bg_clean.webp',
+    '/assets/host_guide/codex_bg_flat.webp',
+    '/assets/atlas_base_clean_no_nodes_1704x786.webp',
+    '/assets/stage1_route_base_1704x786.webp',
+    '/assets/stage2_route_base_1704x786.webp',
+    '/assets/stage3_route_base_1704x786.webp',
+    '/assets/stage4_route_base_1704x786.webp',
+    '/assets/stage5_route_base_1704x786.webp',
+    '/assets/battle/act1_bg.webp',
+    '/assets/battle/act2_bg.webp',
+    '/assets/battle/act3_bg.webp',
+    '/assets/battle/act4_bg.webp',
+    '/assets/battle/act5_bg.webp',
+    '/assets/mob/stage1/group.webp',
+    '/assets/mob/act2/stage1/group.webp',
+    '/assets/mob/act3/stage1/group.webp',
+    '/assets/mob/act4/stage1/group.webp',
+    '/assets/mob/act5/stage1/group.webp',
+    '/assets/mob/speed/act1.webp',
+    '/assets/mob/speed/act2.webp',
+    '/assets/mob/speed/act3.webp',
+    '/assets/mob/speed/act4.webp',
+    '/assets/mob/speed/act5.webp',
+    '/assets/ui/login_panel_user_trans.png',
+    '/hero_shade.png',
+    '/hero_axer.png',
+    '/hero_elem.png',
+    '/hero_bone.png',
+    '/hero_archer.png',
+    '/hero_beast.png',
+    '/hero_whistle.png'
+  ];
+  const LOGIN_PANEL_CROP={x:52,y:18,w:1339,h:1057};
+  const assetCache={};
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+  function deepClone(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} }
+  function unionArr(a,b){ const out=[]; for(const x of [].concat(a||[],b||[])){ if(x!=null && !out.includes(x)) out.push(x); } return out; }
+  function maxNum(a,b){ return Math.max(Number(a)||0,Number(b)||0); }
+
+  const priorOpenLogin=Game.prototype.openLogin;
+  Game.prototype.openLogin=function(){
+    const L=this.save.login||{};
+    this._loginDraft={name:L.name||'',code:L.code||L.pass||'',busy:false,msg:''};
+    this._loginOpen=true;
+    this.render();
+    if(!this._isMobileFx()){
+      setTimeout(()=>{try{ const e=this._loginEls; (e&&(e.name.value?e.code:e.name)).focus(); }catch(_e){}},60);
+    }
+  };
+
+  Game.prototype._placeInput=function(el,x,y,w,h,fs){
+    const sc=this.scale||1;
+    el.style.left=(this.ox+x*sc)+'px';
+    el.style.top=(this.oy+y*sc)+'px';
+    el.style.width=(w*sc)+'px';
+    el.style.height=(h*sc)+'px';
+    el.style.fontSize=Math.max(16,fs*sc)+'px';
+    el.style.lineHeight=(h*sc)+'px';
+    el.style.display='block';
+    el.style.touchAction='manipulation';
+    el.style.webkitTextSizeAdjust='100%';
+    el.style.textSizeAdjust='100%';
+  };
+
+  const priorEnsureInputs=Game.prototype._ensureLoginInputs;
+  Game.prototype._ensureLoginInputs=function(nameR,codeR,fs){
+    priorEnsureInputs.call(this,nameR,codeR,fs);
+    const e=this._loginEls;
+    if(!e) return;
+    for(const el of [e.name,e.code]){
+      el.autocapitalize='off';
+      el.autocorrect='off';
+      el.spellcheck=false;
+      el.style.fontSize=Math.max(16,parseFloat(el.style.fontSize)||16)+'px';
+      el.style.webkitTextSizeAdjust='100%';
+      el.style.textSizeAdjust='100%';
+      el.style.touchAction='manipulation';
+    }
+    e.name.placeholder='輸入你的名字';
+    e.code.placeholder='背號或代號';
+  };
+
+  const priorDrawLogin=Game.prototype.drawLoginModal;
+  Game.prototype.drawLoginModal=function(){
+    priorDrawLogin.call(this);
+    const d=this._loginDraft||{};
+    const src=LOGIN_PANEL_CROP;
+    const sc=Math.min((BW*0.94)/src.w,(BH*0.96)/src.h);
+    const dw=src.w*sc, dh=src.h*sc, dx=BW/2-dw/2, dy=BH/2-dh/2+2;
+    const map=(x,y,w,h)=>({x:dx+x*sc,y:dy+y*sc,w:w*sc,h:h*sc});
+    const okR=map(700,770,410,120);
+    const hot=(d.busy || (this._loginPressUntil&&this.t<this._loginPressUntil));
+    if(hot){
+      const ctx=this.ctx, pulse=0.5+0.5*Math.sin(this.t*18);
+      ctx.save();
+      this.rr(okR.x+6,okR.y+8,okR.w-12,okR.h-16,20);
+      const g=ctx.createLinearGradient(0,okR.y,0,okR.y+okR.h);
+      g.addColorStop(0,'rgba(220,255,64,0.88)');
+      g.addColorStop(1,'rgba(91,145,12,0.72)');
+      ctx.fillStyle=g;
+      ctx.shadowBlur=22+18*pulse;
+      ctx.shadowColor='rgba(190,255,47,0.9)';
+      ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.globalAlpha=0.9;
+      this.text(d.busy?'登入中...':'已按下',okR.x+okR.w/2,okR.y+okR.h/2+2,38,'#111706',{align:'center',baseline:'middle',weight:'900'});
+      ctx.restore();
+    }
+  };
+
+  Game.prototype._preloadImage=function(src){
+    if(assetCache[src]) return assetCache[src];
+    assetCache[src]=new Promise(resolve=>{
+      try{
+        const im=new Image();
+        im.decoding='async';
+        im.onload=async()=>{ try{ if(im.decode) await im.decode(); }catch(_e){} resolve(true); };
+        im.onerror=()=>resolve(false);
+        im.src=src;
+      }catch(e){ resolve(false); }
+    });
+    return assetCache[src];
+  };
+
+  Game.prototype._preloadEntryAssets=async function(){
+    const list=ENTRY_ASSETS.slice();
+    const st=this._assetLoading||{};
+    let done=0, idx=0;
+    const total=list.length;
+    const worker=async()=>{
+      while(idx<total){
+        const src=list[idx++];
+        st.label='載入背景圖';
+        st.detail=src.split('/').pop();
+        await this._preloadImage(src);
+        done++;
+        st.progress=done/total;
+        this.render();
+      }
+    };
+    await Promise.all([worker(),worker(),worker()]);
+  };
+
+  Game.prototype._drawLoadingOverlay=function(){
+    const st=this._assetLoading;
+    if(!st||!st.active) return;
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,p=clamp(st.progress||0,0,1);
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle='rgba(4,2,8,0.94)';
+    ctx.fillRect(0,0,w,h);
+    const cx=w/2, cy=h/2, bw=Math.min(w*0.62,720), bh=Math.max(16,h*0.024);
+    const pulse=0.5+0.5*Math.sin(Date.now()/170);
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.font='900 '+Math.max(26,Math.min(52,w*0.034))+'px "Microsoft JhengHei",serif';
+    ctx.shadowBlur=22+12*pulse;
+    ctx.shadowColor='rgba(190,255,47,0.72)';
+    ctx.fillStyle='#f5edc9';
+    ctx.fillText('召喚籃獄中',cx,cy-bh*5.8);
+    ctx.shadowBlur=0;
+    ctx.font='800 '+Math.max(14,Math.min(24,w*0.017))+'px "Microsoft JhengHei",sans-serif';
+    ctx.fillStyle='#bfb29a';
+    ctx.fillText((st.label||'載入資源')+' · '+Math.round(p*100)+'%',cx,cy-bh*2.8);
+    ctx.fillStyle='rgba(20,15,10,0.92)';
+    this.rr(cx-bw/2,cy-bh/2,bw,bh,Math.max(8,bh/2)); ctx.fill();
+    ctx.lineWidth=Math.max(2,bh*0.16);
+    ctx.strokeStyle='rgba(215,169,69,0.7)';
+    this.rr(cx-bw/2,cy-bh/2,bw,bh,Math.max(8,bh/2)); ctx.stroke();
+    const fillW=Math.max(bh,bw*p);
+    const g=ctx.createLinearGradient(cx-bw/2,0,cx+bw/2,0);
+    g.addColorStop(0,'#7fb516'); g.addColorStop(0.55,'#c8ff35'); g.addColorStop(1,'#fff1a3');
+    ctx.fillStyle=g;
+    this.rr(cx-bw/2,cy-bh/2,fillW,bh,Math.max(8,bh/2)); ctx.fill();
+    ctx.font='700 '+Math.max(12,Math.min(18,w*0.013))+'px "Microsoft JhengHei",sans-serif';
+    ctx.fillStyle='rgba(210,198,170,0.72)';
+    ctx.fillText(st.detail||'準備板凳席與戰鬥背景',cx,cy+bh*3.5);
+    ctx.restore();
+  };
+
+  const priorRender=Game.prototype.render;
+  Game.prototype.render=function(){
+    priorRender.call(this);
+    this._drawLoadingOverlay&&this._drawLoadingOverlay();
+  };
+  const priorOnDown=Game.prototype.onDown;
+  Game.prototype.onDown=function(x,y){ if(this._assetLoading&&this._assetLoading.active) return; return priorOnDown.call(this,x,y); };
+  const priorOnUp=Game.prototype.onUp;
+  Game.prototype.onUp=function(x,y){ if(this._assetLoading&&this._assetLoading.active) return; return priorOnUp.call(this,x,y); };
+
+  Game.prototype._entryLoadingToHub=async function(status){
+    this._assetLoading={active:true,progress:0,label:'載入背景圖',detail:status||'準備進入板凳席'};
+    this.render();
+    try{ await this._preloadEntryAssets(); }catch(e){ try{console.warn('[HB preload]',e);}catch(_e){} }
+    this._assetLoading.progress=1;
+    this._assetLoading.label='載入完成';
+    this._assetLoading.detail='進入最後板凳席';
+    this.render();
+    await sleep(280);
+    this._assetLoading=null;
+    this.go('hub');
+  };
+
+  Game.prototype._progressSaveSubset=function(){
+    const s=this.save||{};
+    const keys=['coins','tutorialDone','hero','relics','loadout','library','acts','marks','heat','memory','bossClears','nodeProg','modeProg','endless','endlessBest','deaths','deathsDay','deathsDayKey','stats'];
+    const out={};
+    for(const k of keys) out[k]=deepClone(s[k]);
+    return out;
+  };
+  Game.prototype._progressSnapshot=function(){
+    return {ver:1,updatedAt:new Date().toISOString(),save:this._progressSaveSubset(),profile:deepClone(this._loadProfile?this._loadProfile():{})};
+  };
+  Game.prototype._mergeProgressSnapshot=function(remote){
+    if(!remote||typeof remote!=='object') return false;
+    let changed=false;
+    const rs=remote.save||{}, s=this.save||{};
+    for(const k of ['coins','acts','endlessBest','deaths','deathsDay']){
+      if(rs[k]!=null && maxNum(rs[k],s[k])!==s[k]){ s[k]=maxNum(rs[k],s[k]); changed=true; }
+    }
+    if(rs.hero && !s.hero){ s.hero=rs.hero; changed=true; }
+    for(const k of ['relics','loadout']){
+      if(Array.isArray(rs[k]) && (!Array.isArray(s[k]) || s[k].filter(Boolean).length===0)){ s[k]=rs[k].slice(); changed=true; }
+    }
+    if(Array.isArray(rs.library)){ const u=unionArr(s.library,rs.library); if(JSON.stringify(u)!==JSON.stringify(s.library||[])){ s.library=u; changed=true; } }
+    for(const k of ['marks','heat','bossClears','nodeProg']){
+      if(rs[k]&&typeof rs[k]==='object'){ s[k]=s[k]||{}; for(const id in rs[k]){ const nv=maxNum(s[k][id],rs[k][id]); if(nv!==s[k][id]){ s[k][id]=nv; changed=true; } } }
+    }
+    if(rs.stats&&typeof rs.stats==='object'){ s.stats=s.stats||{}; for(const k in rs.stats){ const nv=maxNum(s.stats[k],rs.stats[k]); if(nv!==s.stats[k]){ s.stats[k]=nv; changed=true; } } }
+    if(rs.modeProg&&typeof rs.modeProg==='object'){
+      s.modeProg=s.modeProg||{};
+      for(const mode in rs.modeProg){
+        const r=rs.modeProg[mode]||{}, m=s.modeProg[mode]||(s.modeProg[mode]={});
+        if(r.acts!=null){ const nv=maxNum(m.acts,r.acts); if(nv!==m.acts){m.acts=nv; changed=true;} }
+        for(const k of ['marks','heat','bossClears','nodeProg']){
+          if(r[k]){ m[k]=m[k]||{}; for(const id in r[k]){ const nv=maxNum(m[k][id],r[k][id]); if(nv!==m[k][id]){m[k][id]=nv; changed=true;} } }
+        }
+      }
+    }
+    const rp=remote.profile||{};
+    if(rp&&typeof rp==='object'){
+      const lp=this._loadProfile();
+      if(rp.heroes){ lp.heroes=lp.heroes||{}; for(const id in rp.heroes){ const rh=rp.heroes[id]||{}, lh=lp.heroes[id]||(lp.heroes[id]={level:1,xp:0,talents:{}}); for(const k of ['level','xp','shots','swishes','banks','misses']) lh[k]=maxNum(lh[k],rh[k]); lh.talents=Object.assign({},rh.talents||{},lh.talents||{}); changed=true; } }
+      if(rp.relicMeta){ lp.relicMeta=Object.assign({},rp.relicMeta,lp.relicMeta||{}); changed=true; }
+      if(rp.coins!=null){ lp.coins=maxNum(lp.coins,rp.coins); changed=true; }
+      if(rp.heroDay&&rp.heroDay.key===this._dayKey()){ lp.heroDay=lp.heroDay||{key:rp.heroDay.key,stats:{}}; lp.heroDay.key=rp.heroDay.key; lp.heroDay.stats=lp.heroDay.stats||{}; const st=rp.heroDay.stats||{}; for(const id in st){ const rd=st[id]||{}, ld=lp.heroDay.stats[id]||(lp.heroDay.stats[id]={shots:0,makes:0}); ld.shots=maxNum(ld.shots,rd.shots); ld.makes=maxNum(ld.makes,rd.makes); changed=true; } }
+      if(changed) this._saveProfile&&this._saveProfile();
+    }
+    if(changed) persist(s);
+    return changed;
+  };
+  Game.prototype._cloudProgressUrl=function(){
+    const cfg=this._supabaseCfg?this._supabaseCfg():{};
+    if(!cfg.url||!cfg.key) return null;
+    return {cfg,base:cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts')};
+  };
+  Game.prototype._fetchCloudProgress=async function(name,code){
+    const u=this._cloudProgressUrl();
+    if(!u||!name) return {ok:false,reason:'no-config'};
+    const q='?select=player_name,jersey_code,profile_json,profile_updated_at&player_name=eq.'+encodeURIComponent(name)+(code?'&jersey_code=eq.'+encodeURIComponent(code):'')+'&limit=1';
+    const res=await fetch(u.base+q,{headers:{apikey:u.cfg.key,Authorization:'Bearer '+u.cfg.key}});
+    if(!res.ok){ const t=await res.text(); if(/profile_json/i.test(t)){ this._cloudProgressMissing=true; return {ok:false,reason:'missing-column'}; } throw new Error(t); }
+    const rows=await res.json();
+    return {ok:true,row:rows&&rows[0]};
+  };
+  Game.prototype._pushCloudProgress=async function(name,code){
+    const u=this._cloudProgressUrl();
+    if(!u||!name||this._cloudProgressMissing) return false;
+    const snap=this._progressSnapshot();
+    const payload={player_name:name,jersey_code:code,remember:true,last_login_at:new Date().toISOString(),profile_json:snap,profile_updated_at:snap.updatedAt,today_key:this._dayKey()};
+    const totals=this._playerDayTotals?this._playerDayTotals():null;
+    if(totals){ payload.today_shots=totals.shots; payload.today_makes=totals.makes; }
+    const res=await fetch(u.base+'?on_conflict=player_name',{method:'POST',headers:{apikey:u.cfg.key,Authorization:'Bearer '+u.cfg.key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(payload)});
+    if(!res.ok){ const t=await res.text(); if(/profile_json/i.test(t)){ this._cloudProgressMissing=true; return false; } throw new Error(t); }
+    this._cloudProgressMissing=false;
+    return true;
+  };
+  Game.prototype._scheduleCloudProgressSync=function(force){
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()), code=String((L.code||'').trim());
+    if(!name||this._cloudProgressMissing) return;
+    if(this._cloudProgressTimer){ clearTimeout(this._cloudProgressTimer); this._cloudProgressTimer=null; }
+    const run=()=>this._pushCloudProgress(name,code).catch(e=>{try{console.warn('[HB cloud progress]',e);}catch(_e){}});
+    if(force) run(); else this._cloudProgressTimer=setTimeout(run,1200);
+  };
+  const priorSaveProfile=Game.prototype._saveProfile;
+  Game.prototype._saveProfile=function(){
+    const r=priorSaveProfile.apply(this,arguments);
+    this._scheduleCloudProgressSync(false);
+    return r;
+  };
+
+  Game.prototype._submitLogin=async function(){
+    if(this._loginDraft&&this._loginDraft.busy) return;
+    this._syncLoginFields();
+    const d=this._loginDraft||{}, name=String(d.name||'').trim(), code=String(d.code||'').trim();
+    this._loginPressUntil=this.t+0.45;
+    if(!name){ this.audio.sfx('hurt'); this.toast('請輸入名字','帳號請填你的名字'); this.render(); return; }
+    if(!code){ this.audio.sfx('hurt'); this.toast('請輸入代號','代號可用背號，避免使用個人密碼'); this.render(); return; }
+    d.busy=true; d.msg='登入中...'; this.render();
+    if(this._loginEls){ try{this._loginEls.name.blur(); this._loginEls.code.blur();}catch(_e){} }
+    this.save.login={name,code,remember:true,lastLoginAt:new Date().toISOString()};
+    persist(this.save);
+    let cloudMsg='本機登入';
+    try{
+      const remote=await this._fetchCloudProgress(name,code);
+      if(remote.ok&&remote.row&&remote.row.profile_json){ this._mergeProgressSnapshot(remote.row.profile_json); cloudMsg='雲端進度已合併'; }
+      else if(remote.reason==='missing-column'){ cloudMsg='雲端進度欄位尚未建立'; }
+      const pushed=await this._pushCloudProgress(name,code);
+      if(pushed) cloudMsg=remote.ok&&remote.row?'雲端進度已同步':'雲端帳號已建立';
+    }catch(e){ cloudMsg='雲端同步暫時失敗'; try{console.warn('[HB login sync]',e);}catch(_e){} }
+    d.busy=false;
+    this._closeLogin(false);
+    this.toast('登入成功',cloudMsg);
+    await this._entryLoadingToHub(cloudMsg);
+  };
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx;
+    const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+    ctx.save(); ctx.fillStyle='rgba(3,1,7,0.92)'; ctx.fillRect(-4000,-4000,BW+8000,BH+8000); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+    const x=IL+42,y=IT+28,w=BW-IL-IR-84,h=BH-IT-IB-56;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h); bg.addColorStop(0,'rgba(23,16,12,0.98)'); bg.addColorStop(1,'rgba(6,4,9,0.99)');
+    ctx.fillStyle=bg; ctx.fill(); ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+    this.text('今日命中排行榜',x+w/2,y+64,50,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+    this.text('滿 10 球才列正式名次，避免 1 投 1 中直接衝第一。',x+w/2,y+108,24,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    this._drawLeaderboardButton(x+w-166,y+24,124,56,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    this._drawLeaderboardButton(x+42,y+24,124,56,'刷新','leaderboard_refresh',()=>{ this._leaderboardLoading=true; this._leaderboardStatus='重新整理...'; this._fetchLeaderboard(); this.render(); },true);
+    const tx=x+56, ty=y+148, tw=w-112, rowH=74;
+    const cols={rank:tx+54,name:tx+190,shot:tx+tw*0.63,acc:tx+tw-120};
+    this.rr(tx,ty,tw,60,12); ctx.fillStyle='rgba(215,169,69,0.12)'; ctx.fill(); ctx.strokeStyle='rgba(215,169,69,0.35)'; ctx.lineWidth=1.5; this.rr(tx,ty,tw,60,12); ctx.stroke();
+    this.text('排行',cols.rank,ty+30,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('玩家名稱',cols.name,ty+30,25,'#d7a945',{baseline:'middle',weight:'900'});
+    this.text('投球 / 進球',cols.shot,ty+30,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('命中率',cols.acc,ty+30,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    const rows=this._leaderboardRows?this._leaderboardRows():[];
+    const maxRows=Math.max(4,Math.floor((h-258)/rowH));
+    for(let i=0;i<Math.min(rows.length,maxRows);i++){
+      const r=rows[i], ry=ty+74+i*rowH;
+      this.rr(tx,ry,tw,rowH-10,12);
+      ctx.fillStyle=r.local?'rgba(159,224,36,0.16)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.16)');
+      ctx.fill(); ctx.strokeStyle=r.local?'rgba(185,255,47,0.55)':'rgba(215,169,69,0.18)'; ctx.lineWidth=1.3; this.rr(tx,ry,tw,rowH-10,12); ctx.stroke();
+      const muted=r.qualified?'#efe3ca':'#9e9178';
+      this.text(String(r.rank),cols.rank,ry+31,28,r.qualified?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+      this.text(this._clip((r.local?'你 · ':'')+r.name,tw*0.34,28,'900'),cols.name,ry+31,30,r.local?'#d8ff44':muted,{baseline:'middle',weight:'900'});
+      this.text((r.shots||0)+' / '+(r.makes||0),cols.shot,ry+31,29,muted,{align:'center',baseline:'middle',weight:'900'});
+      this.text(r.shots?Math.round(r.acc*100)+'%':'0%',cols.acc,ry+31,30,r.qualified?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+      if(!r.qualified&&r.shots>0) this.text('未滿10球',cols.acc+92,ry+31,17,'#9fe024',{baseline:'middle',weight:'900'});
+    }
+    if(!rows.length) this.text('今天還沒有成績',x+w/2,y+h/2,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    this.text(this._leaderboardLoading?'載入中...':(this._leaderboardStatus||''),x+w/2,y+h-40,22,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  if(typeof Audio!=='undefined'){
+    Audio.prototype._swishNet=function(){
+      this.ensure(); if(!this.ac||!this.enSfx) return;
+      const ac=this.ac,t=ac.currentTime,dur=0.42,len=Math.floor(ac.sampleRate*dur),buf=ac.createBuffer(1,len,ac.sampleRate),data=buf.getChannelData(0);
+      for(let i=0;i<len;i++){ const k=i/len; data[i]=(Math.random()*2-1)*(Math.sin(k*Math.PI))*0.9; }
+      const src=ac.createBufferSource(); src.buffer=buf;
+      const hp=ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1400;
+      const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=4300; bp.Q.value=0.9;
+      const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.18*this.sVol,t+0.055); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(this.sfxGain); src.start(t); src.stop(t+dur+0.03);
+    };
+    Audio.prototype._rimClank=function(){
+      this.ensure(); if(!this.ac||!this.enSfx) return;
+      const ac=this.ac,t=ac.currentTime;
+      const hit=(f,gain,delay,dur)=>{ const o=ac.createOscillator(),g=ac.createGain(); o.type='square'; o.frequency.setValueAtTime(f,t+delay); o.frequency.exponentialRampToValueAtTime(f*0.82,t+delay+dur); g.gain.setValueAtTime(0.0001,t+delay); g.gain.exponentialRampToValueAtTime(gain*this.sVol,t+delay+0.006); g.gain.exponentialRampToValueAtTime(0.0001,t+delay+dur); o.connect(g); g.connect(this.sfxGain); o.start(t+delay); o.stop(t+delay+dur+0.02); };
+      hit(520,0.22,0,0.22); hit(880,0.12,0.012,0.18); hit(1320,0.07,0.025,0.14);
+      this.noise(0.055,0.09*this.sVol,5200,t,'highpass');
+    };
+    const oldSfx=Audio.prototype.sfx;
+    Audio.prototype.sfx=function(n){
+      if(n==='swish'){ this._swishNet(); return; }
+      if(n==='rim'){ this._rimClank(); return; }
+      return oldSfx.call(this,n);
+    };
+  }
+})();
+
 // === bench leaderboard: daily shooting ladder ===
 (function(){
   const MIN_QUALIFIED_SHOTS = 10;
@@ -1421,7 +1810,7 @@ Object.assign(Game.prototype,{
     const G=2600*this._gravMul(), DRAG=0.0016;
     b.vy+=G*h; const sp=Math.hypot(b.vx,b.vy); b.vx-=b.vx*DRAG*sp*h*0.012; b.vy-=b.vy*DRAG*sp*h*0.012;
     b.x+=b.vx*h; b.y+=b.vy*h; b.spin+=b.angVel*h;
-    if(!this.save.settings.reduceMotion){ const fb=this._fxBudget(), fc=this._ballColor(run.form); if(!b.trail)b.trail=[]; b.trail.push([b.x,b.y]); if(b.trail.length>fb.trailMax)b.trail.shift(); if(sp>520&&chance(fb.trailChance)) this.spawn(b.x,b.y,rand(-22,22),rand(-18,18),0.24,rand(3,6),fc,{kind:'streak',glow:true,g:90,drag:0.94,len:24}); }
+    if(!this.save.settings.reduceMotion){ const fb=this._fxBudget(), fc=this._ballColor(run.form), trailMul=run.form==='normal'?1:(fb.mobile?1.85:2.15), trailMax=Math.round(fb.trailMax*trailMul); if(!b.trail)b.trail=[]; b.trail.push([b.x,b.y]); if(b.trail.length>trailMax)b.trail.shift(); if(sp>520&&chance(run.form==='normal'?fb.trailChance:Math.min(0.45,fb.trailChance*1.75))) this.spawn(b.x,b.y,rand(-22,22),rand(-18,18),run.form==='normal'?0.24:0.36,rand(3,run.form==='normal'?6:8),fc,{kind:'streak',glow:true,g:90,drag:0.94,len:run.form==='normal'?24:42}); }
     const floorY=BH-92;
     if(b.y+b.r>floorY && b.vy>0){ b.y=floorY-b.r; b.vy*=-0.5; b.vx*=0.82; b.angVel*=0.6; if(Math.abs(b.vy)>120){ const fc=this._ballColor(run.form); this.audio.sfx('floor'); this.burst(b.x,floorY,8,'#6a5238',210,0.46,{kind:'smoke',r:8,g:-20,alpha:0.7}); this.burst(b.x,floorY,7,fc,210,0.34,{kind:'shard',glow:true,r:3,g:420}); this.ringFx(b.x,floorY,fc,0.22,{r0:10,r1:86,width:6,glow:false}); } if(!b.landed&&b.scored){ b.landed=true; this.landingFx(); } }
     if(b.x-b.r<0){ b.x=b.r; b.vx*=-0.5; } if(b.x+b.r>BW){ b.x=BW-b.r; b.vx*=-0.5; }
