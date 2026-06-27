@@ -760,6 +760,254 @@ class Game{
   };
 })();
 
+// === final activation: branded loading splash wins last ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const LOADING_SPLASH='/assets/ui/loading_splash_hoopbreaker.png?v=20260628_loading_splash_v1';
+
+  Game.prototype._ensureLoadingSplash=function(){
+    if(this._loadingSplash!==undefined) return this._loadingSplash;
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._assetLoading&&this.render) this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=LOADING_SPLASH;
+      this._loadingSplash=im;
+    }catch(e){ this._loadingSplash=null; }
+    return this._loadingSplash;
+  };
+
+  const oldPreloadEntryAssets=Game.prototype._preloadEntryAssets;
+  Game.prototype._preloadEntryAssets=async function(){
+    const st=this._assetLoading||{};
+    try{
+      if(this._preloadImage){
+        st.label='載入入口畫面';
+        st.detail='Hoopbreaker';
+        st.progress=Math.max(st.progress||0,0.03);
+        this.render&&this.render();
+        await this._preloadImage(LOADING_SPLASH);
+      }
+      this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    }catch(e){ try{console.warn('[HB loading splash]',e);}catch(_e){} }
+    if(oldPreloadEntryAssets) return oldPreloadEntryAssets.call(this);
+  };
+
+  Game.prototype._drawLoadingOverlay=function(){
+    const st=this._assetLoading;
+    if(!st||!st.active) return;
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;
+    const p=Math.max(0,Math.min(1,st.progress||0));
+    const rr=(x,y,w,h,r)=>{
+      r=Math.max(0,Math.min(r,w/2,h/2));
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.lineTo(x+w-r,y);
+      ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);
+      ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);
+      ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);
+      ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle='#070407';
+    ctx.fillRect(0,0,w,h);
+
+    const img=this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    if(img&&img.complete&&img.naturalWidth&&!img._err){
+      const iw=img.naturalWidth, ih=img.naturalHeight;
+      const sc=Math.max(w/iw,h/ih);
+      const dw=iw*sc, dh=ih*sc;
+      ctx.drawImage(img,(w-dw)/2,(h-dh)/2,dw,dh);
+    }else{
+      const g=ctx.createRadialGradient(w*0.5,h*0.42,10,w*0.5,h*0.42,Math.max(w,h)*0.68);
+      g.addColorStop(0,'#2a1c10');
+      g.addColorStop(0.58,'#0b0710');
+      g.addColorStop(1,'#030205');
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    const shadeH=Math.max(110,h*0.24);
+    const shade=ctx.createLinearGradient(0,h-shadeH,0,h);
+    shade.addColorStop(0,'rgba(0,0,0,0)');
+    shade.addColorStop(0.52,'rgba(0,0,0,0.52)');
+    shade.addColorStop(1,'rgba(0,0,0,0.88)');
+    ctx.fillStyle=shade;
+    ctx.fillRect(0,h-shadeH,w,shadeH);
+
+    const bw=Math.min(w*0.64,760);
+    const bh=Math.max(14,Math.min(24,h*0.022));
+    const bottomPad=Math.max(34,h*0.058);
+    const x=w/2-bw/2;
+    const y=h-bottomPad-bh;
+    const r=bh/2;
+
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    ctx.font='800 '+Math.max(13,Math.min(20,w*0.014))+'px "Microsoft JhengHei","PingFang TC",sans-serif';
+    ctx.shadowBlur=8;
+    ctx.shadowColor='rgba(0,0,0,0.9)';
+    ctx.fillStyle='rgba(250,236,196,0.88)';
+    ctx.fillText((st.label||'載入資源')+'  '+Math.round(p*100)+'%',w/2,y-14);
+    ctx.shadowBlur=0;
+
+    rr(x,y,bw,bh,r);
+    ctx.fillStyle='rgba(8,5,5,0.84)';
+    ctx.fill();
+    ctx.lineWidth=Math.max(2,bh*0.14);
+    ctx.strokeStyle='rgba(220,140,54,0.76)';
+    ctx.stroke();
+
+    const fillW=Math.max(bh,bw*p);
+    rr(x,y,fillW,bh,r);
+    const fill=ctx.createLinearGradient(x,0,x+bw,0);
+    fill.addColorStop(0,'#5d8b10');
+    fill.addColorStop(0.48,'#bfff2d');
+    fill.addColorStop(1,'#fff0a2');
+    ctx.fillStyle=fill;
+    ctx.shadowBlur=16;
+    ctx.shadowColor='rgba(177,255,40,0.68)';
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    ctx.globalAlpha=0.46;
+    ctx.fillStyle='#fff6c2';
+    ctx.fillRect(x+Math.min(fillW,bw)*0.78,y+2,Math.min(80,fillW*0.18),Math.max(2,bh*0.16));
+    ctx.globalAlpha=1;
+    ctx.restore();
+  };
+})();
+
+// === final activation: branded loading splash ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const LOADING_SPLASH='/assets/ui/loading_splash_hoopbreaker.png?v=20260628_loading_splash_v1';
+
+  Game.prototype._ensureLoadingSplash=function(){
+    if(this._loadingSplash!==undefined) return this._loadingSplash;
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._assetLoading&&this.render) this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=LOADING_SPLASH;
+      this._loadingSplash=im;
+    }catch(e){ this._loadingSplash=null; }
+    return this._loadingSplash;
+  };
+
+  const oldPreloadEntryAssets=Game.prototype._preloadEntryAssets;
+  Game.prototype._preloadEntryAssets=async function(){
+    const st=this._assetLoading||{};
+    try{
+      if(this._preloadImage){
+        st.label='載入入口畫面';
+        st.detail='Hoopbreaker';
+        st.progress=Math.max(st.progress||0,0.03);
+        this.render&&this.render();
+        await this._preloadImage(LOADING_SPLASH);
+      }
+      this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    }catch(e){ try{console.warn('[HB loading splash]',e);}catch(_e){} }
+    if(oldPreloadEntryAssets) return oldPreloadEntryAssets.call(this);
+  };
+
+  Game.prototype._drawLoadingOverlay=function(){
+    const st=this._assetLoading;
+    if(!st||!st.active) return;
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;
+    const p=Math.max(0,Math.min(1,st.progress||0));
+    const rr=(x,y,w,h,r)=>{
+      r=Math.max(0,Math.min(r,w/2,h/2));
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.lineTo(x+w-r,y);
+      ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);
+      ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);
+      ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);
+      ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle='#070407';
+    ctx.fillRect(0,0,w,h);
+
+    const img=this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    if(img&&img.complete&&img.naturalWidth&&!img._err){
+      const iw=img.naturalWidth, ih=img.naturalHeight;
+      const sc=Math.max(w/iw,h/ih);
+      const dw=iw*sc, dh=ih*sc;
+      ctx.drawImage(img,(w-dw)/2,(h-dh)/2,dw,dh);
+    }else{
+      const g=ctx.createRadialGradient(w*0.5,h*0.42,10,w*0.5,h*0.42,Math.max(w,h)*0.68);
+      g.addColorStop(0,'#2a1c10');
+      g.addColorStop(0.58,'#0b0710');
+      g.addColorStop(1,'#030205');
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    const shadeH=Math.max(110,h*0.24);
+    const shade=ctx.createLinearGradient(0,h-shadeH,0,h);
+    shade.addColorStop(0,'rgba(0,0,0,0)');
+    shade.addColorStop(0.52,'rgba(0,0,0,0.52)');
+    shade.addColorStop(1,'rgba(0,0,0,0.88)');
+    ctx.fillStyle=shade;
+    ctx.fillRect(0,h-shadeH,w,shadeH);
+
+    const bw=Math.min(w*0.64,760);
+    const bh=Math.max(14,Math.min(24,h*0.022));
+    const bottomPad=Math.max(34,h*0.058);
+    const x=w/2-bw/2;
+    const y=h-bottomPad-bh;
+    const r=bh/2;
+
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    ctx.font='800 '+Math.max(13,Math.min(20,w*0.014))+'px "Microsoft JhengHei","PingFang TC",sans-serif';
+    ctx.shadowBlur=8;
+    ctx.shadowColor='rgba(0,0,0,0.9)';
+    ctx.fillStyle='rgba(250,236,196,0.88)';
+    ctx.fillText((st.label||'載入資源')+'  '+Math.round(p*100)+'%',w/2,y-14);
+    ctx.shadowBlur=0;
+
+    rr(x,y,bw,bh,r);
+    ctx.fillStyle='rgba(8,5,5,0.84)';
+    ctx.fill();
+    ctx.lineWidth=Math.max(2,bh*0.14);
+    ctx.strokeStyle='rgba(220,140,54,0.76)';
+    ctx.stroke();
+
+    const fillW=Math.max(bh,bw*p);
+    rr(x,y,fillW,bh,r);
+    const fill=ctx.createLinearGradient(x,0,x+bw,0);
+    fill.addColorStop(0,'#5d8b10');
+    fill.addColorStop(0.48,'#bfff2d');
+    fill.addColorStop(1,'#fff0a2');
+    ctx.fillStyle=fill;
+    ctx.shadowBlur=16;
+    ctx.shadowColor='rgba(177,255,40,0.68)';
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    ctx.globalAlpha=0.46;
+    ctx.fillStyle='#fff6c2';
+    ctx.fillRect(x+Math.min(fillW,bw)*0.78,y+2,Math.min(80,fillW*0.18),Math.max(2,bh*0.16));
+    ctx.globalAlpha=1;
+    ctx.restore();
+  };
+})();
+
 // === final activation: generated relic backpack UI wins over legacy backpack ===
 (function(){
   const QUAL=['#6fb0e8','#9fe024','#b980ff','#ffb23c','#ff5a4d','#f4f0d0'];
@@ -5840,5 +6088,129 @@ Object.assign(Game.prototype,{
       if(b._py<=H.y && b.y>=H.y && b.x>lx+6 && b.x<rx-6){ this.makeBasket(); H.net=18; }
     }
     b._py=b.y;
+  };
+})();
+
+// === final activation: branded loading splash absolute last ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const LOADING_SPLASH='/assets/ui/loading_splash_hoopbreaker.png?v=20260628_loading_splash_v1';
+
+  Game.prototype._ensureLoadingSplash=function(){
+    if(this._loadingSplash!==undefined) return this._loadingSplash;
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._assetLoading&&this.render) this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=LOADING_SPLASH;
+      this._loadingSplash=im;
+    }catch(e){ this._loadingSplash=null; }
+    return this._loadingSplash;
+  };
+
+  const oldPreloadEntryAssets=Game.prototype._preloadEntryAssets;
+  Game.prototype._preloadEntryAssets=async function(){
+    const st=this._assetLoading||{};
+    try{
+      if(this._preloadImage){
+        st.label='載入入口畫面';
+        st.detail='Hoopbreaker';
+        st.progress=Math.max(st.progress||0,0.03);
+        this.render&&this.render();
+        await this._preloadImage(LOADING_SPLASH);
+      }
+      this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    }catch(e){ try{console.warn('[HB loading splash]',e);}catch(_e){} }
+    if(oldPreloadEntryAssets) return oldPreloadEntryAssets.call(this);
+  };
+
+  Game.prototype._drawLoadingOverlay=function(){
+    const st=this._assetLoading;
+    if(!st||!st.active) return;
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;
+    const p=Math.max(0,Math.min(1,st.progress||0));
+    const rr=(x,y,w,h,r)=>{
+      r=Math.max(0,Math.min(r,w/2,h/2));
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.lineTo(x+w-r,y);
+      ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);
+      ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);
+      ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);
+      ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle='#070407';
+    ctx.fillRect(0,0,w,h);
+
+    const img=this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    if(img&&img.complete&&img.naturalWidth&&!img._err){
+      const iw=img.naturalWidth, ih=img.naturalHeight;
+      const sc=Math.max(w/iw,h/ih);
+      const dw=iw*sc, dh=ih*sc;
+      ctx.drawImage(img,(w-dw)/2,(h-dh)/2,dw,dh);
+    }else{
+      const g=ctx.createRadialGradient(w*0.5,h*0.42,10,w*0.5,h*0.42,Math.max(w,h)*0.68);
+      g.addColorStop(0,'#2a1c10');
+      g.addColorStop(0.58,'#0b0710');
+      g.addColorStop(1,'#030205');
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    const shadeH=Math.max(110,h*0.24);
+    const shade=ctx.createLinearGradient(0,h-shadeH,0,h);
+    shade.addColorStop(0,'rgba(0,0,0,0)');
+    shade.addColorStop(0.52,'rgba(0,0,0,0.52)');
+    shade.addColorStop(1,'rgba(0,0,0,0.88)');
+    ctx.fillStyle=shade;
+    ctx.fillRect(0,h-shadeH,w,shadeH);
+
+    const bw=Math.min(w*0.64,760);
+    const bh=Math.max(14,Math.min(24,h*0.022));
+    const bottomPad=Math.max(34,h*0.058);
+    const x=w/2-bw/2;
+    const y=h-bottomPad-bh;
+    const r=bh/2;
+
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    ctx.font='800 '+Math.max(13,Math.min(20,w*0.014))+'px "Microsoft JhengHei","PingFang TC",sans-serif';
+    ctx.shadowBlur=8;
+    ctx.shadowColor='rgba(0,0,0,0.9)';
+    ctx.fillStyle='rgba(250,236,196,0.88)';
+    ctx.fillText((st.label||'載入資源')+'  '+Math.round(p*100)+'%',w/2,y-14);
+    ctx.shadowBlur=0;
+
+    rr(x,y,bw,bh,r);
+    ctx.fillStyle='rgba(8,5,5,0.84)';
+    ctx.fill();
+    ctx.lineWidth=Math.max(2,bh*0.14);
+    ctx.strokeStyle='rgba(220,140,54,0.76)';
+    ctx.stroke();
+
+    const fillW=Math.max(bh,bw*p);
+    rr(x,y,fillW,bh,r);
+    const fill=ctx.createLinearGradient(x,0,x+bw,0);
+    fill.addColorStop(0,'#5d8b10');
+    fill.addColorStop(0.48,'#bfff2d');
+    fill.addColorStop(1,'#fff0a2');
+    ctx.fillStyle=fill;
+    ctx.shadowBlur=16;
+    ctx.shadowColor='rgba(177,255,40,0.68)';
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    ctx.globalAlpha=0.46;
+    ctx.fillStyle='#fff6c2';
+    ctx.fillRect(x+Math.min(fillW,bw)*0.78,y+2,Math.min(80,fillW*0.18),Math.max(2,bh*0.16));
+    ctx.globalAlpha=1;
+    ctx.restore();
   };
 })();
