@@ -5035,10 +5035,26 @@ Object.assign(Game.prototype,{
       ctx.globalAlpha=1;
     }
     ctx.restore();
-    const pad=Math.max(8,Math.min(14,Math.min(w,h)*0.1));
+    const pad=Math.max(4,Math.min(8,Math.min(w,h)*0.045));
     const side=Math.min(w-pad*2,h-pad*2);
     const ix=x+(w-side)/2, iy=y+(h-side)/2;
     this._drawRelicSheetIcon(item.type,item.idx,ix,iy,side,side,o.locked?0.36:1);
+  };
+
+  state._drawRelicLoadoutIcon=function(item,x,y,w,h,o){
+    o=o||{};
+    const ctx=this.ctx, col=QUAL[item.tier||0]||QUAL[0];
+    const side=Math.min(w,h)*0.70;
+    const ix=x+w/2-side/2, iy=y+h/2-side/2+2;
+    ctx.save();
+    ctx.shadowBlur=o.selected?18:10;
+    ctx.shadowColor=col;
+    this.rr(ix-6,iy-6,side+12,side+12,10);
+    ctx.lineWidth=o.selected?4:2.5;
+    ctx.strokeStyle=o.selected?'#fff4c2':col;
+    ctx.stroke();
+    ctx.restore();
+    this._drawRelicSheetIcon(item.type,item.idx,ix,iy,side,side,1);
   };
 
   state.drawRelics=function(){
@@ -5056,16 +5072,16 @@ Object.assign(Game.prototype,{
     this.button(BW-safeR-132,safeT+32,82,58,'×','relic_back',()=>this.go('hub'),{size:36,color:'#f0c0b0'});
 
     const tab=this._relicTab||'全部';
-    const tabW=96, tabH=34, tabGap=8, tabX=safeL+34, tabY=safeT+96;
+    const tabW=118, tabH=42, tabGap=8, tabX=safeL+28, tabY=safeT+78;
     for(let ti=0;ti<TABS.length;ti++){
       const tb=TABS[ti], tx=tabX, ty=tabY+ti*(tabH+tabGap), w=tabW;
-      this.rr(tx,ty,w,tabH,10);
+      this.rr(tx,ty,w,tabH,11);
       ctx.fillStyle=tab===tb?'rgba(184,255,47,0.18)':'rgba(10,7,8,0.66)';
       ctx.fill();
       ctx.lineWidth=2;
       ctx.strokeStyle=tab===tb?'#bfff2f':'rgba(215,169,69,0.38)';
       ctx.stroke();
-      this.text(tb,tx+w/2,ty+tabH/2,17,tab===tb?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      this.text(tb,tx+w/2,ty+tabH/2,21,tab===tb?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
       ((t,xx,yy,ww)=>this.btn(xx,yy,ww,tabH,'relic_tab_'+t,()=>{this._relicTab=t;this.render();}))(tb,tx,ty,w);
     }
 
@@ -5081,7 +5097,7 @@ Object.assign(Game.prototype,{
       const rid=s.loadout[i], r=slots[i], x=r.x, y=r.y, w=r.w, h=r.h;
       if(rid){
         const it=this._relicDisplay(rid,true);
-        this._drawRelicCard(it,x,y,w,h,{equipped:true,selected:this._bagSel===rid});
+        this._drawRelicLoadoutIcon(it,x,y,w,h,{selected:this._bagSel===rid});
         ((id,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'eq_'+i,()=>this._openRelicCompare(id)))(rid,r);
       } else {
         this.text('+',x+w/2,y+h/2-2,46,'rgba(215,169,69,0.48)',{align:'center',baseline:'middle',weight:'700'});
