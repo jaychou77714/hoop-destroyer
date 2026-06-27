@@ -6821,3 +6821,194 @@ Object.assign(Game.prototype,{
     this.render&&this.render();
   };
 })();
+
+// === final activation v3: daily leaderboard countdown, speed HUD and confirm safety ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const MIN_LEADERBOARD_SHOTS=10;
+  const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
+  const clamp01=v=>Math.max(0,Math.min(1,v));
+  const dailyResetCountdown=()=>{
+    const now=new Date();
+    const next=new Date(now);
+    next.setHours(24,0,0,0);
+    const total=Math.floor(Math.max(0,next-now)/1000);
+    const h=Math.floor(total/3600);
+    const m=Math.floor((total%3600)/60);
+    const s=total%60;
+    return pad2(h)+':'+pad2(m)+':'+pad2(s);
+  };
+
+  Game.prototype._hbDrawLeaderButton=function(x,y,w,h,label,id,cb,primary){
+    const ctx=this.ctx;
+    this.rr(x,y,w,h,12);
+    const g=ctx.createLinearGradient(0,y,0,y+h);
+    if(primary){ g.addColorStop(0,'#c7ff3a'); g.addColorStop(1,'#5d9416'); }
+    else { g.addColorStop(0,'rgba(40,28,16,0.96)'); g.addColorStop(1,'rgba(14,9,6,0.98)'); }
+    ctx.fillStyle=g; ctx.fill();
+    ctx.lineWidth=2.4;
+    ctx.strokeStyle=primary?'#d7a945':'rgba(215,169,69,0.66)';
+    this.rr(x,y,w,h,12); ctx.stroke();
+    this.text(label,x+w/2,y+h/2,26,primary?'#111706':'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+    this.btn(x,y,w,h,id,cb);
+  };
+
+  Game.prototype.drawConfirm=function(){
+    const c=this._confirm;
+    if(!c) return;
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.fillStyle='rgba(2,1,4,0.76)';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(0,0,BW,BH,'confirm_scrim',()=>{});
+    const w=Math.min(860,BW-180),h=320,x=BW/2-w/2,y=BH/2-h/2;
+    this.panel(x,y,w,h,{r:22,stroke:'rgba(215,169,69,0.66)'});
+    this.wrap(String(c.m||''),BW/2,y+98,w-120,42,'#ece0c4',30);
+    const bw=260,bh=76,by=y+h-112;
+    this.rr(BW/2-bw-22,by,bw,bh,14);
+    ctx.fillStyle='rgba(124,32,30,0.94)'; ctx.fill();
+    ctx.lineWidth=2.5; ctx.strokeStyle='#e6433c'; ctx.stroke();
+    this.text('確認',BW/2-bw-22+bw/2,by+bh/2,29,'#fff',{align:'center',baseline:'middle',weight:'900'});
+    this.buttons.push({x:BW/2-bw-22,y:by,w:bw,h:bh,id:'confirm_yes',opts:{_confirm:true},cb:()=>{
+      const cur=this._confirm;
+      this._confirm=null;
+      const fn=cur&&cur.onYes;
+      if(typeof fn==='function') fn();
+      this.render&&this.render();
+    }});
+    this.rr(BW/2+22,by,bw,bh,14);
+    ctx.fillStyle='rgba(40,30,18,0.94)'; ctx.fill();
+    ctx.lineWidth=2.2; ctx.strokeStyle='rgba(200,155,60,0.48)'; ctx.stroke();
+    this.text('取消',BW/2+22+bw/2,by+bh/2,29,'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+    this.buttons.push({x:BW/2+22,y:by,w:bw,h:bh,id:'confirm_no',opts:{_confirm:true},cb:()=>{
+      this._confirm=null;
+      this.render&&this.render();
+    }});
+  };
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx;
+    const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+    ctx.save();
+    ctx.fillStyle='rgba(3,1,7,0.93)';
+    ctx.fillRect(-4000,-4000,BW+8000,BH+8000);
+    ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+
+    const x=IL+34,y=IT+24,w=BW-IL-IR-68,h=BH-IT-IB-48;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(23,16,12,0.98)');
+    bg.addColorStop(0.52,'rgba(10,8,11,0.99)');
+    bg.addColorStop(1,'rgba(6,4,9,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.34)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+
+    this.text('今日命中排行榜',x+w/2,y+62,48,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+    this.text('每日重置倒數 '+dailyResetCountdown()+'  ·  本機午夜刷新',x+w/2,y+106,25,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this.text('至少 '+MIN_LEADERBOARD_SHOTS+' 球列入名次；未滿 '+MIN_LEADERBOARD_SHOTS+' 球列入觀察',x+w/2,y+138,20,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    this._hbDrawLeaderButton(x+w-158,y+30,116,54,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    this._hbDrawLeaderButton(x+42,y+30,116,54,'刷新','leaderboard_refresh',()=>{
+      this._leaderboardLoading=true;
+      this._leaderboardStatus='重新整理...';
+      this._fetchLeaderboard&&this._fetchLeaderboard();
+      this.render();
+    },true);
+
+    const tx=x+44, ty=y+174, tw=w-88;
+    const rowH=Math.max(68,Math.min(82,Math.floor((h-286)/8)));
+    const headerH=58;
+    const cols={rank:tx+58,name:tx+205,shot:tx+tw*0.66,acc:tx+tw-120};
+    this.rr(tx,ty,tw,headerH,12);
+    ctx.fillStyle='rgba(215,169,69,0.13)'; ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(215,169,69,0.38)'; this.rr(tx,ty,tw,headerH,12); ctx.stroke();
+    this.text('名次',cols.rank,ty+headerH/2,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('投手',cols.name,ty+headerH/2,25,'#d7a945',{baseline:'middle',weight:'900'});
+    this.text('出手 / 命中',cols.shot,ty+headerH/2,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('命中率',cols.acc,ty+headerH/2,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+
+    const rows=(this._leaderboardRows?this._leaderboardRows():[]);
+    const maxRows=Math.max(4,Math.floor((y+h-ty-headerH-78)/rowH));
+    for(let i=0;i<Math.min(rows.length,maxRows);i++){
+      const r=rows[i], ry=ty+headerH+12+i*rowH, mid=ry+(rowH-8)/2;
+      this.rr(tx,ry,tw,rowH-8,12);
+      ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.15)');
+      ctx.fill();
+      ctx.lineWidth=r.local?2.2:1.2;
+      ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)';
+      this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+      const qualified=!!r.qualified;
+      const rankText=qualified?String(r.rank):'觀察';
+      const muted=qualified?'#efe3ca':'#b8ad96';
+      const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+      const accText=r.shots?Math.round((r.acc||0)*100)+'%':'0%';
+      this.text(rankText,cols.rank,mid,qualified?28:23,qualified?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+      this.text(this._clip?this._clip(name,tw*0.36,29,'900'):name,cols.name,mid,29,r.local?'#d8ff44':muted,{baseline:'middle',weight:'900'});
+      this.text((r.shots||0)+' / '+(r.makes||0),cols.shot,mid,28,muted,{align:'center',baseline:'middle',weight:'900'});
+      this.text(accText,cols.acc,mid,29,qualified?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+      if(!qualified && (r.shots||0)>0) this.text('未滿'+MIN_LEADERBOARD_SHOTS+'球',cols.acc+78,mid,16,'#9fe024',{baseline:'middle',weight:'800'});
+    }
+    if(!rows.length){
+      this.text('今天還沒有命中紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+    const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
+    this.text(status,x+w/2,y+h-38,22,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  Game.prototype.drawSpeedHUD=function(){
+    const ctx=this.ctx, run=this.run;
+    if(!run) return;
+    const IT=this.insT||0, cx=BW/2, y=IT+16;
+    const mx=run.shotClockMax||10;
+    const left=Math.max(0,Number(run.shotClock)||0);
+    const frac=clamp01(left/mx);
+    const low=left<3;
+    const chance=Math.max(0,Math.ceil((run.hp||0)/Math.max(1,Math.ceil((run.maxhp||1)/5))));
+    this.text('速投 '+(run.speedScore||0)+' 球',cx,y+28,34,'#ffe7b0',{align:'center',baseline:'middle',weight:'900'});
+    const bw=460,bx=cx-bw/2,by=y+50,bh=22;
+    this.rr(bx,by,bw,bh,11); ctx.fillStyle='rgba(8,5,3,0.74)'; ctx.fill();
+    if(frac>0){ this.rr(bx,by,bw*frac,bh,11); ctx.fillStyle=low?'#ff3322':(frac<0.5?'#e0a032':'#39ad39'); ctx.fill(); }
+    ctx.lineWidth=2.6; ctx.strokeStyle=low?'rgba(255,80,60,0.95)':'rgba(230,192,104,0.52)'; this.rr(bx,by,bw,bh,11); ctx.stroke();
+    this.text('倒數 '+left.toFixed(1)+'s',cx,by+bh+30,27,low?'#ff6a4a':'#ecdfc4',{align:'center',baseline:'middle',weight:'900'});
+    this.text('剩餘失誤容錯 '+chance,cx,by+bh+64,22,chance<=1?'#ff6a4a':'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  Game.prototype._speedHoopPos=function(force){
+    const run=this.run;
+    if(!run||!run.hoop||!run.host) return;
+    const H=run.hoop, host=run.host;
+    const lefty=this.save&&this.save.settings&&this.save.settings.lefty;
+    const score=Math.max(0,Number(run.speedScore)||0);
+    const spread=clamp01(score/14);
+    const near=0.38-0.11*spread;
+    const far=0.68+0.18*spread;
+    const throwX=lefty?BW-210:210;
+    let tx=H.x||BW*0.55, ty=H.y||BH*0.42;
+    for(let tries=0;tries<12;tries++){
+      const raw=rand(BW*near,BW*far);
+      const candidateX=lefty?BW-raw:raw;
+      const dx=Math.abs(candidateX-throwX);
+      const farT=clamp01((dx-BW*0.48)/(BW*0.34));
+      const yMax=(BH*0.62)*(1-farT)+(BH*0.49)*farT;
+      const candidateY=rand(BH*0.27,yMax);
+      if(!H.x||Math.hypot(candidateX-H.x,candidateY-H.y)>210||tries>6){
+        tx=candidateX; ty=candidateY; break;
+      }
+    }
+    H.tx=clamp(tx,BW*0.14,BW*0.86);
+    H.ty=clamp(ty,BH*0.27,BH*0.62);
+    host.tx=clamp(H.tx+(lefty?-150:150),200,BW-200);
+    host.ty=H.ty;
+    H.label='速投框';
+    if(force){
+      H.x=H.tx; H.y=H.ty;
+      host.x=host.tx; host.y=host.ty;
+      run.repos=0;
+    } else {
+      run.repos=0.68;
+    }
+  };
+})();
