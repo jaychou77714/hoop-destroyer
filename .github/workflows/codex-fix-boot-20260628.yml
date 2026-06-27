@@ -1,0 +1,34 @@
+name: Codex Hoopbreaker boot fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/codex-fix-boot-20260628.yml
+      - scripts/codex-fix-boot-20260628.js
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply boot fix
+        run: node scripts/codex-fix-boot-20260628.js
+      - name: Validate engine syntax
+        run: node --check engine.js
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A engine.js index.html .github/workflows/codex-fix-boot-20260628.yml scripts/codex-fix-boot-20260628.js
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Fix Hoopbreaker boot and hero relic bag"
+          git push
