@@ -1,0 +1,49 @@
+name: Codex apply leaderboard speed polish
+
+on:
+  push:
+    paths:
+      - '.github/workflows/codex-apply-leaderboard-speed-polish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply final v3 patch
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const zlib = require('zlib');
+          const marker = '// === final activation v3: daily leaderboard countdown, speed HUD and confirm safety ===';
+          const payload = 'H4sIAAAAAAACCrVafY/bxpn/35+CwSIecjmiyBHFpbSmjSpuqwXWbeF1sS2KwhiRwxVhilSHlEnCWiC4vjhO4zYJkOSAM5DLwblDgrbJ3RXX9CUo0M8Syd6/7iscZkjxRSvZGzsHw7vk8HmbZ57nN888s+22YFmW4HoB9gVsx95dHHthINzt9AUHe34m+AQ7hI5CTB3BDmdB7IRJAIVoSogjDH94XcAB+xC4Hp0IEXZJnDGRl0R3FthMlijduyQInivG2ZSErvBdPCGWZYFZ4BDXC4gDJIGSeEaD/UuXBCYqioUbB9+7ffjtb13/9s3B97918/rto+H3bx1ZmrpfUkyxg6zAunoUUy84EW/geKxMcCqqkD+6fhhSMZAkSZli5yjGNBYRBCqQKhG2jydTVbPuWlfX2SdeIGrwrlSj5u64SSISv7ZygyVK1lU2uxVNECZWQBLhOo6JyHnLLySNq09BmBRf2bgSkXgYzmgkIh2q7F+DNQ5j7Fu1WdWMZewtJq2tqWqTbVxn4TLaHWONZlKnyYle5URto0kYWflHQ81H8wXjiyCOJRn0gcyfJ7XniEs45avKFl2Z0jAOWRQot8ej6xQnhzy2BrM4DgOrjJcUZjCBY+jjEfGh50B7BKfUm2CaSXVn23FqxWMvUuw4za3ib5SWEjTUmMSJZcepYlOCY3LoBQTT71LseCSIRRVmUIWZPC4YPFcsVQonCnac10I/pEdxOBVVCHbsPdftYCDtr3/UINjpOj1dM9jHUy6M+BERNomhJyMs6ipEJtQMqCo9Q9oskhNqOuxBTmZKlXA2Jdfz/aM484l1sl8OlPEXp4rvBeTYc+KxhRS9Go5iGt4hOWcx3Wtgx9nDPb0L+rlWpHWhZvSg0YOqYhgS2O7qmsyVck4WkzQW89VM5aSNmJ/bCCIDVko1TdtTDdAHO8Qmqq0DeA/73knQBzYJYkIBHOGIsHn0wcRzHJ8AmBDvZBz3QU9VwWld4SiuoojHz/ZIdChOXsvRy2oiVhlmeZDdLjCujI9X7Aq3nhWU3Cn4LqmvR7VghZOhBnWoKnulf1dUN4nNolOFg2M4GNZEUBLFIW06ms27pIWgsPh2ZFNvAiAHq9NGRiRWiXamwfhamqlKcGx1kApTa3DcRi2+YNZg2EatcRvVtE1xQPzSz/doHyGYr/620GksUkLxVCzQ21Ym8zkAEmQaYSb3TJi0NKRCHcEqIjpNTBolFjJUOBpbewYcZVYmj1uahprxyacwSloIwVEGRwkcjaGmP2MpNKTDDoIdlSWaLoHnJ1R3/1wygR1i6J2ODZ6dE+DJv/3l6acPAayslEfM36NMHvEU6UGw47ruy2UDx9dImc6isXgv7ddckvVHGUz6owSO+yOWK/0yaDISARhO46h/bxX6/ZjOyCm0R/1q3yvjfkY35UlhwmrQCma+v99gdAPLntHLl+0ZVcLgxyRafa4qBjdg9cIqO4EkuMHKl6uFJoFD6OXLtZcVxWnDF0VEyBcOB11loaCZF44GtCEa8mxQVah1u9BgkaWb0vNiY/Hb95f/80YeG/LGwPgmkHJDbMjPDowgvFhcbF/4Cy7ZVrw+rErSG6GD/W3AfR6K+fjBYT7sBdHhfK7Cg5vl+03+fqt8v8XfB+X7YD5XL47qHajBPRY4nY2o3tJVVYX5z8GxbPLfQ/77Ajj/DG4IakX7OfSveSK1Dg7ljg4z6+CWjHSYWIPj1sFh6+BmyzDh2BoMWwe3WgeDlm5u3vVRs8AafY0Ka7SlHEIdVgtpqKxzNlMrXbQqi1RoQk1j9L2t9KsayoCsiGqQNldu9NwKSt+a4PXtzmQ7+UZ/bcj6pgJt446Sz9XsQtTtQp2FVUdvqJA1tnNqCCYtpMMx+6EZ59Sto8xXf31z+cHHi3e+/OqL3y9/8+7Tj95a/vsjUNZpBoK6yfcgsoeNrws18MQPk76mn55Ht+Vnv11+8PHZ/YdPvvzD4vV3l+99IQB5wxFLlGQgCP/4kyAsH/1u+cmHi4dvLB4/Wrzxp+X7n1dmaqoBUReCHcd0Xf3lIDG37+n9/158/o4A5I0nURkIT97++eKNDxa//Hjx9sPl7z7637/9y/LRp8u//v0iLE//4/XFZx/WzO+YEPFjhTkye1/LfHPd/A1HKzGVk5bWNWEms71MM2BXh+Dsg0dn7z8ATbCw/TAiOVgU+M0GaoArStDFfkSer1JHTX2rNWvoo8SlJBoX8NTYOWpkhyF2vODEYvvM/jaioxjHs8gCZ/cfLt//fPneH5+8/StFUUCTwSWxPa7Np9iAzo1vLDDKDQoyS5pYGqdWKus6FGJWiWp77CmxkpZp1hGShsnQKs/vhll1G0xUb1yI4xYyDaltSlLzUM8tHFrdhlQ79CPrHsXBnX6cyl0TBnhC2CNSuzAahzF7jpNdVoVDbNv5KyuwT5u4HqcwzmCcwEJP7QS96dRSBzyt8/zq6BnI1pDVMevIttGo59ROPCcBZI5RmF9gnMkFO6ueOFTkx9yXh4rlm+8tH/y6UMY8/yxlX1v64v5flg9+LbSFHKMLNWxR/z/nlCt78pv7hT5s29+oumZKRJZ4Lp1vhkl0beOoKPV/8tNmGwun7EOVWHojl9jBMM5ahfGtPVNqszxcZZYbUtEnseBZ6r53pUxIZpfik+AkHsNCgbTvybLUPPhQixH+xPspFGhmVT6SNSR7u0wPFCaeY9FMZiKHLVNanaIbeUd5iOcUVdqtJx5V/NDG/rWiHOj2IGLnVdYV0kwJ9EXvVVR8ZHXC6r+qqLq06uioeY9R0bplDSScS9z11F0pRgrqawqqE9WTec2+ernSNaWNPSWkSuAi/tiQ8as1+NkM+57rEcd65RWqlG9NIgYDt1gXtvx+reg+UA4RUh8U+3KTbzKLiVNjAjvEJR0bs17VyMROz1hjYBBgiaUnvvryX1n9AvoASHKpkRHN52D56NPFO18yuMpBZG1i2La5yZQnfHSNBycNZ4EjipQl5XyuSruaqkoyeBX0gfpq05U8mVcTr6HhxHNgNSNk9lEH1mdYlHt9sNNziYpeuKCqm7GqJ7zptepRzPGSbU0dg59qGbvU58MVoDJ7UQ+WPl3VeX2+OBdF1bo1YuFS5kAZCG0ByCJVJvgO4UM1lOW6TVhoemk3FEtawWoxt0aA5Qd7FmAGxj31xd3P+pSlZOHyZaE+76uq1NjHeP26tXx98vbPq81A3jO54ZoBazFysTL1tOyg1iBWunfOU+xssnj8ydk//WL5X+8uHz0o9qQ/vn721i9AvZMsayaDwBcpn3vn7CruO/Jiclsleg08/duDxS8//uqL37MSsy9uqUZ5U3N9c81lVxNoseqf9Tl7pKftmS9W/W9tlhyxi7rhD69foEkCBToL8jc6C6pGN50Fm1rd630Swc47xlDg/QTNaGzRqUVnAY+91/zQvnMDp/O5ptZJfOLGVu1u63uzyYhQscEmsbitM7kU21ZxkScyCe1J2iDww8Ri41c6jYp5jAObWOvXfjbxfJFrHE+ZpnZJoK0TTHDKaDSp3ZXKIr0WvGevf7h88z0OK2wCbBWO7JCSAnDybEphJiMTdvTiiD164VQvW+I6a4mnlp22ioahlcld3iVHa63xUVrrgWrS/sYa34Rd2GE3Exubn54rsgW4qkr3zondZV+2yPbDhO8ynQ5CoM9lXFGVLoM+FasdxKCv08NOpwekhtbapVe96WqcP1ZwFWUhZKp537XXrYoQdjbtIaip7Oali+pHjo2u2X7aWPUvWJwpcfgdLyWOqEkyiPga86YtOwqjPbiauYF1nN92Oa79TTQsFg8+OXv8z4vH//n008eLP/z57K3PBCDnYV7ZYOgMafLRK5bWsORleg+bL3l50A/DcPqDMKrgxw2pTRoYtBV15vNXeC6G4bR8jOJNWDS0VoRQYDTWingdYLJcE2vdFkd/9shu4GMvOIk2jSmcr3EbzhJ5G1SVmX4Oq6IpJdgp0YpLaVe3D8XfCWBqsRNwS1U0bTdnaQAe/26YMqv4N3yPxzRMfsQhL7s2OG4hTe2jFdCyY06cWkMlnc8Hx7uq0u3yhsVQyebzwXBXVXTUPBTF1CORpe7z31c0lD+cPwXhxKI4cMTB8S6bAhwc77qYrpWzNg4cz8ExqdlHcdKnOGkSOmnuXTyKxIqplc9tTaiL6a3Sp6KTtvjEdFNqi/ypo0trHNkNnFoin66BpF1RazEZkpwP6T2JmX5ri+k/LubJSNEeZLIa1Rb3LTd+nE3DuG7+UElhJac1VDLpKtLU+Zz79KpR+lRgi1Qx7rMlqhj3hREl+M5K6WmteBkqjJH5gh2h+PQ1Pf9tGoWZQ4VJy2kyuJrHyhs5DcucShSTKov5irW0rtrXuqoEEb94aKHytiJnYsG0ypahwm/9rWIzXH70K1DtGzUYYJQsKuN0XxgqdQmF1NQqLNrP37PivaRimUfJNGShmvuj+KuL898Vw6zqvdP9S6cSg/T/A5vtCpUJJQAA';
+          const block = zlib.gunzipSync(Buffer.from(payload, 'base64')).toString('utf8');
+          const sha = crypto.createHash('sha256').update(block, 'utf8').digest('hex');
+          if (sha !== '53dd7f3b963543976638b89b4823282b40c85452ff034d65cb97ce8e34b1a401') {
+            throw new Error('patch payload sha mismatch: ' + sha);
+          }
+          let text = fs.readFileSync('engine.js', 'utf8');
+          const idx = text.indexOf(marker);
+          if (idx >= 0) text = text.slice(0, idx).trimEnd() + '\n\n';
+          else text = text.trimEnd() + '\n\n';
+          fs.writeFileSync('engine.js', text + block, 'utf8');
+          NODE
+          node --check engine.js
+      - name: Commit patched engine
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/codex-apply-leaderboard-speed-polish.yml
+          git add engine.js
+          git status --short
+          git commit -m "Polish leaderboard and speed mode UI" || exit 0
+          git push
