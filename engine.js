@@ -5056,39 +5056,35 @@ Object.assign(Game.prototype,{
     this.button(BW-safeR-132,safeT+32,82,58,'×','relic_back',()=>this.go('hub'),{size:36,color:'#f0c0b0'});
 
     const tab=this._relicTab||'全部';
-    let tx=safeL+58,ty=safeT+102;
-    for(const tb of TABS){
-      const w=tb==='全部'?92:100;
-      this.rr(tx,ty,w,40,12);
+    const tabW=96, tabH=34, tabGap=8, tabX=safeL+34, tabY=safeT+96;
+    for(let ti=0;ti<TABS.length;ti++){
+      const tb=TABS[ti], tx=tabX, ty=tabY+ti*(tabH+tabGap), w=tabW;
+      this.rr(tx,ty,w,tabH,10);
       ctx.fillStyle=tab===tb?'rgba(184,255,47,0.18)':'rgba(10,7,8,0.66)';
       ctx.fill();
       ctx.lineWidth=2;
       ctx.strokeStyle=tab===tb?'#bfff2f':'rgba(215,169,69,0.38)';
       ctx.stroke();
-      this.text(tb,tx+w/2,ty+20,19,tab===tb?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
-      ((t,xx,ww)=>this.btn(xx,ty,ww,40,'relic_tab_'+t,()=>{this._relicTab=t;this.render();}))(tb,tx,w);
-      tx+=w+10;
+      this.text(tb,tx+w/2,ty+tabH/2,17,tab===tb?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((t,xx,yy,ww)=>this.btn(xx,yy,ww,tabH,'relic_tab_'+t,()=>{this._relicTab=t;this.render();}))(tb,tx,ty,w);
     }
 
-    const eqY=safeT+142, eqX=safeL+320, eqW=178, eqH=128, eqGap=28;
+    const tpl=(ax,ay,aw,ah)=>({x:ax*BW/1672,y:ay*BH/941,w:aw*BW/1672,h:ah*BH/941});
+    const slots=[
+      tpl(353,105,142,126),
+      tpl(562,105,142,126),
+      tpl(772,105,142,126),
+      tpl(977,105,142,126),
+      tpl(1181,105,142,126)
+    ];
     for(let i=0;i<5;i++){
-      const rid=s.loadout[i], x=eqX+i*(eqW+eqGap);
+      const rid=s.loadout[i], r=slots[i], x=r.x, y=r.y, w=r.w, h=r.h;
       if(rid){
         const it=this._relicDisplay(rid,true);
-        this._drawRelicCard(it,x,eqY,eqW,eqH,{equipped:true,selected:this._bagSel===rid});
-        ((id,xx)=>this.btn(xx,eqY,eqW,eqH,'eq_'+i,()=>this._openRelicCompare(id)))(rid,x);
+        this._drawRelicCard(it,x,y,w,h,{equipped:true,selected:this._bagSel===rid});
+        ((id,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'eq_'+i,()=>this._openRelicCompare(id)))(rid,r);
       } else {
-        ctx.save();
-        this.rr(x,eqY,eqW,eqH,12);
-        ctx.fillStyle='rgba(8,6,8,0.66)';
-        ctx.fill();
-        ctx.setLineDash([8,8]);
-        ctx.lineWidth=2;
-        ctx.strokeStyle='rgba(215,169,69,0.32)';
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-        this.text('+',x+eqW/2,eqY+eqH/2-6,46,'rgba(215,169,69,0.44)',{align:'center',baseline:'middle',weight:'700'});
+        this.text('+',x+w/2,y+h/2-2,46,'rgba(215,169,69,0.48)',{align:'center',baseline:'middle',weight:'700'});
       }
     }
 
@@ -5099,8 +5095,11 @@ Object.assign(Game.prototype,{
     if(tab!=='全部') catalog=catalog.filter(it=>it.tab===tab || (tab==='核心'&&it.type==='ball'));
     const ownedType=new Set(owned.map(it=>it.type+':'+it.idx));
     const locked=catalog.filter(it=>!ownedType.has(it.type+':'+it.idx));
-    const gx=safeL+58, gy=safeT+288, cols=10, cellW=126, cellH=108, cg=12;
-    const visible=owned.concat(locked).slice(0,40);
+    const grid=tpl(285,302,1100,392);
+    const cols=12, rows=4, cg=8*BW/1672, rg=8*BH/941;
+    const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows;
+    const gx=grid.x, gy=grid.y;
+    const visible=owned.concat(locked).slice(0,cols*rows);
     for(let i=0;i<visible.length;i++){
       const it=visible[i], x=gx+(i%cols)*(cellW+cg), y=gy+((i/cols)|0)*(cellH+cg);
       const lockedItem=!!it.catalog;
