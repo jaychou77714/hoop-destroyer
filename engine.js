@@ -2,7 +2,22 @@
 // Single-finger physics basketball × dark-comedy roguelite × boss hunt × relic collection.
 // Data-driven rebuild. Self-contained, no network. Bean-style art. export start(canvas, root).
 
-export function start(canvas, root){ const G=new Game(canvas,root); G.boot(); try{window.__HB=G;}catch(e){} return G; }
+function resetLocalDataIfRequested(){
+  try{
+    const params=new URLSearchParams(window.location.search||'');
+    const shouldReset=params.has('resetLocalData')||params.has('freshStart')||params.has('reset-local-data');
+    if(!shouldReset) return false;
+    const keys=['hoopocalypse_save_v2','abyss_hoop_save_v1','abyss_hoop_save_v1_backup','hb_profile_v2','hb_layout_v1'];
+    for(const k of keys) localStorage.removeItem(k);
+    try{ sessionStorage.clear(); }catch(e){}
+    for(const k of ['resetLocalData','freshStart','reset-local-data']) params.delete(k);
+    const query=params.toString();
+    const next=window.location.pathname+(query?'?'+query:'')+window.location.hash;
+    window.history&&window.history.replaceState&&window.history.replaceState(null,'',next);
+    return true;
+  }catch(e){ return false; }
+}
+export function start(canvas, root){ const didReset=resetLocalDataIfRequested(); const G=new Game(canvas,root); G.boot(); try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){} if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} } return G; }
 try{ window.HBStart = start; }catch(e){}
 
 // ---------- math / util ----------
@@ -510,7 +525,7 @@ class Game{
     // camera ease
     this.cam.y=lerp(this.cam.y,this.cam.ty,clamp(dt*6,0,1)); this.cam.zoom=lerp(this.cam.zoom,this.cam.tz,clamp(dt*6,0,1));
     if(this.screen==='battle'&&this.run&&!this._paused&&!this._detailOpen&&!this.portrait&&!this.run.modal) this.updateBattle(dt);
-    if(!this.portrait){ if(this.screen==='battle'&&this.run){ this.audio.startTheme(ACTS[this.run.act-1].key, this.run.stage.boss); } else if(this.screen==='home'||this.screen==='hub'){ this.audio.startTheme('hub',false); } else this.audio.stopTheme(); }
+    if(!this.portrait){ if(this.screen==='battle'&&this.run){ this.audio.startTheme(ACTS[this.run.act-1].key, this.run.stage.boss); } else { this.audio.startTheme('hub',false); } }
   }
 
   render(){ const ctx=this.ctx,dpr=this.dpr; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
@@ -5168,5 +5183,253 @@ Object.assign(Game.prototype,{
     const bw=300,bh=78,by=y+h-120;
     this.button(BW/2-bw-36,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
     this.button(BW/2+36,by,bw,bh,current&&current.id===selected.id?'卸下':'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:34,weight:'900'});
+  };
+})();
+
+// === final activation: mode progression rules and corruption difficulty ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const clampAct=n=>Math.max(0,Math.min(ACTS.length,Number(n)||0));
+  const oldModeActs=Game.prototype._modeActs;
+  const oldUnlockedActs=Game.prototype._unlockedActs;
+  const oldStartRun=Game.prototype.startRun;
+  const oldFinishRun=Game.prototype.finishRun;
+  const oldSpawnWave=Game.prototype.spawnWave;
+  const oldSpawnGuard=Game.prototype.spawnGuard;
+  const oldPlayerHurt=Game.prototype.playerHurt;
+
+  Game.prototype._stdClearedActs=function(){
+    const mp=this._mp('std'), legacy=Number((this.save&&this.save.acts)||1)||1;
+    let n=0;
+    for(let a=1;a<=ACTS.length;a++){
+      const boss=a+'-boss';
+      if((mp.bossClears&&mp.bossClears[boss]>0) || (a<ACTS.length && (mp.acts||1)>a) || (a<ACTS.length && legacy>a)) n=a;
+    }
+    return clampAct(n);
+  };
+
+  Game.prototype._fastUnlockedActs=function(){
+    return this._stdClearedActs();
+  };
+
+  Game.prototype._corruptUnlockedActs=function(){
+    if(this._stdClearedActs()<ACTS.length) return 0;
+    const mp=this._mp('corrupt');
+    let n=1;
+    for(let a=1;a<ACTS.length;a++){
+      const boss=a+'-boss';
+      if(mp.bossClears&&mp.bossClears[boss]>0) n=Math.max(n,a+1);
+    }
+    if(mp.bossClears&&mp.bossClears[ACTS.length+'-boss']>0) n=ACTS.length;
+    return clampAct(n);
+  };
+
+  Game.prototype._normalizeModeProgression=function(){
+    if(!this.save||this.save.admin) return;
+    const std=this._mp('std'), fast=this._mp('fast'), corrupt=this._mp('corrupt');
+    const stdCleared=this._stdClearedActs();
+    std.acts=Math.max(1, Math.min(ACTS.length, Math.max(Number(std.acts)||1, Math.min(ACTS.length,stdCleared+1))));
+    fast.acts=this._fastUnlockedActs();
+    corrupt.acts=this._corruptUnlockedActs();
+  };
+
+  Game.prototype._modeActs=function(mode){
+    if(this.save&&this.save.admin) return ACTS.length;
+    mode=mode||'std';
+    if(mode==='fast') return this._fastUnlockedActs();
+    if(mode==='corrupt') return this._corruptUnlockedActs();
+    if(mode==='std'){
+      const mp=this._mp('std');
+      const byClear=Math.min(ACTS.length,this._stdClearedActs()+1);
+      return Math.max(1,Math.min(ACTS.length,Math.max(Number(mp.acts)||1,byClear)));
+    }
+    return oldModeActs?oldModeActs.call(this,mode):(this._mp(mode).acts||1);
+  };
+
+  Game.prototype._unlockedActs=function(){
+    if(this.save&&this.save.admin) return ACTS.length;
+    return Math.max(1,this._modeActs('std'),this._modeActs('fast'),this._modeActs('corrupt'));
+  };
+
+  Game.prototype.startRun=function(actId,routeType,stoneId,nodeIdx){
+    routeType=routeType||'std';
+    if(!(this.save&&this.save.admin) && this._modeActs(routeType)<actId){
+      const name=routeType==='fast'?'速投線':routeType==='corrupt'?'腐化加時':'標準遠征';
+      this.toast('尚未解鎖 '+name,'先完成前置模式通關');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    return oldStartRun.call(this,actId,routeType,stoneId,nodeIdx);
+  };
+
+  Game.prototype.finishRun=function(won){
+    const run=this.run;
+    const snapshot=run?{
+      route:run.route, act:run.act, speed:!!run.speed, admin:!!(this.save&&this.save.admin),
+      fastBossClears:Object.assign({},(this._mp('fast').bossClears)||{}),
+      fastMarks:Object.assign({},(this._mp('fast').marks)||{}),
+      fastHeat:Object.assign({},(this._mp('fast').heat)||{}),
+      fastMemory:Object.assign({},(this._mp('fast').memory)||{})
+    }:null;
+    const r=oldFinishRun.call(this,won);
+    if(snapshot&&!snapshot.admin){
+      const fast=this._mp('fast'), corrupt=this._mp('corrupt');
+      if(snapshot.speed||snapshot.route==='fast'){
+        fast.bossClears=snapshot.fastBossClears;
+        fast.marks=snapshot.fastMarks;
+        fast.heat=snapshot.fastHeat;
+        fast.memory=snapshot.fastMemory;
+        if(this._endStats) this._endStats.marks=0;
+      }
+      this._normalizeModeProgression();
+      fast.acts=this._fastUnlockedActs();
+      corrupt.acts=this._corruptUnlockedActs();
+      persist(this.save);
+      this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(false);
+    }
+    return r;
+  };
+
+  Game.prototype.spawnWave=function(n){
+    const run=this.run;
+    const r=oldSpawnWave.call(this,n);
+    if(run&&run.corrupt&&!run.speed&&run.stage&&Array.isArray(run.stage.guards)){
+      const extra=Math.max(1,Math.ceil(n*(run.stage.boss?0.35:0.25)));
+      for(let i=0;i<extra;i++) this.spawnGuard(pick(run.stage.guards));
+    }
+    return r;
+  };
+
+  Game.prototype.spawnGuard=function(type){
+    const g=oldSpawnGuard.call(this,type);
+    const run=this.run;
+    if(g&&run&&run.corrupt&&!g.sandbag){
+      const act=Number(run.act)||1;
+      const stageTier=run.stage&&run.stage.boss?1.22:1;
+      const hpMul=(1.58+Math.max(0,act-1)*0.08)*stageTier;
+      g.maxhp=Math.ceil((g.maxhp||g.hp||1)*hpMul);
+      g.hp=Math.ceil((g.hp||g.maxhp)*hpMul);
+      g.r=(g.r||20)*1.06;
+      g.drawScale=(g.drawScale||1)*1.06;
+      if(g.castMax>0) g.castMax=Math.max(1,Math.floor(g.castMax*0.72));
+      if(!g.elite && !g.eliteMove && Math.random()<0.26){
+        const mv=_eliteMoveFor(type);
+        g.elite=true;
+        g.eliteMove=mv.id;
+        g.eliteEff=mv.eff;
+        g.eliteName=mv.name;
+        g.eliteCounter=mv.counter;
+        g.castMax=mv.charge>0?Math.max(1,mv.charge-1):0;
+        if(mv.eff==='armor') g.shieldUp=true;
+        g.maxhp=Math.ceil(g.maxhp*1.28);
+        g.hp=Math.ceil(g.hp*1.28);
+      }
+    }
+    return g;
+  };
+
+  Game.prototype.playerHurt=function(dmg){
+    if(this.run&&this.run.corrupt) dmg=Math.ceil((Number(dmg)||0)*1.25);
+    return oldPlayerHurt.call(this,dmg);
+  };
+})();
+
+// === final activation: sampled basketball audio and persistent BGM ===
+(function(){
+  if(typeof Audio==='undefined') return;
+  const SAMPLE_SRC={
+    swish:'/assets/audio/sfx_swish.wav',
+    floor:'/assets/audio/sfx_ball_floor.wav',
+    rim:'/assets/audio/sfx_rim_clank.wav'
+  };
+  const SAMPLE_VOL={
+    swish:0.92,
+    score:0.78,
+    floor:0.72,
+    rim:0.88,
+    bank:0.66,
+    board:0.46
+  };
+  const SAMPLE_THROTTLE={rim:70,floor:90,swish:35};
+  const clamp01=v=>v<0?0:v>1?1:v;
+  const oldSfx=Audio.prototype.sfx;
+  const oldStartTheme=Audio.prototype.startTheme;
+  const oldResume=Audio.prototype.resume;
+
+  Audio.prototype._sampleName=function(n){
+    if(n==='swish'||n==='score') return 'swish';
+    if(n==='rim'||n==='bank'||n==='board') return 'rim';
+    if(n==='floor') return 'floor';
+    return '';
+  };
+  Audio.prototype._ensureSamples=function(){
+    if(this._samplePools) return;
+    this._samplePools={};
+    this._sampleLast={};
+    for(const k in SAMPLE_SRC){
+      this._samplePools[k]=[];
+      try{
+        const a=new window.Audio(SAMPLE_SRC[k]);
+        a.preload='auto';
+        a.load&&a.load();
+        this._samplePools[k].push(a);
+      }catch(e){}
+    }
+  };
+  Audio.prototype._playSample=function(n,vol){
+    if(!this.enSfx) return false;
+    this._ensureSamples();
+    const key=this._sampleName(n);
+    const pool=this._samplePools&&this._samplePools[key];
+    if(!key||!pool||!pool.length) return false;
+    const now=(typeof performance!=='undefined'?performance.now():Date.now());
+    const last=this._sampleLast[key]||0;
+    if(SAMPLE_THROTTLE[key]&&now-last<SAMPLE_THROTTLE[key]) return true;
+    this._sampleLast[key]=now;
+    let a=pool.find(x=>x.paused||x.ended);
+    if(!a&&pool.length<5){
+      try{ a=pool[0].cloneNode(true); a.preload='auto'; pool.push(a); }catch(e){}
+    }
+    if(!a) a=pool[0];
+    try{
+      a.pause();
+      a.currentTime=0;
+      a.volume=clamp01((this.enSfx?this.sVol:0)*(vol==null?1:vol));
+      const p=a.play();
+      if(p&&p.catch)p.catch(()=>{});
+      return true;
+    }catch(e){ return false; }
+  };
+  Audio.prototype.sfx=function(n){
+    const sample=this._sampleName(n);
+    if(sample&&this._playSample(n,SAMPLE_VOL[n]||1)) return;
+    return oldSfx.call(this,n);
+  };
+  Audio.prototype.startTheme=function(key,intense){
+    this.ensure();
+    const id='song:'+(key||'hub')+(intense?'!':'');
+    if(this._theme===id){
+      if(this._song&&this._song.paused&&this.enMusic){
+        const p=this._song.play();
+        if(p&&p.catch)p.catch(()=>{});
+      }
+      return;
+    }
+    this.stopTheme();
+    this._theme=id;
+    if(!this.enMusic) return;
+    if(this._startSong()) return;
+    this._theme=null;
+    return oldStartTheme.call(this,key,intense);
+  };
+  Audio.prototype.resume=function(){
+    const r=oldResume.call(this);
+    this._ensureSamples();
+    if(this.enMusic&&this._theme&&this._song&&this._song.paused){
+      const p=this._song.play();
+      if(p&&p.catch)p.catch(()=>{});
+    }
+    return r;
   };
 })();
