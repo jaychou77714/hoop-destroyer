@@ -88,16 +88,21 @@ function persist(s){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(s)); }ca
 // ---------- Web Audio synth ----------
 class Audio{
   constructor(){ this.ac=null; this.master=null; this.musicGain=null; this.sfxGain=null;
-    this.enMusic=true; this.enSfx=true; this.mVol=0.5; this.sVol=0.8; this._theme=null; this._timer=null; }
+    this.enMusic=true; this.enSfx=true; this.mVol=0.5; this.sVol=0.8; this._theme=null; this._timer=null;
+    this._song=null; this._songSrc='/assets/audio/court_of_stone.mp3'; this._usingSong=false; }
   ensure(){ if(this.ac) return; try{ const AC=window.AudioContext||window.webkitAudioContext; this.ac=new AC();
     this.master=this.ac.createGain(); this.master.gain.value=0.9; this.master.connect(this.ac.destination);
     this.musicGain=this.ac.createGain(); this.musicGain.gain.value=this.enMusic?this.mVol:0; this.musicGain.connect(this.master);
     this.sfxGain=this.ac.createGain(); this.sfxGain.gain.value=this.enSfx?this.sVol:0; this.sfxGain.connect(this.master);
   }catch(e){ this.ac=null; } }
-  resume(){ this.ensure(); if(this.ac&&this.ac.state==='suspended') this.ac.resume(); }
-  setMusic(b){ this.enMusic=b; if(this.musicGain) this.musicGain.gain.value=b?this.mVol:0; }
+  _musicVol(){ return this.enMusic?Math.max(0,Math.min(1,this.mVol)):0; }
+  _ensureSong(){ if(this._song) return this._song; try{ const a=new window.Audio(this._songSrc); a.loop=true; a.preload='auto'; a.volume=this._musicVol(); this._song=a; return a; }catch(e){ return null; } }
+  _startSong(){ const a=this._ensureSong(); if(!a||!this.enMusic) return false; this._usingSong=true; a.volume=this._musicVol(); const p=a.play(); if(p&&p.catch)p.catch(()=>{}); return true; }
+  _stopSong(){ if(this._song){ try{ this._song.pause(); }catch(e){} } this._usingSong=false; }
+  resume(){ this.ensure(); if(this.ac&&this.ac.state==='suspended') this.ac.resume(); if(this._usingSong&&this._song&&this.enMusic){ const p=this._song.play(); if(p&&p.catch)p.catch(()=>{}); } }
+  setMusic(b){ this.enMusic=b; if(this.musicGain) this.musicGain.gain.value=b?this.mVol:0; if(this._song){ this._song.volume=this._musicVol(); if(b&&this._usingSong){ const p=this._song.play(); if(p&&p.catch)p.catch(()=>{}); } else if(!b){ try{this._song.pause();}catch(e){} } } }
   setSfx(b){ this.enSfx=b; if(this.sfxGain) this.sfxGain.gain.value=b?this.sVol:0; }
-  setMVol(v){ this.mVol=v; if(this.musicGain) this.musicGain.gain.value=this.enMusic?v:0; }
+  setMVol(v){ this.mVol=v; if(this.musicGain) this.musicGain.gain.value=this.enMusic?v:0; if(this._song)this._song.volume=this._musicVol(); }
   setSVol(v){ this.sVol=v; if(this.sfxGain) this.sfxGain.gain.value=this.enSfx?v:0; }
   tone(f,dur,type,gain,when,slide){ if(!this.ac||!this.enSfx) return; const t=when||this.ac.currentTime;
     const o=this.ac.createOscillator(),g=this.ac.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(f,t);
@@ -137,7 +142,9 @@ class Audio{
     case 'lose': this.tone(330,0.3,'sawtooth',0.18,T,160); this.tone(247,0.5,'sine',0.16,T+0.15,120); break;
     case 'boss': this.tone(70,0.6,'sawtooth',0.2,T,180); this.tone(110,0.5,'square',0.1,T+0.1); break;
   } }
-  startTheme(key,intense){ this.ensure(); if(!this.ac) return; const id=key+(intense?'!':''); if(this._theme===id) return; this.stopTheme(); this._theme=id; if(!this.enMusic) return;
+  startTheme(key,intense){ this.ensure(); const id=key+(intense?'!':''); if(this._theme===id) return; this.stopTheme(); this._theme=id; if(!this.enMusic) return;
+    if(key!=='hub'&&this._startSong()) return;
+    if(!this.ac) return;
     const ac=this.ac; const roots={abbey:110,sand:98,city:104,inferno:87,final:123.47,hub:98};
     const root=roots[key]||104; const seq=[0,0,3,0,5,3,0,-2]; let step=0; const beat=intense?0.32:0.5;
     const play=()=>{ if(!this.ac||this._theme!==id) return; const t=ac.currentTime; const f=root*Math.pow(2,seq[step%seq.length]/12);
@@ -146,7 +153,7 @@ class Audio{
       if(intense&&step%2===0) this.noise(0.05,0.05,6000,t,'highpass'); step++; this._timer=setTimeout(play,beat*1000); };
     play();
   }
-  stopTheme(){ if(this._timer) clearTimeout(this._timer); this._timer=null; this._theme=null; }
+  stopTheme(){ if(this._timer) clearTimeout(this._timer); this._timer=null; this._stopSong(); this._theme=null; }
 }
 // ============================================================
 // DATA TABLES (§22)
