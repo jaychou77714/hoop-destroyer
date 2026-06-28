@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs><filter id="g"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <ellipse cx="128" cy="220" rx="70" ry="16" fill="#000" opacity=".35"/>
+  <path d="M78 178 C60 120 84 70 132 66 C184 62 204 118 184 174 C166 224 96 224 78 178 Z" fill="#ffb34d" stroke="#120d10" stroke-width="10"/>
+  <ellipse cx="132" cy="150" rx="62" ry="36" fill="#3a1710" stroke="#d7a945" stroke-width="8"/>
+  <path d="M78 150 C98 122 166 122 188 150 C166 178 98 178 78 150 Z" fill="#1a0d0b" opacity=".75"/>
+  <circle cx="116" cy="104" r="6" fill="#120d10"/><circle cx="150" cy="104" r="6" fill="#120d10"/>
+  <path d="M66 76 L24 44 M190 78 L230 42" stroke="#120d10" stroke-width="10" stroke-linecap="round"/>
+  <path d="M42 54 L30 26 M214 52 L230 24" stroke="#e6c068" stroke-width="8" stroke-linecap="round" filter="url(#g)"/>
+  <path d="M100 184 L84 224 M156 184 L174 224" stroke="#120d10" stroke-width="12" stroke-linecap="round"/>
+</svg>

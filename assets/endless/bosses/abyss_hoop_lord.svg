@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><filter id="g"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <ellipse cx="256" cy="468" rx="158" ry="32" fill="#000" opacity=".45"/>
+  <path d="M128 382 C90 240 142 94 262 66 C402 34 470 188 424 336 C386 466 174 492 128 382 Z" fill="#201326" stroke="#09060b" stroke-width="18"/>
+  <path d="M150 124 L198 50 L236 116 L274 38 L316 116 L366 50 L388 132" fill="#d7a945" stroke="#09060b" stroke-width="12"/>
+  <ellipse cx="270" cy="208" rx="124" ry="42" fill="none" stroke="#c04cff" stroke-width="20" filter="url(#g)"/>
+  <path d="M182 208 C206 316 336 318 364 208" fill="none" stroke="#8fff22" stroke-width="10"/>
+  <circle cx="226" cy="258" r="13" fill="#d8ff44" filter="url(#g)"/><circle cx="316" cy="254" r="13" fill="#d8ff44" filter="url(#g)"/>
+  <path d="M208 326 C250 352 306 350 356 320" fill="none" stroke="#e6c068" stroke-width="12" stroke-linecap="round"/>
+  <path d="M160 384 L108 486 M350 388 L408 486" stroke="#09060b" stroke-width="25" stroke-linecap="round"/>
+  <path d="M84 270 C134 218 182 226 214 272 M426 224 C390 252 366 290 360 338" fill="none" stroke="#09060b" stroke-width="21" stroke-linecap="round"/>
+  <path d="M70 96 C140 38 216 20 300 34 C386 48 438 92 468 154" fill="none" stroke="#8fff22" stroke-width="9" filter="url(#g)"/>
+</svg>

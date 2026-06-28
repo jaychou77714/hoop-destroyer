@@ -761,6 +761,936 @@ class Game{
   };
 })();
 
+// === final activation v11: endless stage banners do not inherit act names ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const prevEnterStage=Game.prototype.enterStage;
+  Game.prototype.enterStage=function(pi){
+    const out=prevEnterStage.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&run.stage){
+      this._primeEndlessRun&&this._primeEndlessRun(run);
+      const depth=run.endlessDepth||1;
+      const biome=run.endlessBiomeName||'無盡深淵';
+      if(run.stage.boss){
+        run.banner={text:run.stage.name,sub:'第 '+depth+' 層 · '+(run.stage.endlessTag||'Boss 降臨'),t:2.2};
+      }else{
+        run.banner={text:biome,sub:'第 '+depth+' 層 · 集滿進度召喚 Boss',t:2.2};
+      }
+    }
+    return out;
+  };
+})();
+
+// === final activation v13: endless sprites, affixes, leaderboards, and daily shot detail ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const MIN_DAILY_SHOTS=10;
+  const ENDLESS_ENEMIES={
+    crack_runner:{name:'裂縫跑位者',src:'/assets/endless/enemies/crack_runner.svg',color:'#9fe024',scale:1.18},
+    screen_idol:{name:'擋拆石像',src:'/assets/endless/enemies/screen_idol.svg',color:'#d7a945',scale:1.34},
+    iron_whistle:{name:'鐵哨裁判',src:'/assets/endless/enemies/iron_whistle.svg',color:'#ffe14d',scale:1.12},
+    oil_monk:{name:'黏油球僧',src:'/assets/endless/enemies/oil_monk.svg',color:'#6fbe30',scale:1.24},
+    mist_librarian:{name:'霧線司書',src:'/assets/endless/enemies/mist_librarian.svg',color:'#b980ff',scale:1.18},
+    cold_rim_guard:{name:'寒框守衛',src:'/assets/endless/enemies/cold_rim_guard.svg',color:'#6fd8ff',scale:1.25},
+    war_drum_leader:{name:'戰鼓看台長',src:'/assets/endless/enemies/war_drum_leader.svg',color:'#ffb34d',scale:1.25},
+    shattered_board_collector:{name:'碎板收債人',src:'/assets/endless/enemies/shattered_board_collector.svg',color:'#d8ff44',scale:1.20}
+  };
+  const ENEMY_BY_BIOME={
+    rift:{chain:'crack_runner',bat:'mist_librarian',zombie:'oil_monk',drummer:'war_drum_leader',shield:'screen_idol',eye:'iron_whistle',frost:'cold_rim_guard'},
+    iron:{shield:'screen_idol',chain:'iron_whistle',drummer:'war_drum_leader',zombie:'oil_monk',bat:'crack_runner',eye:'shattered_board_collector',frost:'cold_rim_guard'},
+    cold:{frost:'cold_rim_guard',eye:'mist_librarian',bat:'mist_librarian',zombie:'oil_monk',chain:'crack_runner',shield:'screen_idol',drummer:'war_drum_leader'},
+    thunder:{drummer:'war_drum_leader',chain:'shattered_board_collector',eye:'iron_whistle',frost:'cold_rim_guard',shield:'screen_idol',zombie:'oil_monk',bat:'mist_librarian'},
+    finale:{shield:'screen_idol',chain:'crack_runner',drummer:'war_drum_leader',frost:'cold_rim_guard',eye:'shattered_board_collector',zombie:'oil_monk',bat:'mist_librarian'}
+  };
+  const AFFIXES=[
+    {id:'crown',name:'深淵冠冕',short:'冠',color:'#ffe14d'},
+    {id:'mirror',name:'鏡框',short:'鏡',color:'#8fe8ff'},
+    {id:'countdown',name:'倒數',short:'倒',color:'#ff6a4a'},
+    {id:'lockrim',name:'鎖框',short:'鎖',color:'#d8ff44'},
+    {id:'greed',name:'貪分',short:'貪',color:'#c89bff'}
+  ];
+  const BOSS_SPRITES=[
+    {max:5,key:'free_throw_executioner',src:'/assets/endless/bosses/free_throw_executioner.svg'},
+    {max:10,key:'broken_rim_stitcher',src:'/assets/endless/bosses/broken_rim_stitcher.svg'},
+    {max:15,key:'coldflame_scorekeeper',src:'/assets/endless/bosses/coldflame_scorekeeper.svg'},
+    {max:20,key:'thunderbone_announcer',src:'/assets/endless/bosses/thunderbone_announcer.svg'},
+    {max:9999,key:'abyss_hoop_lord',src:'/assets/endless/bosses/abyss_hoop_lord.svg'}
+  ];
+
+  const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
+  const clamp01=v=>Math.max(0,Math.min(1,Number(v)||0));
+  const pct=n=>Math.max(0,Math.min(100,Math.round((Number(n)||0)*100)));
+  const clone=v=>{ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} };
+  const dayCountdown=()=>{
+    const now=new Date(), next=new Date(now);
+    next.setHours(24,0,0,0);
+    const total=Math.floor(Math.max(0,next-now)/1000);
+    return pad2(total/3600)+':'+pad2((total%3600)/60)+':'+pad2(total%60);
+  };
+  const snapSave=row=>{
+    const p=row&&row.profile_json;
+    if(!p||typeof p!=='object') return {};
+    return p.save&&typeof p.save==='object'?p.save:p;
+  };
+  const snapProfile=row=>{
+    const p=row&&row.profile_json;
+    if(!p||typeof p!=='object') return {};
+    return p.profile&&typeof p.profile==='object'?p.profile:{};
+  };
+  const profileDayTotals=(profile,key)=>{
+    const hd=profile&&profile.heroDay;
+    const out={shots:0,makes:0,swishes:0,banks:0,luckies:0};
+    if(!hd||hd.key!==key||!hd.stats) return out;
+    for(const id of Object.keys(hd.stats)){
+      const d=hd.stats[id]||{};
+      out.shots+=Math.max(0,Number(d.shots)||0);
+      out.makes+=Math.max(0,Number(d.makes)||0);
+      out.swishes+=Math.max(0,Number(d.swishes)||0);
+      out.banks+=Math.max(0,Number(d.banks)||0);
+      out.luckies+=Math.max(0,Number(d.luckies)||0);
+    }
+    out.makes=Math.min(out.makes,out.shots);
+    return out;
+  };
+  const stripOptionalStats=payload=>{
+    const out=Object.assign({},payload||{});
+    for(const k of ['today_swishes','today_banks','today_luckies','endless_best','endless_best_score','endless_best_bosses']) delete out[k];
+    return out;
+  };
+
+  const prevPlayerDayTotals=Game.prototype._playerDayTotals;
+  Game.prototype._playerDayTotals=function(){
+    const p=this._loadProfile ? this._loadProfile() : null;
+    const k=this._dayKey ? this._dayKey() : '';
+    const base=prevPlayerDayTotals?prevPlayerDayTotals.call(this):{key:k,shots:0,makes:0};
+    const out={key:base.key||k,shots:base.shots||0,makes:base.makes||0,swishes:0,banks:0,luckies:0};
+    if(!p||!p.heroDay||p.heroDay.key!==out.key) return out;
+    const stats=p.heroDay.stats||{};
+    for(const id of Object.keys(stats)){
+      const d=stats[id]||{};
+      out.swishes+=Math.max(0,Number(d.swishes)||0);
+      out.banks+=Math.max(0,Number(d.banks)||0);
+      out.luckies+=Math.max(0,Number(d.luckies)||0);
+    }
+    return out;
+  };
+
+  const prevRecordShot=Game.prototype._recordShot;
+  Game.prototype._recordShot=function(id,made,type){
+    const before=this._playerDayTotals?this._playerDayTotals():null;
+    const out=prevRecordShot?prevRecordShot.apply(this,arguments):undefined;
+    if(!this.save||this.save.admin||!made) return out;
+    const after=this._playerDayTotals?this._playerDayTotals():null;
+    if(!after||!before||after.shots===before.shots) return out;
+    const d=this._heroDay?this._heroDay(id):null;
+    if(d){
+      if(type==='swish') d.swishes=(d.swishes||0)+1;
+      else if(type==='bank') d.banks=(d.banks||0)+1;
+      else if(type==='lucky') d.luckies=(d.luckies||0)+1;
+    }
+    if(type==='lucky'&&this._heroProg){
+      const h=this._heroProg(id);
+      h.luckies=(h.luckies||0)+1;
+    }
+    this._saveProfile&&this._saveProfile();
+    this._syncLeaderboardStats&&this._syncLeaderboardStats(false);
+    return out;
+  };
+
+  const prevProgressSubset=Game.prototype._progressSaveSubset;
+  Game.prototype._progressSaveSubset=function(){
+    const out=prevProgressSubset?prevProgressSubset.call(this):{};
+    const s=this.save||{};
+    for(const k of ['endlessBestScore','endlessBestBosses','endlessBestKills','endlessBestCombo']) out[k]=clone(s[k]);
+    return out;
+  };
+
+  const prevApplyCloud=Game.prototype._applyCloudProgressSnapshot;
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    const changed0=prevApplyCloud?prevApplyCloud.call(this,remote):false;
+    const rs=remote&&remote.save&&typeof remote.save==='object'?remote.save:null;
+    let changed=!!changed0;
+    if(rs&&this.save){
+      for(const k of ['endlessBestScore','endlessBestBosses','endlessBestKills','endlessBestCombo']){
+        if(rs[k]!=null){
+          const nv=Math.max(Number(this.save[k])||0,Number(rs[k])||0);
+          if(nv!==(Number(this.save[k])||0)){ this.save[k]=nv; changed=true; }
+        }
+      }
+      if(changed) persist(this.save);
+    }
+    return changed;
+  };
+
+  const prevWriteCloud=Game.prototype._writeCloudAccount;
+  Game.prototype._writeCloudAccount=async function(name,code,payload){
+    if(!prevWriteCloud) return {ok:false,reason:'no-writer'};
+    try{
+      return await prevWriteCloud.call(this,name,code,payload);
+    }catch(e){
+      const msg=String((e&&(e.message||e))||'');
+      if(/today_swishes|today_banks|today_luckies|endless_best/i.test(msg)){
+        return await prevWriteCloud.call(this,name,code,stripOptionalStats(payload));
+      }
+      throw e;
+    }
+  };
+
+  Game.prototype._dailyLeaderboardRow=function(row){
+    if(!row) return null;
+    const name=String(row.player_name||row.name||'').trim();
+    if(!name) return null;
+    const key=this._dayKey?this._dayKey():'';
+    const profileTotals=profileDayTotals(snapProfile(row),key);
+    const shots=Math.max(0,Number(row.today_shots!=null?row.today_shots:row.shots)||profileTotals.shots||0);
+    const makes=clamp(Number(row.today_makes!=null?row.today_makes:row.makes)||profileTotals.makes||0,0,shots);
+    const swishes=Math.max(0,Number(row.today_swishes)||profileTotals.swishes||0);
+    const banks=Math.max(0,Number(row.today_banks)||profileTotals.banks||0);
+    const luckies=Math.max(0,Number(row.today_luckies)||profileTotals.luckies||0);
+    return {
+      name,shots,makes,swishes,banks,luckies,local:!!row._local,
+      updated:row.last_login_at||row.profile_updated_at||row.updated_at||'',
+      qualified:shots>=MIN_DAILY_SHOTS,
+      acc:shots?makes/shots:0,
+      score:this._fairAccScore?this._fairAccScore(makes,shots):(shots?makes/shots:0)
+    };
+  };
+
+  Game.prototype._leaderboardLocalRow=function(){
+    const t=this._playerDayTotals?this._playerDayTotals():{key:this._dayKey?this._dayKey():'',shots:0,makes:0,swishes:0,banks:0,luckies:0};
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()||'本機玩家');
+    return {player_name:name,today_key:t.key,today_shots:t.shots,today_makes:t.makes,today_swishes:t.swishes||0,today_banks:t.banks||0,today_luckies:t.luckies||0,profile_json:this._progressSnapshot?this._progressSnapshot():null,_local:true};
+  };
+
+  Game.prototype._normalLeaderboardRow=function(row){
+    return this._dailyLeaderboardRow(row);
+  };
+
+  Game.prototype._leaderboardRows=function(){
+    const rows=[];
+    const add=row=>{
+      const r=this._dailyLeaderboardRow(row);
+      if(!r) return;
+      const key=r.name.toLowerCase();
+      const i=rows.findIndex(x=>x.name.toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const cur=rows[i];
+        const better=r.local||r.shots>cur.shots||(r.shots===cur.shots&&r.makes>cur.makes);
+        if(better) rows[i]=Object.assign(cur,r,{local:cur.local||r.local});
+      }
+    };
+    const cache=Array.isArray(this._leaderboardCache)?this._leaderboardCache:[];
+    for(const r of cache) add(r);
+    add(this._leaderboardLocalRow());
+    rows.sort((a,b)=>{
+      if(a.qualified!==b.qualified) return a.qualified?-1:1;
+      if(b.score!==a.score) return b.score-a.score;
+      if(b.makes!==a.makes) return b.makes-a.makes;
+      if(b.swishes!==a.swishes) return b.swishes-a.swishes;
+      if(b.luckies!==a.luckies) return b.luckies-a.luckies;
+      if(b.shots!==a.shots) return b.shots-a.shots;
+      return a.name.localeCompare(b.name,'zh-Hant');
+    });
+    let rank=1;
+    for(const r of rows) r.rank=r.qualified?rank++:'觀察';
+    return rows.slice(0,50);
+  };
+
+  Game.prototype._endlessLocalRow=function(){
+    const L=this.save&&this.save.login?this.save.login:{};
+    return {
+      name:String((L.name||'').trim()||'本機玩家'),
+      depth:Math.max(0,Number(this.save&&this.save.endlessBest)||0),
+      score:Math.max(0,Number(this.save&&this.save.endlessBestScore)||0),
+      bosses:Math.max(0,Number(this.save&&this.save.endlessBestBosses)||0),
+      kills:Math.max(0,Number(this.save&&this.save.endlessBestKills)||0),
+      combo:Math.max(0,Number(this.save&&this.save.endlessBestCombo)||0),
+      local:true
+    };
+  };
+
+  Game.prototype._endlessLeaderboardRow=function(row){
+    if(!row) return null;
+    const name=String(row.player_name||row.name||'').trim();
+    if(!name) return null;
+    const s=snapSave(row);
+    const depth=Math.max(0,Number(row.endless_best)||Number(s.endlessBest)||0);
+    const score=Math.max(0,Number(row.endless_best_score)||Number(s.endlessBestScore)||Number(s.stats&&s.stats.bestScore)||0);
+    const bosses=Math.max(0,Number(row.endless_best_bosses)||Number(s.endlessBestBosses)||0);
+    const kills=Math.max(0,Number(s.endlessBestKills)||0);
+    const combo=Math.max(0,Number(s.endlessBestCombo)||Number(s.stats&&s.stats.bestCombo)||0);
+    if(depth<=0&&!row._local) return null;
+    return {name,depth,score,bosses,kills,combo,local:!!row._local,updated:row.last_login_at||row.profile_updated_at||''};
+  };
+
+  Game.prototype._endlessLeaderboardRows=function(){
+    const rows=[];
+    const add=row=>{
+      const r=this._endlessLeaderboardRow(row);
+      if(!r) return;
+      const key=r.name.toLowerCase();
+      const i=rows.findIndex(x=>x.name.toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const cur=rows[i];
+        if(r.local||r.depth>cur.depth||(r.depth===cur.depth&&r.score>cur.score)) rows[i]=Object.assign(cur,r,{local:cur.local||r.local});
+      }
+    };
+    const cache=Array.isArray(this._leaderboardCache)?this._leaderboardCache:[];
+    for(const r of cache) add(r);
+    const local=this._endlessLocalRow();
+    add(Object.assign({},local,{player_name:local.name,_local:true,profile_json:this._progressSnapshot?this._progressSnapshot():null}));
+    rows.sort((a,b)=>{
+      if(b.depth!==a.depth) return b.depth-a.depth;
+      if(b.score!==a.score) return b.score-a.score;
+      if(b.bosses!==a.bosses) return b.bosses-a.bosses;
+      return a.name.localeCompare(b.name,'zh-Hant');
+    });
+    let rank=1;
+    for(const r of rows) r.rank=r.depth>0?rank++:'觀察';
+    return rows.slice(0,50);
+  };
+
+  Game.prototype._openLeaderboard=function(mode){
+    this._leaderboardMode=mode==='endless'?'endless':'daily';
+    this._leaderboardOpen=true;
+    this._leaderboardLoading=true;
+    this._leaderboardStatus='載入雲端排行榜...';
+    this._syncLeaderboardStats&&this._syncLeaderboardStats(true);
+    this._fetchLeaderboard&&this._fetchLeaderboard();
+    this.render&&this.render();
+  };
+
+  Game.prototype._syncLeaderboardNow=async function(){
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()), code=String((L.code||'').trim());
+    if(!name||!this._writeCloudAccount) return false;
+    const t=this._playerDayTotals?this._playerDayTotals():{key:this._dayKey&&this._dayKey(),shots:0,makes:0};
+    const snap=this._progressSnapshot?this._progressSnapshot():null;
+    const payload={
+      today_key:t.key,
+      today_shots:t.shots,
+      today_makes:t.makes,
+      profile_json:snap,
+      profile_updated_at:snap&&snap.updatedAt
+    };
+    await this._writeCloudAccount(name,code,payload);
+    return true;
+  };
+
+  Game.prototype._fetchLeaderboard=async function(){
+    const cfg=this._supabaseCfg ? this._supabaseCfg() : {};
+    if(!cfg.url||!cfg.key){
+      this._leaderboardLoading=false;
+      this._leaderboardStatus='目前顯示本機成績';
+      this.render&&this.render();
+      return;
+    }
+    const base=cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts');
+    const headers={apikey:cfg.key,Authorization:'Bearer '+cfg.key};
+    try{
+      const select='player_name,today_key,today_shots,today_makes,last_login_at,profile_json,profile_updated_at';
+      const q='?select='+encodeURIComponent(select)+'&order=last_login_at.desc&limit=150';
+      const res=await fetch(base+q,{headers});
+      if(!res.ok) throw new Error(await res.text());
+      this._leaderboardCache=await res.json();
+      this._leaderboardStatus=(this._leaderboardCache&&this._leaderboardCache.length)?'雲端排行榜已更新':'目前沒有雲端成績';
+    }catch(e){
+      try{
+        const q='?select=player_name,today_key,today_shots,today_makes,last_login_at&today_key=eq.'+encodeURIComponent(this._dayKey&&this._dayKey())+'&order=today_shots.desc&limit=100';
+        const res=await fetch(base+q,{headers});
+        if(!res.ok) throw new Error(await res.text());
+        this._leaderboardCache=await res.json();
+        this._leaderboardStatus='雲端排行榜已更新（基本欄位）';
+      }catch(e2){
+        this._leaderboardCache=[];
+        this._leaderboardStatus='雲端排行榜讀取失敗，先顯示本機成績';
+        try{ console.warn('[HB leaderboard]',e,e2); }catch(_e){}
+      }
+    }finally{
+      this._leaderboardLoading=false;
+      this.render&&this.render();
+    }
+  };
+
+  Game.prototype._hbLeaderTab=function(x,y,w,h,label,active,cb){
+    const ctx=this.ctx;
+    this.rr(x,y,w,h,12);
+    const g=ctx.createLinearGradient(0,y,0,y+h);
+    if(active){ g.addColorStop(0,'#d8ff44'); g.addColorStop(1,'#6b9d16'); }
+    else { g.addColorStop(0,'rgba(39,28,18,0.96)'); g.addColorStop(1,'rgba(10,7,8,0.98)'); }
+    ctx.fillStyle=g; ctx.fill();
+    ctx.lineWidth=2.2; ctx.strokeStyle=active?'#ffe7a6':'rgba(215,169,69,0.44)';
+    this.rr(x,y,w,h,12); ctx.stroke();
+    this.text(label,x+w/2,y+h/2,24,active?'#111706':'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+    this.btn(x,y,w,h,'lb_tab_'+label,cb);
+  };
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx;
+    const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+    const mode=this._leaderboardMode==='endless'?'endless':'daily';
+    ctx.save();
+    ctx.fillStyle='rgba(3,1,7,0.94)';
+    ctx.fillRect(-4000,-4000,BW+8000,BH+8000);
+    ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+
+    const x=IL+32,y=IT+20,w=BW-IL-IR-64,h=BH-IT-IB-42;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(24,16,11,0.98)');
+    bg.addColorStop(0.5,'rgba(9,7,10,0.99)');
+    bg.addColorStop(1,'rgba(5,4,8,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.34)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+
+    const title=mode==='endless'?'無盡深淵排行榜':'今日命中排行榜';
+    this.text(title,x+w/2,y+52,44,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+    const sub=mode==='endless'?'依最高層數排序；同層比最佳分數，再比 Boss 擊破數':'每日重置倒數 '+dayCountdown()+' · 空心與幸運球會列入今日命中分項';
+    this.text(sub,x+w/2,y+91,22,mode==='endless'?'#c8b894':'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this._hbLeaderTab(x+44,y+28,150,52,'今日命中',mode==='daily',()=>{this._leaderboardMode='daily';this.render();});
+    this._hbLeaderTab(x+206,y+28,150,52,'無盡深淵',mode==='endless',()=>{this._leaderboardMode='endless';this.render();});
+    this._hbDrawLeaderButton(x+w-158,y+28,116,52,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    this._hbDrawLeaderButton(x+w-292,y+28,116,52,'刷新','leaderboard_refresh',()=>{
+      this._leaderboardLoading=true;
+      this._leaderboardStatus='重新整理...';
+      this._fetchLeaderboard&&this._fetchLeaderboard();
+      this.render();
+    },true);
+
+    const tx=x+44,ty=y+134,tw=w-88,headerH=54,rowH=Math.max(72,Math.min(84,Math.floor((h-246)/7)));
+    this.rr(tx,ty,tw,headerH,12);
+    ctx.fillStyle='rgba(215,169,69,0.13)'; ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(215,169,69,0.38)'; this.rr(tx,ty,tw,headerH,12); ctx.stroke();
+
+    if(mode==='endless'){
+      const cols={rank:tx+72,name:tx+190,depth:tx+tw*0.56,score:tx+tw*0.72,boss:tx+tw*0.86,kills:tx+tw-70};
+      this.text('名次',cols.rank,ty+headerH/2,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('投手',cols.name,ty+headerH/2,24,'#d7a945',{baseline:'middle',weight:'900'});
+      this.text('最高層',cols.depth,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('分數',cols.score,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('Boss',cols.boss,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('擊殺',cols.kills,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      const rows=this._endlessLeaderboardRows?this._endlessLeaderboardRows():[];
+      const maxRows=Math.max(4,Math.floor((y+h-ty-headerH-72)/rowH));
+      for(let i=0;i<Math.min(rows.length,maxRows);i++){
+        const r=rows[i], ry=ty+headerH+10+i*rowH, mid=ry+(rowH-8)/2;
+        this.rr(tx,ry,tw,rowH-8,12);
+        ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.16)');
+        ctx.fill();
+        ctx.lineWidth=r.local?2.2:1.2;
+        ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)';
+        this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const badgeW=110,badgeH=rowH-28,badgeX=tx+18,badgeY=ry+10;
+        this.rr(badgeX,badgeY,badgeW,badgeH,14);
+        ctx.fillStyle='rgba(215,169,69,0.16)'; ctx.fill();
+        ctx.lineWidth=1.8; ctx.strokeStyle='rgba(255,231,166,0.48)'; this.rr(badgeX,badgeY,badgeW,badgeH,14); ctx.stroke();
+        this.text(String(r.rank||'觀察'),badgeX+badgeW/2,mid,30,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+        this.text(this._clip?this._clip(name,cols.depth-cols.name-36,28,'900'):name,cols.name,mid-10,28,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(r.depth>=25?'深層循環':'第 '+(r.depth||0)+' 層',cols.name,mid+21,16,r.depth>=25?'#c89bff':'#9e9178',{baseline:'middle',weight:'800'});
+        this.text(String(r.depth||0),cols.depth,mid,32,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.score||0),cols.score,mid,27,'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.bosses||0),cols.boss,mid,27,'#e6c068',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.kills||0),cols.kills,mid,27,'#b8ad96',{align:'center',baseline:'middle',weight:'900'});
+      }
+      if(!rows.length) this.text('還沒有無盡紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }else{
+      const cols={rank:tx+72,name:tx+194,shot:tx+tw*0.56,special:tx+tw*0.72,acc:tx+tw*0.86,score:tx+tw-70};
+      this.text('名次',cols.rank,ty+headerH/2,25,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('投手',cols.name,ty+headerH/2,24,'#d7a945',{baseline:'middle',weight:'900'});
+      this.text('出手 / 命中',cols.shot,ty+headerH/2,23,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('空心 / 幸運',cols.special,ty+headerH/2,23,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('命中率',cols.acc,ty+headerH/2,23,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      this.text('穩定',cols.score,ty+headerH/2,23,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+      const rows=this._leaderboardRows?this._leaderboardRows():[];
+      const maxRows=Math.max(4,Math.floor((y+h-ty-headerH-72)/rowH));
+      for(let i=0;i<Math.min(rows.length,maxRows);i++){
+        const r=rows[i], ry=ty+headerH+10+i*rowH, mid=ry+(rowH-8)/2;
+        const shots=Math.max(0,Number(r.shots)||0), makes=Math.max(0,Number(r.makes)||0);
+        const qualified=!!r.qualified, need=Math.max(0,MIN_DAILY_SHOTS-shots);
+        this.rr(tx,ry,tw,rowH-8,12);
+        ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.16)');
+        ctx.fill();
+        ctx.lineWidth=r.local?2.2:1.2;
+        ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)';
+        this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const badgeW=110,badgeH=rowH-28,badgeX=tx+18,badgeY=ry+10;
+        this.rr(badgeX,badgeY,badgeW,badgeH,14);
+        ctx.fillStyle=qualified?'rgba(215,169,69,0.16)':'rgba(159,224,36,0.15)';
+        ctx.fill();
+        ctx.lineWidth=1.8; ctx.strokeStyle=qualified?'rgba(255,231,166,0.48)':'rgba(159,224,36,0.58)'; this.rr(badgeX,badgeY,badgeW,badgeH,14); ctx.stroke();
+        this.text(qualified?String(r.rank):'觀察',badgeX+badgeW/2,mid-(qualified?0:9),qualified?30:24,qualified?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+        if(!qualified) this.text('差 '+need+' 球',badgeX+badgeW/2,mid+18,15,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+        this.text(this._clip?this._clip(name,cols.shot-cols.name-36,28,'900'):name,cols.name,mid-10,28,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(qualified?'已入榜 · 樣本 '+shots+' 球':'未滿 '+MIN_DAILY_SHOTS+' 球先觀察',cols.name,mid+21,16,qualified?'#a99a7a':'#9fe024',{baseline:'middle',weight:'800'});
+        this.text(shots+' / '+makes,cols.shot,mid-5,27,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+        this.text('出手 / 命中',cols.shot,mid+22,15,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text((r.swishes||0)+' / '+(r.luckies||0),cols.special,mid-5,27,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        this.text('空心 / 幸運',cols.special,mid+22,15,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text(shots?Math.round((r.acc||0)*100)+'%':'0%',cols.acc,mid,29,qualified?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(pct(r.score!=null?r.score:r.acc)),cols.score,mid,28,qualified?'#ffe7a6':'#9e9178',{align:'center',baseline:'middle',weight:'900'});
+      }
+      if(!rows.length) this.text('今天還沒有命中紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+    const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
+    this.text(status,x+w/2,y+h-34,21,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  Game.prototype._drawFbStatCards=function(LO){
+    const U=LO.U,s=this.save||{},total=this._playerDayTotals?this._playerDayTotals():{shots:0,makes:0,swishes:0,luckies:0};
+    const acc=total.shots?Math.round(total.makes/total.shots*100):0;
+    this._gothCard(LO.statL,U);
+    this._statIcon('target',LO.statL.x+18*U,LO.statL.y+LO.statL.h*0.62,7*U);
+    this.text('今日命中', LO.statL.x+14*U, LO.statL.y+16*U, 11*U,'#a2926e');
+    this.text(acc+'%', LO.statL.x+32*U, LO.statL.y+LO.statL.h*0.56, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text((total.shots||0)+' / '+(total.makes||0), LO.statL.x+LO.statL.w-16*U, LO.statL.y+LO.statL.h*0.54, 10*U,'#9fe024',{align:'right',baseline:'middle',weight:'800'});
+    this.text('空 '+(total.swishes||0)+'  幸 '+(total.luckies||0), LO.statL.x+LO.statL.w-16*U, LO.statL.y+LO.statL.h*0.75, 9*U,'#c8b894',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›', LO.statL.x+LO.statL.w-14*U, LO.statL.y+18*U, 9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statL.x,LO.statL.y,LO.statL.w,Math.max(44*U,LO.statL.h),'fb_leaderboard_daily',()=>this._openLeaderboard&&this._openLeaderboard('daily'));
+
+    this._gothCard(LO.statR,U);
+    this._statIcon('crown',LO.statR.x+18*U,LO.statR.y+LO.statR.h*0.62,7*U);
+    this.text('無盡最佳', LO.statR.x+14*U, LO.statR.y+16*U, 11*U,'#a2926e');
+    this.text(String(s.endlessBest|0), LO.statR.x+32*U, LO.statR.y+LO.statR.h*0.56, 22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text('Boss '+(s.endlessBestBosses|0), LO.statR.x+LO.statR.w-16*U, LO.statR.y+LO.statR.h*0.54, 10*U,'#e6c068',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›', LO.statR.x+LO.statR.w-14*U, LO.statR.y+18*U, 9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statR.x,LO.statR.y,LO.statR.w,Math.max(44*U,LO.statR.h),'fb_leaderboard_endless',()=>this._openLeaderboard&&this._openLeaderboard('endless'));
+  };
+
+  Game.prototype._endlessEnemyInfo=function(g){
+    if(!g) return ENDLESS_ENEMIES.crack_runner;
+    return ENDLESS_ENEMIES[g.endlessEnemyId||'crack_runner']||ENDLESS_ENEMIES.crack_runner;
+  };
+
+  Game.prototype._endlessBossSprite=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    for(const b of BOSS_SPRITES) if(depth<=b.max) return b;
+    return BOSS_SPRITES[BOSS_SPRITES.length-1];
+  };
+
+  const prevSpawnGuard=Game.prototype.spawnGuard;
+  Game.prototype.spawnGuard=function(type){
+    const g=prevSpawnGuard.apply(this,arguments);
+    const run=this.run;
+    if(!g||!run||!run.endless||g.sandbag) return g;
+    const biome=run.endlessBiome||((this._endlessBiome&&this._endlessBiome(run.endlessDepth||1).id)||'rift');
+    const map=ENEMY_BY_BIOME[biome]||ENEMY_BY_BIOME.rift;
+    const id=map[type]||map.chain||'crack_runner';
+    const info=ENDLESS_ENEMIES[id]||ENDLESS_ENEMIES.crack_runner;
+    g.endlessEnemyId=id;
+    g.endlessName=info.name;
+    g.endlessSprite=info.src;
+    g.endlessColor=info.color;
+    g.drawScale=(g.drawScale||1)*(info.scale||1);
+    const depth=Math.max(1,Number(run.endlessDepth)||1);
+    const greed=Number(run.endlessGreedStacks)||0;
+    if(greed>0){
+      const mul=1+Math.min(0.45,greed*0.08);
+      g.maxhp=Math.ceil((g.maxhp||g.hp||1)*mul);
+      g.hp=Math.ceil((g.hp||g.maxhp)*mul);
+    }
+    if(id==='screen_idol') g.shieldUp=true;
+    if(id==='iron_whistle') g.endlessMissTax=true;
+    if(id==='cold_rim_guard') g.endlessFreezeHoop=true;
+    if(id==='shattered_board_collector') g.endlessDebt=true;
+    const affixChance=Math.min(0.56,0.12+Math.max(0,depth-4)*0.018+(g.elite?0.22:0));
+    if(!g.endlessAffix&&Math.random()<affixChance){
+      const aff=AFFIXES[Math.floor(Math.random()*AFFIXES.length)];
+      g.endlessAffix=aff.id;
+      g.endlessAffixName=aff.name;
+      g.endlessAffixShort=aff.short;
+      g.endlessAffixColor=aff.color;
+      if(aff.id==='crown'){
+        g.elite=true;
+        g.maxhp=Math.ceil((g.maxhp||g.hp||1)*1.65);
+        g.hp=Math.ceil((g.hp||g.maxhp)*1.65);
+        g.r=(g.r||24)*1.08;
+      }else if(aff.id==='mirror'){
+        g.endlessMirror=1;
+      }else if(aff.id==='countdown'){
+        g.endlessCountdown=Math.max(7,15-Math.floor(depth/5));
+      }else if(aff.id==='lockrim'){
+        g.endlessLocksHoop=true;
+      }else if(aff.id==='greed'){
+        g.endlessGreed=true;
+      }
+    }
+    return g;
+  };
+
+  const prevDrawGuard=Game.prototype.drawEndlessGuard;
+  Game.prototype.drawEndlessGuard=function(g){
+    const run=this.run;
+    if(run&&run.stage&&run.stage.boss) return;
+    const info=this._endlessEnemyInfo(g);
+    const im=this._endlessImg?this._endlessImg('enemy_'+(g.endlessEnemyId||'crack_runner'),info.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return prevDrawGuard?prevDrawGuard.call(this,g):undefined;
+    const ctx=this.ctx, base=g.r||28, bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4;
+    const scale=(g.drawScale||1)*(g.elite?1.08:1);
+    let H=base*3.15*scale,W=H*im.naturalWidth/im.naturalHeight;
+    const maxW=base*4.25*scale;
+    if(W>maxW){ W=maxW; H=W*im.naturalHeight/im.naturalWidth; }
+    const x=-W/2,y=bob+base*1.04-H;
+    ctx.save();
+    ctx.translate(g.x,g.y);
+    ctx.globalAlpha=g.phased?0.48:1;
+    this.shadow(0,base*0.92,base*1.1,0.25);
+    const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,base*2.6);
+    glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.22)':'rgba(155,255,50,0.18)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.arc(0,bob-base*0.4,base*2.35,0,TAU);
+    ctx.fill();
+    ctx.drawImage(im,x,y,W,H);
+    if(g.flash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.62,g.flash*0.7);
+      ctx.drawImage(im,x,y,W,H);
+      ctx.globalCompositeOperation='source-over';
+      ctx.globalAlpha=1;
+    }
+    if(g.shieldUp){
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.88)';
+      ctx.beginPath();
+      ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU);
+      ctx.stroke();
+    }
+    if(g.endlessAffix){
+      const col=g.endlessAffixColor||'#ffe14d';
+      ctx.save();
+      ctx.translate(0,y-18);
+      this.rr(-24,-16,48,32,10);
+      ctx.fillStyle='rgba(9,6,5,0.88)';
+      ctx.fill();
+      ctx.lineWidth=2.4;
+      ctx.strokeStyle=col;
+      ctx.stroke();
+      this.text(g.endlessAffixShort||'菁',0,2,20,col,{align:'center',baseline:'middle',weight:'900',glow:8});
+      ctx.restore();
+      if(g.endlessCountdown>0) this.text(Math.ceil(g.endlessCountdown),0,y+22,18,'#ff6a4a',{align:'center',baseline:'middle',weight:'900'});
+    }
+    ctx.restore();
+    this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  Game.prototype.drawEndlessBossArt=function(){
+    const ctx=this.ctx,run=this.run;
+    const boss=this._endlessBossSprite(run&&run.endlessDepth);
+    const im=this._endlessImg?this._endlessImg('boss_'+boss.key,boss.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const nw=im.naturalWidth,nh=im.naturalHeight;
+    let H=BH*0.72,W=H*nw/nh;
+    const maxW=BW*0.62;
+    if(W>maxW){ W=maxW; H=W*nh/nw; }
+    const cx=BW*0.67,by=BH-18;
+    ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,30,cx,by-H*0.48,W*0.66);
+    glow.addColorStop(0,'rgba(160,255,48,0.22)');
+    glow.addColorStop(0.58,'rgba(100,255,36,0.08)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-H*0.45,W*0.6,H*0.52,0,0,TAU);
+    ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.42);
+    sh.addColorStop(0,'rgba(0,0,0,0.58)');
+    sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-8,W*0.42,H*0.08,0,0,TAU);
+    ctx.fill();
+    let lp=0;
+    if(run&&run._mobLunge>0){ const tt=1-run._mobLunge/0.34; lp=Math.sin(clamp(tt,0,1)*Math.PI); }
+    if(lp>0){ ctx.translate(cx,by); ctx.scale(1+lp*0.05,1+lp*0.05); ctx.translate(-cx-lp*54,-by); }
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run&&run._mobHitFlash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.45,run._mobHitFlash*0.65);
+      ctx.drawImage(im,cx-W/2,by-H,W,H);
+    }
+    ctx.restore();
+  };
+
+  const prevHurtGuard=Game.prototype.hurtGuard;
+  Game.prototype.hurtGuard=function(g,dmg,c,primary){
+    const run=this.run;
+    if(run&&run.endless&&g&&!g.dead){
+      if(g.endlessMirror>0){
+        g.endlessMirror=0;
+        g.flash=1;
+        this.floater(g.x,g.y-(g.r||24)-24,'鏡框反彈','#8fe8ff',22,{crit:true});
+        this.shockFx&&this.shockFx(g.x,g.y,'#8fe8ff',220,0.34);
+        this.audio&&this.audio.sfx&&this.audio.sfx('rim');
+        return;
+      }
+      if(g.endlessFreezeHoop&&run.hoop){
+        run.endlessHoopFreeze=Math.max(run.endlessHoopFreeze||0,1.05);
+        this.floater(run.hoop.x,run.hoop.y-96,'寒框鎖定','#6fd8ff',20);
+      }
+      if(g.endlessLocksHoop&&run.hoop) run.endlessHoopLock=Math.max(run.endlessHoopLock||0,1.25);
+    }
+    return prevHurtGuard.apply(this,arguments);
+  };
+
+  const prevKillGuard=Game.prototype.killGuard;
+  Game.prototype.killGuard=function(g){
+    const run=this.run, wasDead=!!(g&&g.dead);
+    const r=prevKillGuard.apply(this,arguments);
+    if(run&&run.endless&&g&&!wasDead&&g.dead&&!g.sandbag){
+      if(g.endlessAffix==='crown'&&!run.stage.boss) this._endlessAddProgress&&this._endlessAddProgress(12);
+      if(g.endlessGreed){
+        run.endlessGreedStacks=(run.endlessGreedStacks||0)+1;
+        if(!run.stage.boss) this._endlessAddProgress&&this._endlessAddProgress(8);
+        this.floater(g.x,g.y-(g.r||24)-26,'貪分 +難度','#c89bff',22,{crit:true});
+      }
+      if(g.endlessDebt){
+        run.endlessDebtShots=Math.max(run.endlessDebtShots||0,1);
+        this.floater(g.x,g.y-(g.r||24)-26,'碎板債','#ffb34d',22);
+      }
+    }
+    return r;
+  };
+
+  const prevEndShot=Game.prototype.endShot;
+  Game.prototype.endShot=function(scored){
+    const run=this.run;
+    const missTax=run&&run.endless&&!scored&&run.guards&&run.guards.some(g=>!g.dead&&g.endlessMissTax);
+    const debt=run&&run.endless&&!scored&&run.endlessDebtShots>0;
+    const r=prevEndShot.apply(this,arguments);
+    if(run&&run.endless&&!scored){
+      if(missTax){
+        this.playerHurt&&this.playerHurt(4+Math.floor((run.endlessDepth||1)/5));
+        this.floater(BW/2,BH*0.30,'鐵哨加罰','#ffe14d',26,{crit:true});
+      }
+      if(debt){
+        run.endlessDebtShots=Math.max(0,(run.endlessDebtShots||0)-1);
+        this.playerHurt&&this.playerHurt(5+Math.floor((run.endlessDepth||1)/4));
+        this.floater(BW/2,BH*0.36,'碎板債討回','#ff6a4a',26,{crit:true});
+      }
+    }
+    return r;
+  };
+
+  const prevPickHoop=Game.prototype.pickHoopPos;
+  Game.prototype.pickHoopPos=function(force){
+    const run=this.run;
+    if(run&&run.endless&&run.hoop&&(run.endlessHoopLock>0||run.endlessHoopFreeze>0)){
+      run.repos=0;
+      if(run.host){ run.host.tx=run.host.x; run.host.ty=run.host.y; }
+      run.hoop.tx=run.hoop.x; run.hoop.ty=run.hoop.y;
+      return;
+    }
+    return prevPickHoop.apply(this,arguments);
+  };
+
+  const prevUpdateBattle=Game.prototype.updateBattle;
+  Game.prototype.updateBattle=function(dt){
+    const r=prevUpdateBattle.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&!run.modal){
+      if(run.endlessHoopLock>0) run.endlessHoopLock=Math.max(0,run.endlessHoopLock-dt);
+      if(run.endlessHoopFreeze>0) run.endlessHoopFreeze=Math.max(0,run.endlessHoopFreeze-dt);
+      for(const g of (run.guards||[])){
+        if(!g||g.dead) continue;
+        if(g.endlessCountdown>0){
+          g.endlessCountdown-=dt;
+          if(g.endlessCountdown<=0&&!g._endlessCountdownFired){
+            g._endlessCountdownFired=true;
+            if(run.stage&&run.stage.boss) run.endlessBossTime=Math.max(0,(run.endlessBossTime||0)-8);
+            else run.endlessProgress=Math.max(0,(run.endlessProgress||0)-10);
+            this.floater(g.x,g.y-(g.r||24)-26,'倒數懲罰','#ff6a4a',22,{crit:true});
+            this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+          }
+        }
+      }
+      if(run.stage&&run.stage.boss&&run.guards&&run.guards.some(g=>!g.dead&&g.endlessEnemyId==='war_drum_leader')){
+        run.endlessBossTime=Math.max(0,(run.endlessBossTime||0)-dt*0.18);
+      }
+    }
+    return r;
+  };
+
+  Game.prototype._recordEndlessCheckpoint=function(run){
+    if(!run||!run.endless||!this.save||this.save.admin) return;
+    const depth=Math.max(1,Number(run.endlessDepth)||1);
+    const bosses=Math.max(Number(this.save.endlessBestBosses)||0,Number(run.endlessBosses||0)+(run.stage&&run.stage.boss?1:0));
+    this.save.endless=true;
+    this.save.endlessBest=Math.max(Number(this.save.endlessBest)||0,depth);
+    this.save.endlessBestScore=Math.max(Number(this.save.endlessBestScore)||0,Number(run.score)||0);
+    this.save.endlessBestKills=Math.max(Number(this.save.endlessBestKills)||0,Number(run.kills)||0);
+    this.save.endlessBestCombo=Math.max(Number(this.save.endlessBestCombo)||0,Number(run.bestCombo)||0);
+    this.save.endlessBestBosses=bosses;
+    persist(this.save);
+    this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(false);
+  };
+
+  const prevEndlessAdvance=Game.prototype._endlessAdvanceDepth;
+  Game.prototype._endlessAdvanceDepth=function(){
+    if(this.run&&this.run.endless) this._recordEndlessCheckpoint(this.run);
+    return prevEndlessAdvance.apply(this,arguments);
+  };
+
+  const prevFinishEndless=Game.prototype.finishEndlessRun;
+  Game.prototype.finishEndlessRun=function(won){
+    if(this.run&&this.run.endless) this._recordEndlessCheckpoint(this.run);
+    return prevFinishEndless.apply(this,arguments);
+  };
+})();
+
+// === final activation v9: endless depth biomes and loop ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ENDLESS_BIOMES=[
+    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.svg',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
+    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.svg',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
+    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.svg',guards:['frost','eye','bat','zombie'],count:17,waves:4},
+    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.svg',guards:['drummer','chain','eye','frost'],count:19,waves:4},
+    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.svg',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
+  ];
+  const ENDLESS_BOSSES=[
+    {depth:5,name:'罰球線執刑官',guards:['chain','bat','zombie'],count:20,waves:3,tag:'節奏門檻'},
+    {depth:10,name:'破框縫合師',guards:['shield','chain','drummer'],count:24,waves:4,tag:'護盾擋拆'},
+    {depth:15,name:'冷焰記分官',guards:['frost','eye','bat'],count:26,waves:4,tag:'冰霧短軌'},
+    {depth:20,name:'雷骨播報王',guards:['drummer','chain','eye','frost'],count:28,waves:4,tag:'規則亂流'},
+    {depth:25,name:'深淵籃君',guards:['shield','drummer','frost','eye','chain'],count:32,waves:5,tag:'終焉混成'}
+  ];
+  const DEEP_AFFIXES=['冷焰','戰鼓','鎖框','鏡框','貪分','深淵冠冕'];
+  const cloneStage=(stage,extra)=>{
+    const out=Object.assign({},stage||{},extra||{});
+    out.guards=Array.isArray(out.guards)?out.guards.slice():['chain','bat'];
+    return out;
+  };
+
+  Game.prototype._endlessBiome=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    return ENDLESS_BIOMES.find(b=>depth>=b.min&&depth<=b.max)||ENDLESS_BIOMES[0];
+  };
+
+  Game.prototype._endlessBossDef=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    const fixed=ENDLESS_BOSSES.find(b=>b.depth===depth);
+    if(fixed) return fixed;
+    if(depth>25){
+      const base=ENDLESS_BOSSES[(Math.floor((depth-26)/5))%ENDLESS_BOSSES.length];
+      const aff=DEEP_AFFIXES[Math.floor(depth/5)%DEEP_AFFIXES.length];
+      const extra=Math.min(20,Math.floor((depth-21)/2));
+      return Object.assign({},base,{name:base.name+' · '+aff,count:base.count+extra,waves:Math.min(6,base.waves+1),tag:aff});
+    }
+    return {depth,name:'深淵守衛',guards:null,count:null,waves:null,tag:'層間試煉'};
+  };
+
+  const oldEndlessPath=Game.prototype._endlessPath;
+  Game.prototype._endlessPath=function(){
+    const run=this.run||{};
+    const depth=Math.max(1,run.endlessDepth||1);
+    const biome=this._endlessBiome(depth);
+    const bossDef=this._endlessBossDef(depth);
+    const scale=1+Math.min(1.35,(depth-1)*0.055);
+    const base=(typeof STAGES!=='undefined'&&STAGES[1]&&STAGES[1][0])||{};
+    const bossSrc=(typeof STAGES!=='undefined'&&STAGES[1]&&(STAGES[1][4]||STAGES[1][0]))||base;
+    const normal=cloneStage(base,{
+      name:biome.name+' · 第 '+depth+' 層',
+      host:'深淵記分員',
+      body:'shade',
+      guards:biome.guards,
+      count:Math.round((biome.count||12)*scale),
+      boss:false,
+      tier:2+Math.min(4,Math.floor(depth/5)),
+      tut:false
+    });
+    const isMilestone=depth%5===0||depth>25;
+    const boss=cloneStage(bossSrc,{
+      name:(isMilestone?bossDef.name:('深淵守衛 · '+biome.name)),
+      host:(isMilestone?bossDef.name:'深淵守衛'),
+      body:'worldking',
+      guards:bossDef.guards||biome.guards,
+      count:Math.round((bossDef.count||biome.count||18)*scale),
+      boss:true,
+      waves:bossDef.waves||biome.waves||3,
+      tier:3+Math.min(5,Math.floor(depth/5)),
+      endlessTag:bossDef.tag||biome.name,
+      endlessMilestone:isMilestone
+    });
+    return [normal,boss];
+  };
+
+  const oldPrimeEndless=Game.prototype._primeEndlessRun;
+  Game.prototype._primeEndlessRun=function(run){
+    oldPrimeEndless&&oldPrimeEndless.call(this,run);
+    if(!run||!run.endless) return;
+    const biome=this._endlessBiome(run.endlessDepth||1);
+    run.endlessBiome=biome.id;
+    run.endlessBiomeName=biome.name;
+    run.endlessProgressMax=100+Math.min(80,Math.floor(((run.endlessDepth||1)-1)/2)*10);
+  };
+
+  const oldEnsureBattleBg=Game.prototype._ensureBattleBg;
+  Game.prototype._ensureBattleBg=function(act){
+    if(this.run&&this.run.endless){
+      const biome=this._endlessBiome(this.run.endlessDepth||1);
+      return this._endlessImg('bg_'+biome.id,biome.bg);
+    }
+    return oldEnsureBattleBg.call(this,act);
+  };
+
+  Game.prototype._endlessAdvanceDepth=function(){
+    const run=this.run;
+    if(!run||!run.endless||run._stageClearing) return;
+    run._stageClearing=true;
+    const depth=run.endlessDepth||1;
+    const fastClear=!run.endlessTimedOut;
+    const jump=(fastClear&&depth%5===0)?2:1;
+    const nextDepth=depth+jump;
+    run.endlessBosses=(run.endlessBosses||0)+1;
+    if(this.save&&!this.save.admin){
+      this.save.endless=true;
+      this.save.endlessBest=Math.max(this.save.endlessBest||0,nextDepth);
+      persist(this.save);
+    }
+    run.banner={text:fastClear?'深淵突破':'深淵推進',sub:'進入第 '+nextDepth+' 層'+(jump>1?' · 限時擊破跳層':''),t:2.1};
+    setTimeout(()=>{
+      if(this.run!==run) return;
+      run._stageClearing=false;
+      run.endlessDepth=nextDepth;
+      run.endlessProgress=0;
+      run.endlessTimedOut=false;
+      run.endlessBossActive=false;
+      run.endlessBossTimeMax=Math.max(90,180-Math.min(70,Math.floor((nextDepth-1)/5)*12));
+      run.endlessBossTime=run.endlessBossTimeMax;
+      run.path=this._endlessPath();
+      this._primeEndlessRun(run);
+      this.enterStage(0);
+      this._primeEndlessRun(this.run);
+      if(this.run) this.run.banner={text:this.run.endlessBiomeName||'無盡深淵',sub:'第 '+nextDepth+' 層 · 集滿進度召喚 Boss',t:2.2};
+    },820);
+  };
+
+  const oldEndlessStageClear=Game.prototype.onStageClear;
+  Game.prototype.onStageClear=function(){
+    const run=this.run;
+    if(run&&run.endless){
+      if(run._stageClearing) return;
+      if(run.stage&&!run.stage.boss) return this._endlessSummonBoss();
+      if(run.stage&&run.stage.boss){
+        if(run.spawned<run.guardsTotal) return oldEndlessStageClear.apply(this,arguments);
+        return this._endlessAdvanceDepth();
+      }
+    }
+    return oldEndlessStageClear.apply(this,arguments);
+  };
+})();
+
 // === final activation: branded loading splash wins last ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -1569,6 +2499,25 @@ Object.assign(Game.prototype,{
     '/assets/battle/act3_bg.webp',
     '/assets/battle/act4_bg.webp',
     '/assets/battle/act5_bg.webp',
+    '/assets/endless/endless_cracked_court.svg',
+    '/assets/endless/bg_iron_cage_stands.svg',
+    '/assets/endless/bg_coldflame_zone.svg',
+    '/assets/endless/bg_thunderbone_dome.svg',
+    '/assets/endless/bg_final_abyss_cathedral.svg',
+    '/assets/endless/boss_hoop_guardian.svg',
+    '/assets/endless/enemies/crack_runner.svg',
+    '/assets/endless/enemies/screen_idol.svg',
+    '/assets/endless/enemies/iron_whistle.svg',
+    '/assets/endless/enemies/oil_monk.svg',
+    '/assets/endless/enemies/mist_librarian.svg',
+    '/assets/endless/enemies/cold_rim_guard.svg',
+    '/assets/endless/enemies/war_drum_leader.svg',
+    '/assets/endless/enemies/shattered_board_collector.svg',
+    '/assets/endless/bosses/free_throw_executioner.svg',
+    '/assets/endless/bosses/broken_rim_stitcher.svg',
+    '/assets/endless/bosses/coldflame_scorekeeper.svg',
+    '/assets/endless/bosses/thunderbone_announcer.svg',
+    '/assets/endless/bosses/abyss_hoop_lord.svg',
     '/assets/mob/stage1/group.webp',
     '/assets/mob/act2/stage1/group.webp',
     '/assets/mob/act3/stage1/group.webp',
@@ -2892,7 +3841,7 @@ Object.assign(Game.prototype,{
   _adminKey(k){ if(k==='close'){ this._adminPadOpen=false; this.audio.sfx('ui'); this.render(); return; }
     if(k==='del'){ this._adminPadVal=(this._adminPadVal||'').slice(0,-1); this.audio.sfx('ui'); this.render(); return; }
     this._adminPadVal=((this._adminPadVal||'')+k).slice(0,6); this.audio.sfx('ui');
-    if(this._adminPadVal.length>=6){ if(this._adminPadVal==='071428'){ this.save.admin=true; this.save.layoutMode=true; persist(this.save); this._adminPadOpen=false; this.toast('開發者模式開啟','全地圖 · 一球秒節點 · 排版調整 · 不計成績'); this.audio.sfx('levelup'); }
+    if(this._adminPadVal.length>=6){ if(this._adminPadVal==='071428'){ this.save.admin=true; this.save.layoutMode=true; persist(this.save); this._adminPadOpen=false; this.toast('開發者模式開啟','全地圖 · 無盡模式 · 一球秒節點 · 不計成績'); this.audio.sfx('levelup'); }
       else { this._adminPadVal=''; this._adminPadShake=1; this.toast('密碼錯誤'); this.audio.sfx('hurt'); } }
     this.render();
   },
@@ -3040,7 +3989,7 @@ Object.assign(Game.prototype,{
     this.button(bx+bw+30,560,bw,bh,'選擇英雄','heroes',()=>this.go('heroes'),{size:26});
     this.button(bx,560+bh+24,bw,bh,'籃魂聖匣','relics',()=>this.go('relics'),{size:26});
     this.button(bx+bw+30,560+bh+24,bw,bh,'宿主圖鑑','codex',()=>this.go('codex'),{size:26});
-    if(s.endless) this.button(BW/2-200,560+bh*2+48,400,64,'∞ 無盡加時 (最佳 '+s.endlessBest+')','endless',()=>this.startEndless(),{size:24,color:'#e6c068'});
+    if(s.endless||s.admin) this.button(BW/2-200,560+bh*2+48,400,64,'∞ 無盡加時 (最佳 '+s.endlessBest+')','endless',()=>this.startEndless(),{size:24,color:'#e6c068'});
     this.button(70,144,176,74,'← 首頁','home',()=>this.go('home'),{size:22});
     this.text(this._heroProg(s.hero).level? ('Lv '+this._heroProg(s.hero).level) : 'Lv 1',BW-80,90,24,'#e6c068',{align:'right',weight:'700'});
   },
@@ -4520,10 +5469,10 @@ Object.assign(Game.prototype, {
   _drawFbButtons(LO){ const U=LO.U;
     const pr=LO.prim; this._fbPrimary(pr,'進入籃獄圖譜',this._press(pr)); this.btn(pr.x,pr.y,pr.w,Math.max(44*U,pr.h),'fb_atlas',()=>this.go('atlas'));
     const se=LO.sel; this._fbBtn(se,'選擇英雄',this._press(se),'helmet'); this.btn(se.x,se.y-((Math.max(44*U,se.h)-se.h)/2),se.w,Math.max(44*U,se.h),'fb_heroes',()=>this.go('heroes'));
-    const a=LO.bL, endlessReady=!!(this.save&&this.save.endless);
+    const a=LO.bL, endlessReady=!!(this.save&&(this.save.endless||this.save.admin));
     this._fbBtn(a,'無盡模式',this._press(a),'inf',!endlessReady);
     this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_entry',()=>{
-      if(!this.save.endless){ this.toast('無盡模式','標準或腐化第 5 幕通關後解鎖'); return; }
+      if(!endlessReady){ this.toast('無盡模式','標準或腐化第 5 幕通關後解鎖'); return; }
       this._toast=null; this._endlessIntro=true; this.render();
     });
     const b=LO.bR; this._fbBtn(b,'天梯榜',false,'crown',true); this.btn(b.x,b.y,b.w,Math.max(44*U,b.h),'fb_ladder_locked',()=>this.toast('天梯榜','即將開放'));
@@ -4668,7 +5617,7 @@ Object.assign(Game.prototype, {
     // drag from anywhere in the field; anchor = press point (not the ball). exclude HUD regions.
     const _IL=this.insL||0,_IR=this.insR||0,_IT=this.insT||0,_IB=this.insB||0;
     if(x>=_IL+24&&x<=_IL+24+486&&y>=_IT+22&&y<=_IT+22+210) return; // hero panel
-    if(x>=BW/2-280&&x<=BW/2+280&&y>=_IT+18&&y<=_IT+18+92) return; // stage bar
+    if(x>=BW/2-350&&x<=BW/2+350&&y>=_IT+18&&y<=_IT+18+128) return; // stage bar
     if(x>=BW-_IR-108&&y<=_IT+106) return; // pause (top-right)
     if(y>=BH-_IB-44) return; // bottom info bar
     run.aiming=true; run.aimStartX=x; run.aimStartY=y; run.aimX=x; run.aimY=y; if(run.tutorial&&run.tutStep==null) run.tutStep=1;
@@ -6860,6 +7809,25 @@ Object.assign(Game.prototype,{
     '/assets/battle/act3_bg.webp',
     '/assets/battle/act4_bg.webp',
     '/assets/battle/act5_bg.webp',
+    '/assets/endless/endless_cracked_court.svg',
+    '/assets/endless/bg_iron_cage_stands.svg',
+    '/assets/endless/bg_coldflame_zone.svg',
+    '/assets/endless/bg_thunderbone_dome.svg',
+    '/assets/endless/bg_final_abyss_cathedral.svg',
+    '/assets/endless/boss_hoop_guardian.svg',
+    '/assets/endless/enemies/crack_runner.svg',
+    '/assets/endless/enemies/screen_idol.svg',
+    '/assets/endless/enemies/iron_whistle.svg',
+    '/assets/endless/enemies/oil_monk.svg',
+    '/assets/endless/enemies/mist_librarian.svg',
+    '/assets/endless/enemies/cold_rim_guard.svg',
+    '/assets/endless/enemies/war_drum_leader.svg',
+    '/assets/endless/enemies/shattered_board_collector.svg',
+    '/assets/endless/bosses/free_throw_executioner.svg',
+    '/assets/endless/bosses/broken_rim_stitcher.svg',
+    '/assets/endless/bosses/coldflame_scorekeeper.svg',
+    '/assets/endless/bosses/thunderbone_announcer.svg',
+    '/assets/endless/bosses/abyss_hoop_lord.svg',
     '/assets/mob/stage1/group.webp',
     '/assets/mob/act2/stage1/group.webp',
     '/assets/mob/act3/stage1/group.webp',
@@ -7214,4 +8182,1063 @@ Object.assign(Game.prototype,{
     const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
     this.text(status,x+w/2,y+h-38,22,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
   };
+})();
+
+// === final activation v8: endless abyss gameplay and dedicated art ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ENDLESS_BG='/assets/endless/endless_cracked_court.svg';
+  const ENDLESS_BOSS='/assets/endless/boss_hoop_guardian.svg';
+  const cloneStage=(stage,extra)=>{
+    const src=stage||{};
+    const out=Object.assign({},src,extra||{});
+    out.guards=Array.isArray(src.guards)?src.guards.slice():(Array.isArray(out.guards)?out.guards.slice():['chain','skel']);
+    return out;
+  };
+  const mmss=t=>{
+    t=Math.max(0,Math.ceil(Number(t)||0));
+    const m=Math.floor(t/60),s=t%60;
+    return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  };
+
+  const oldButton=Game.prototype.button;
+  Game.prototype.button=function(x,y,w,h,label,id,cb,o){
+    if(id==='endless_intro_next'){
+      label='開始挑戰';
+      cb=()=>this.startEndless();
+    }
+    return oldButton.call(this,x,y,w,h,label,id,cb,o);
+  };
+
+  Game.prototype._endlessPath=function(){
+    const act1=(typeof STAGES!=='undefined'&&STAGES[1])||[];
+    const normal=cloneStage(act1[0],{
+      name:'裂隙前哨',
+      host:'深淵記分員',
+      body:'shade',
+      guards:['chain','bat','zombie','drummer'],
+      count:12,
+      boss:false,
+      tier:2,
+      tut:false
+    });
+    const bossSrc=act1[4]||act1[act1.length-1]||act1[0];
+    const boss=cloneStage(bossSrc,{
+      name:'深淵 Boss：籃框守衛',
+      host:'籃框守衛',
+      body:'worldking',
+      guards:['chain','shield','drummer','eye'],
+      count:18,
+      boss:true,
+      waves:3,
+      tier:3
+    });
+    return [normal,boss];
+  };
+
+  Game.prototype._primeEndlessRun=function(run){
+    if(!run) return;
+    run.endless=true;
+    run.route='endless';
+    run.speed=false;
+    run.sandbag=false;
+    run.nodeMode=false;
+    run.nodeIdx=null;
+    run.tutorial=false;
+    run.endlessDepth=run.endlessDepth||1;
+    run.endlessBosses=run.endlessBosses||0;
+    run.endlessProgress=run.endlessProgress||0;
+    run.endlessProgressMax=run.endlessProgressMax||100;
+    run.endlessBossTimeMax=run.endlessBossTimeMax||180;
+    run.endlessBossTime=run.endlessBossTime==null?run.endlessBossTimeMax:run.endlessBossTime;
+    run.endlessBossActive=!!(run.stage&&run.stage.boss);
+    run.endlessTimedOut=!!run.endlessTimedOut;
+  };
+
+  Game.prototype.startEndless=function(){
+    if(!(this.save&&this.save.admin)) this.save.endless=true;
+    this._endlessIntro=false;
+    this._selRoute='std';
+    this._selStone=null;
+    this.startRun(1,'std',null);
+    const run=this.run;
+    if(!run) return;
+    run.path=this._endlessPath();
+    run.endlessDepth=1;
+    run.endlessBosses=0;
+    run.endlessProgress=0;
+    run.endlessProgressMax=100;
+    run.endlessBossTimeMax=180;
+    run.endlessBossTime=180;
+    run.endlessTimedOut=false;
+    run.endlessBossActive=false;
+    this._primeEndlessRun(run);
+    this.enterStage(0);
+    this._primeEndlessRun(this.run);
+    if(this.run) this.run.banner={text:'無盡深淵',sub:'第 1 層 · 集滿進度召喚 Boss',t:2.8};
+    this.toast('無盡深淵','命中與擊殺會推進深淵進度');
+    this.render();
+  };
+
+  Game.prototype._endlessAddProgress=function(amount){
+    const run=this.run;
+    if(!run||!run.endless||!run.stage||run.stage.boss||run._stageClearing||run._endlessSummoning) return;
+    const max=run.endlessProgressMax||100;
+    run.endlessProgress=clamp((run.endlessProgress||0)+amount,0,max);
+    if(run.endlessProgress>=max) this._endlessSummonBoss();
+  };
+
+  Game.prototype._endlessSummonBoss=function(){
+    const run=this.run;
+    if(!run||!run.endless||run._endlessSummoning) return;
+    run._endlessSummoning=true;
+    run._stageClearing=true;
+    run.endlessProgress=run.endlessProgressMax||100;
+    run.projectiles=[];
+    run.intf=[];
+    run.guards=[];
+    run.modal=null;
+    run.banner={text:'深淵 Boss 降臨',sub:'場上護衛已清空 · 3 分鐘擊破挑戰開始',t:1.8};
+    this.floater(BW/2,BH*0.24,'深淵裂口開啟','#d8ff44',34,{crit:true,t:1.2});
+    this.audio&&this.audio.sfx&&this.audio.sfx('boss');
+    setTimeout(()=>{
+      if(this.run!==run) return;
+      run._endlessSummoning=false;
+      run._stageClearing=false;
+      const bossIndex=Math.min(1,run.path.length-1);
+      this.enterStage(bossIndex);
+      this._primeEndlessRun(this.run);
+      if(this.run){
+        this.run.endlessBossActive=true;
+        this.run.endlessBossTime=this.run.endlessBossTimeMax||180;
+        this.run.endlessTimedOut=false;
+        this.run.banner={text:'深淵 Boss',sub:'限時擊破可獲得高階升級機會',t:2.4};
+      }
+    },520);
+  };
+
+  Game.prototype.finishEndlessRun=function(won){
+    const run=this.run;
+    if(!run){ this.go('hub'); return; }
+    this._stageClearing=false;
+    const s=this.save,adm=!!s.admin;
+    const acc=run.shots?run.makes/run.shots:0;
+    const depth=run.endlessDepth||1;
+    const fastClear=won&&!run.endlessTimedOut;
+    if(!adm){
+      s.endless=true;
+      s.endlessBest=Math.max(s.endlessBest||0,depth);
+      if(s.stats){
+        s.stats.bestScore=Math.max(s.stats.bestScore||0,run.score||0);
+        s.stats.bestCombo=Math.max(s.stats.bestCombo||0,run.bestCombo||0);
+        s.stats.bestAcc=Math.max(s.stats.bestAcc||0,acc);
+      }
+      persist(s);
+      const pr=this._heroProg&&this._heroProg(run.heroId);
+      if(pr){
+        pr.level=run.level;
+        pr.xp=run.xp;
+        this._saveProfile&&this._saveProfile();
+      }
+    }
+    const _ptsAvail=this._talentPtsAvail?this._talentPtsAvail(run.heroId):0;
+    const _ptsEarned=this._talentPtsEarned?this._talentPtsEarned(run.heroId):0;
+    this._endStats={won,endless:true,act:run.act,route:'endless',speed:false,speedScore:0,stone:null,nodeMode:false,node:null,boss:true,stageName:'無盡深淵 第 '+depth+' 層',score:run.score,acc,swishes:run.swishes,banks:run.banks,bestCombo:run.bestCombo,kills:run.kills,level:run.level,talentPts:_ptsAvail,talentEarned:_ptsEarned,admin:adm,rewardLog:(run.rewardLog||[]).slice(),words:run.words.slice(),reached:depth,total:depth,loot:null,marks:fastClear?2:1,picked:false,session:null};
+    this.screen=won?'win':'lose';
+    this.audio.sfx(won?'win':'lose');
+    if(won) this.audio.sfx('whistle');
+    if(!won&&!adm) this._recordDeath&&this._recordDeath();
+    this.particles.length=0;
+    this.floaters.length=0;
+    this.run=null;
+  };
+
+  Game.prototype._endlessImg=function(key,src){
+    this._endlessImgs=this._endlessImgs||{};
+    if(this._endlessImgs[key]===undefined){
+      try{
+        const im=new Image();
+        im.onerror=()=>{im._err=true;};
+        im.onload=()=>{try{if(this.screen==='battle'&&this.render)this.render();}catch(e){}};
+        im.src=src;
+        this._endlessImgs[key]=im;
+      }catch(e){ this._endlessImgs[key]=null; }
+    }
+    return this._endlessImgs[key];
+  };
+
+  const oldEnsureBattleBg=Game.prototype._ensureBattleBg;
+  Game.prototype._ensureBattleBg=function(act){
+    if(this.run&&this.run.endless) return this._endlessImg('bg',ENDLESS_BG);
+    return oldEnsureBattleBg.call(this,act);
+  };
+
+  const oldDrawMobGroup=Game.prototype.drawMobGroup;
+  Game.prototype.drawMobGroup=function(){
+    const run=this.run;
+    if(run&&run.endless){
+      if(run.stage&&run.stage.boss) return this.drawEndlessBossArt();
+      return;
+    }
+    return oldDrawMobGroup.apply(this,arguments);
+  };
+
+  Game.prototype.drawEndlessBossArt=function(){
+    const ctx=this.ctx,run=this.run,im=this._endlessImg('boss',ENDLESS_BOSS);
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const nw=im.naturalWidth,nh=im.naturalHeight;
+    let H=BH*0.68,W=H*nw/nh;
+    const maxW=BW*0.58;
+    if(W>maxW){ W=maxW; H=W*nh/nw; }
+    const cx=BW*0.69,by=BH-28;
+    ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.45,30,cx,by-H*0.45,W*0.62);
+    glow.addColorStop(0,'rgba(160,255,48,0.20)');
+    glow.addColorStop(0.62,'rgba(100,255,36,0.08)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-H*0.45,W*0.58,H*0.52,0,0,TAU);
+    ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.42);
+    sh.addColorStop(0,'rgba(0,0,0,0.58)');
+    sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-8,W*0.42,H*0.08,0,0,TAU);
+    ctx.fill();
+    let lp=0;
+    if(run._mobLunge>0){ const tt=1-run._mobLunge/0.34; lp=Math.sin(clamp(tt,0,1)*Math.PI); }
+    if(lp>0){ ctx.translate(cx,by); ctx.scale(1+lp*0.05,1+lp*0.05); ctx.translate(-cx-lp*54,-by); }
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run._mobHitFlash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.45,run._mobHitFlash*0.65);
+      ctx.drawImage(im,cx-W/2,by-H,W,H);
+    }
+    ctx.restore();
+  };
+
+  const oldDrawGuard=Game.prototype.drawGuard;
+  Game.prototype.drawGuard=function(g){
+    if(this.run&&this.run.endless) return this.drawEndlessGuard(g);
+    return oldDrawGuard.apply(this,arguments);
+  };
+
+  Game.prototype.drawEndlessGuard=function(g){
+    if(this.run&&this.run.stage&&this.run.stage.boss) return;
+    const ctx=this.ctx,base=g.r||30,bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4;
+    const col=g.elite?'#d7a945':'#8f62c8',glow=g.elite?'rgba(255,215,110,0.35)':'rgba(155,255,50,0.28)';
+    ctx.save();
+    ctx.translate(g.x,g.y);
+    ctx.globalAlpha=g.phased?0.48:1;
+    this.shadow(0,base*0.92,base*0.95,0.24);
+    const rg=ctx.createRadialGradient(0,bob,4,0,bob,base*2.2);
+    rg.addColorStop(0,glow);
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg;
+    ctx.beginPath();
+    ctx.arc(0,bob,base*2.2,0,TAU);
+    ctx.fill();
+    this._bean(0,bob-base*0.1,base*1.0,base*(g.elite?1.75:1.55),col,{lw:6,seed:37,wob:2,lean:g.elite?-1.5:2});
+    ctx.fillStyle='#100914';
+    ctx.beginPath();
+    ctx.arc(-base*0.22,bob-base*0.28,base*0.09,0,TAU);
+    ctx.arc(base*0.22,bob-base*0.28,base*0.09,0,TAU);
+    ctx.fill();
+    ctx.strokeStyle='#9fe024';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(-base*0.44,bob-base*0.55);
+    ctx.lineTo(base*0.44,bob-base*0.55);
+    ctx.stroke();
+    if(g.shieldUp){
+      ctx.strokeStyle='rgba(215,169,69,0.86)';
+      ctx.lineWidth=5;
+      this.rr(base*0.35,bob-base*0.75,base*0.82,base*1.28,8);
+      ctx.stroke();
+    }
+    if(g.flash>0){
+      ctx.globalAlpha=g.flash*0.62;
+      ctx.fillStyle='#fff';
+      ctx.beginPath();
+      ctx.arc(0,bob,base*1.1,0,TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  const oldDrawEliteTelegraphs=Game.prototype.drawEliteTelegraphs;
+  Game.prototype.drawEliteTelegraphs=function(){
+    if(this.run&&this.run.endless&&this.run.stage&&this.run.stage.boss) return;
+    return oldDrawEliteTelegraphs.apply(this,arguments);
+  };
+
+  Game.prototype.drawEndlessHUD=function(){
+    return;
+  };
+
+  const oldMakeBasket=Game.prototype.makeBasket;
+  Game.prototype.makeBasket=function(){
+    const beforeRun=this.run,beforeMakes=beforeRun?beforeRun.makes:0;
+    const r=oldMakeBasket.apply(this,arguments);
+    const run=this.run;
+    if(run&&run===beforeRun&&run.endless&&run.makes>beforeMakes&&!(run.stage&&run.stage.boss)) this._endlessAddProgress(12);
+    return r;
+  };
+
+  const oldKillGuard=Game.prototype.killGuard;
+  Game.prototype.killGuard=function(g){
+    const wasDead=!!(g&&g.dead);
+    const r=oldKillGuard.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&g&&!wasDead&&g.dead&&!g.sandbag&&!(run.stage&&run.stage.boss)) this._endlessAddProgress(g.elite?18:10);
+    return r;
+  };
+
+  const oldUpdateBattle=Game.prototype.updateBattle;
+  Game.prototype.updateBattle=function(dt){
+    const r=oldUpdateBattle.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&run.stage&&run.stage.boss&&!run.modal&&!run._stageClearing){
+      run.endlessBossActive=true;
+      run.endlessBossTime=Math.max(0,(run.endlessBossTime==null?run.endlessBossTimeMax||180:run.endlessBossTime)-dt);
+      if(run.endlessBossTime<=0&&!run.endlessTimedOut){
+        run.endlessTimedOut=true;
+        this.floater(BW/2,BH*0.26,'限時獎勵失效','#ff6a4a',32,{crit:true,t:1.2});
+        this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      }
+    }
+    return r;
+  };
+
+  const oldOnStageClear=Game.prototype.onStageClear;
+  Game.prototype.onStageClear=function(){
+    const run=this.run;
+    if(run&&run.endless){
+      if(run._stageClearing) return;
+      if(run.stage&&run.stage.boss&&run.spawned<run.guardsTotal) return oldOnStageClear.apply(this,arguments);
+      if(run.stage&&!run.stage.boss) return this._endlessSummonBoss();
+      if(run.stage&&run.stage.boss){
+        run._stageClearing=true;
+        run.endlessBosses=(run.endlessBosses||0)+1;
+        run.banner={text:'Boss 擊破',sub:run.endlessTimedOut?'獲得基本獎勵':'限時擊破 · 高階升級機會',t:2.2};
+        setTimeout(()=>{ if(this.run===run){ run._stageClearing=false; this.finishRun(true); } },780);
+        return;
+      }
+    }
+    return oldOnStageClear.apply(this,arguments);
+  };
+
+  const oldFinishRun=Game.prototype.finishRun;
+  Game.prototype.finishRun=function(won){
+    if(this.run&&this.run.endless) return this.finishEndlessRun(won);
+    return oldFinishRun.apply(this,arguments);
+  };
+
+  const oldDrawHUD=Game.prototype.drawHUD;
+  Game.prototype.drawHUD=function(){
+    const r=oldDrawHUD.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&!run.speed){
+      const IT=this.insT||0;
+      const ctx=this.ctx;
+      const sw=Math.min(720,Math.max(620,BW*0.38)),sx=BW/2-sw/2,syy=IT+18,sh=128;
+      this.panel(sx,syy,sw,sh,{r:16,c0:'rgba(18,12,8,0.9)',c1:'rgba(6,5,7,0.94)'});
+      const boss=!!(run.stage&&run.stage.boss);
+      const waves=boss?(run.stage.waves||3):1;
+      const curW=boss?Math.min((run.bossWave||0)+1,waves):1;
+      const total=run.guardsTotal||0;
+      const rem=(run.guards?run.guards.length:0)+Math.max(0,total-(run.spawned||0));
+      const stageName=(run.stage&&run.stage.name)||'深淵裂隙';
+      const max=boss?(run.endlessBossTimeMax||180):(run.endlessProgressMax||100);
+      const val=boss?(run.endlessBossTime||0):(run.endlessProgress||0);
+      const ratio=boss?clamp(val/max,0,1):clamp(val/max,0,1);
+      const stat=boss?mmss(val):(Math.round(val)+'/'+max);
+      const mode=boss?'Boss 限時':'深淵進度';
+      const sub=boss?('第 '+curW+'/'+waves+' 波 · 剩餘護衛 '+rem+'/'+total):('剩餘護衛 '+rem+'/'+total);
+      this.text('第 '+(run.endlessDepth||1)+' 層',sx+34,syy+32,34,'#d8ff44',{baseline:'middle',weight:'900',glow:8});
+      this.text('無盡深淵',sx+sw-34,syy+31,22,'#ffe7a6',{align:'right',baseline:'middle',weight:'900'});
+      this.text(this._clip(stageName,sw-84,33,'900'),BW/2,syy+66,33,boss?'#ff6a4a':'#ece0c4',{align:'center',baseline:'middle',weight:'900',glow:boss?8:0});
+      this.text(sub,sx+32,syy+92,19,'#e6c068',{baseline:'middle',weight:'800'});
+      this.text(mode+' '+stat,sx+sw-32,syy+92,19,boss?'#ffcf69':'#d8ff44',{align:'right',baseline:'middle',weight:'900'});
+      const bx=sx+32,by=syy+107,bw=sw-64,bh=14;
+      this.rr(bx,by,bw,bh,7);
+      ctx.fillStyle='rgba(0,0,0,0.55)';
+      ctx.fill();
+      if(ratio>0){
+        this.rr(bx,by,bw*ratio,bh,7);
+        const fg=ctx.createLinearGradient(bx,by,bx+bw,by);
+        fg.addColorStop(0,boss?'#ff5c37':'#9fe024');
+        fg.addColorStop(1,boss?'#ffe14d':'#d8ff44');
+        ctx.fillStyle=fg;
+        ctx.fill();
+      }
+      ctx.lineWidth=1.4;
+      ctx.strokeStyle='rgba(255,231,166,0.42)';
+      this.rr(bx,by,bw,bh,7);
+      ctx.stroke();
+    }
+    return r;
+  };
+
+  const oldDrawBattle=Game.prototype.drawBattle;
+  Game.prototype.drawBattle=function(){
+    return oldDrawBattle.apply(this,arguments);
+  };
+})();
+
+// === final activation v10: endless depth biomes and loop, active after Game definition ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ENDLESS_BIOMES=[
+    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.svg',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
+    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.svg',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
+    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.svg',guards:['frost','eye','bat','zombie'],count:17,waves:4},
+    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.svg',guards:['drummer','chain','eye','frost'],count:19,waves:4},
+    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.svg',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
+  ];
+  const ENDLESS_BOSSES=[
+    {depth:5,name:'罰球線執刑官',guards:['chain','bat','zombie'],count:20,waves:3,tag:'節奏門檻'},
+    {depth:10,name:'破框縫合師',guards:['shield','chain','drummer'],count:24,waves:4,tag:'護盾擋拆'},
+    {depth:15,name:'冷焰記分官',guards:['frost','eye','bat'],count:26,waves:4,tag:'冰霧短軌'},
+    {depth:20,name:'雷骨播報王',guards:['drummer','chain','eye','frost'],count:28,waves:4,tag:'規則亂流'},
+    {depth:25,name:'深淵籃君',guards:['shield','drummer','frost','eye','chain'],count:32,waves:5,tag:'終焉混成'}
+  ];
+  const DEEP_AFFIXES=['冷焰','戰鼓','鎖框','鏡框','貪分','深淵冠冕'];
+  const cloneStage=(stage,extra)=>{
+    const out=Object.assign({},stage||{},extra||{});
+    out.guards=Array.isArray(out.guards)?out.guards.slice():['chain','bat'];
+    return out;
+  };
+
+  Game.prototype._endlessBiome=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    return ENDLESS_BIOMES.find(b=>depth>=b.min&&depth<=b.max)||ENDLESS_BIOMES[0];
+  };
+
+  Game.prototype._endlessBossDef=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    const fixed=ENDLESS_BOSSES.find(b=>b.depth===depth);
+    if(fixed) return fixed;
+    if(depth>25){
+      const base=ENDLESS_BOSSES[Math.floor((depth-26)/5)%ENDLESS_BOSSES.length];
+      const aff=DEEP_AFFIXES[Math.floor(depth/5)%DEEP_AFFIXES.length];
+      const extra=Math.min(20,Math.floor((depth-21)/2));
+      return Object.assign({},base,{name:base.name+' · '+aff,count:base.count+extra,waves:Math.min(6,base.waves+1),tag:aff});
+    }
+    return {depth,name:'深淵守衛',guards:null,count:null,waves:null,tag:'層間試煉'};
+  };
+
+  Game.prototype._endlessPath=function(){
+    const run=this.run||{};
+    const depth=Math.max(1,run.endlessDepth||1);
+    const biome=this._endlessBiome(depth);
+    const bossDef=this._endlessBossDef(depth);
+    const scale=1+Math.min(1.35,(depth-1)*0.055);
+    const base=(typeof STAGES!=='undefined'&&STAGES[1]&&STAGES[1][0])||{};
+    const bossSrc=(typeof STAGES!=='undefined'&&STAGES[1]&&(STAGES[1][4]||STAGES[1][0]))||base;
+    const normal=cloneStage(base,{
+      name:biome.name+' · 第 '+depth+' 層',
+      host:'深淵記分員',
+      body:'shade',
+      guards:biome.guards,
+      count:Math.round((biome.count||12)*scale),
+      boss:false,
+      tier:2+Math.min(4,Math.floor(depth/5)),
+      tut:false
+    });
+    const isMilestone=depth%5===0||depth>25;
+    const boss=cloneStage(bossSrc,{
+      name:(isMilestone?bossDef.name:('深淵守衛 · '+biome.name)),
+      host:(isMilestone?bossDef.name:'深淵守衛'),
+      body:'worldking',
+      guards:bossDef.guards||biome.guards,
+      count:Math.round((bossDef.count||biome.count||18)*scale),
+      boss:true,
+      waves:bossDef.waves||biome.waves||3,
+      tier:3+Math.min(5,Math.floor(depth/5)),
+      endlessTag:bossDef.tag||biome.name,
+      endlessMilestone:isMilestone
+    });
+    return [normal,boss];
+  };
+
+  const prevPrimeEndless=Game.prototype._primeEndlessRun;
+  Game.prototype._primeEndlessRun=function(run){
+    prevPrimeEndless&&prevPrimeEndless.call(this,run);
+    if(!run||!run.endless) return;
+    const biome=this._endlessBiome(run.endlessDepth||1);
+    run.endlessBiome=biome.id;
+    run.endlessBiomeName=biome.name;
+    run.endlessProgressMax=100+Math.min(80,Math.floor(((run.endlessDepth||1)-1)/2)*10);
+  };
+
+  const prevEnsureBattleBg=Game.prototype._ensureBattleBg;
+  Game.prototype._ensureBattleBg=function(act){
+    if(this.run&&this.run.endless){
+      const biome=this._endlessBiome(this.run.endlessDepth||1);
+      return this._endlessImg('bg_'+biome.id,biome.bg);
+    }
+    return prevEnsureBattleBg.call(this,act);
+  };
+
+  Game.prototype._endlessAdvanceDepth=function(){
+    const run=this.run;
+    if(!run||!run.endless||run._stageClearing) return;
+    run._stageClearing=true;
+    const depth=run.endlessDepth||1;
+    const fastClear=!run.endlessTimedOut;
+    const jump=(fastClear&&depth%5===0)?2:1;
+    const nextDepth=depth+jump;
+    run.endlessBosses=(run.endlessBosses||0)+1;
+    if(this.save&&!this.save.admin){
+      this.save.endless=true;
+      this.save.endlessBest=Math.max(this.save.endlessBest||0,nextDepth);
+      persist(this.save);
+    }
+    run.banner={text:fastClear?'深淵突破':'深淵推進',sub:'進入第 '+nextDepth+' 層'+(jump>1?' · 限時擊破跳層':''),t:2.1};
+    setTimeout(()=>{
+      if(this.run!==run) return;
+      run._stageClearing=false;
+      run.endlessDepth=nextDepth;
+      run.endlessProgress=0;
+      run.endlessTimedOut=false;
+      run.endlessBossActive=false;
+      run.endlessBossTimeMax=Math.max(90,180-Math.min(70,Math.floor((nextDepth-1)/5)*12));
+      run.endlessBossTime=run.endlessBossTimeMax;
+      run.path=this._endlessPath();
+      this._primeEndlessRun(run);
+      this.enterStage(0);
+      this._primeEndlessRun(this.run);
+      if(this.run) this.run.banner={text:this.run.endlessBiomeName||'無盡深淵',sub:'第 '+nextDepth+' 層 · 集滿進度召喚 Boss',t:2.2};
+    },820);
+  };
+
+  const prevStageClear=Game.prototype.onStageClear;
+  Game.prototype.onStageClear=function(){
+    const run=this.run;
+    if(run&&run.endless){
+      if(run._stageClearing) return;
+      if(run.stage&&!run.stage.boss) return this._endlessSummonBoss();
+      if(run.stage&&run.stage.boss){
+        if(run.spawned<run.guardsTotal) return prevStageClear.apply(this,arguments);
+        return this._endlessAdvanceDepth();
+      }
+    }
+    return prevStageClear.apply(this,arguments);
+  };
+})();
+
+// === final activation v12: endless stage banners do not inherit act names, active ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const prevEnterStage=Game.prototype.enterStage;
+  Game.prototype.enterStage=function(pi){
+    const out=prevEnterStage.apply(this,arguments);
+    const run=this.run;
+    if(run&&run.endless&&run.stage){
+      this._primeEndlessRun&&this._primeEndlessRun(run);
+      const depth=run.endlessDepth||1;
+      const biome=run.endlessBiomeName||'無盡深淵';
+      if(run.stage.boss){
+        run.banner={text:run.stage.name,sub:'第 '+depth+' 層 · '+(run.stage.endlessTag||'Boss 降臨'),t:2.2};
+      }else{
+        run.banner={text:biome,sub:'第 '+depth+' 層 · 集滿進度召喚 Boss',t:2.2};
+      }
+    }
+    return out;
+  };
+})();
+
+// === final activation v14: active endless sprites, affixes, and dual leaderboards ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const MIN_DAILY_SHOTS=10;
+  const E={
+    crack_runner:{n:'裂縫跑位者',s:'/assets/endless/enemies/crack_runner.svg',c:'#9fe024',z:1.18},
+    screen_idol:{n:'擋拆石像',s:'/assets/endless/enemies/screen_idol.svg',c:'#d7a945',z:1.34},
+    iron_whistle:{n:'鐵哨裁判',s:'/assets/endless/enemies/iron_whistle.svg',c:'#ffe14d',z:1.12},
+    oil_monk:{n:'黏油球僧',s:'/assets/endless/enemies/oil_monk.svg',c:'#6fbe30',z:1.24},
+    mist_librarian:{n:'霧線司書',s:'/assets/endless/enemies/mist_librarian.svg',c:'#b980ff',z:1.18},
+    cold_rim_guard:{n:'寒框守衛',s:'/assets/endless/enemies/cold_rim_guard.svg',c:'#6fd8ff',z:1.25},
+    war_drum_leader:{n:'戰鼓看台長',s:'/assets/endless/enemies/war_drum_leader.svg',c:'#ffb34d',z:1.25},
+    shattered_board_collector:{n:'碎板收債人',s:'/assets/endless/enemies/shattered_board_collector.svg',c:'#d8ff44',z:1.20}
+  };
+  const EM={
+    rift:{chain:'crack_runner',bat:'mist_librarian',zombie:'oil_monk',drummer:'war_drum_leader',shield:'screen_idol',eye:'iron_whistle',frost:'cold_rim_guard'},
+    iron:{shield:'screen_idol',chain:'iron_whistle',drummer:'war_drum_leader',zombie:'oil_monk',bat:'crack_runner',eye:'shattered_board_collector',frost:'cold_rim_guard'},
+    cold:{frost:'cold_rim_guard',eye:'mist_librarian',bat:'mist_librarian',zombie:'oil_monk',chain:'crack_runner',shield:'screen_idol',drummer:'war_drum_leader'},
+    thunder:{drummer:'war_drum_leader',chain:'shattered_board_collector',eye:'iron_whistle',frost:'cold_rim_guard',shield:'screen_idol',zombie:'oil_monk',bat:'mist_librarian'},
+    finale:{shield:'screen_idol',chain:'crack_runner',drummer:'war_drum_leader',frost:'cold_rim_guard',eye:'shattered_board_collector',zombie:'oil_monk',bat:'mist_librarian'}
+  };
+  const AF=[
+    ['crown','深淵冠冕','冠','#ffe14d'],
+    ['mirror','鏡框','鏡','#8fe8ff'],
+    ['countdown','倒數','倒','#ff6a4a'],
+    ['lockrim','鎖框','鎖','#d8ff44'],
+    ['greed','貪分','貪','#c89bff']
+  ];
+  const BS=[
+    [5,'free_throw_executioner','/assets/endless/bosses/free_throw_executioner.svg'],
+    [10,'broken_rim_stitcher','/assets/endless/bosses/broken_rim_stitcher.svg'],
+    [15,'coldflame_scorekeeper','/assets/endless/bosses/coldflame_scorekeeper.svg'],
+    [20,'thunderbone_announcer','/assets/endless/bosses/thunderbone_announcer.svg'],
+    [9999,'abyss_hoop_lord','/assets/endless/bosses/abyss_hoop_lord.svg']
+  ];
+  const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
+  const copy=v=>{ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} };
+  const p100=n=>Math.max(0,Math.min(100,Math.round((Number(n)||0)*100)));
+  const resetCountdown=()=>{
+    const now=new Date(), next=new Date(now);
+    next.setHours(24,0,0,0);
+    const t=Math.floor(Math.max(0,next-now)/1000);
+    return pad2(t/3600)+':'+pad2((t%3600)/60)+':'+pad2(t%60);
+  };
+  const snapSave=row=>{
+    const p=row&&row.profile_json;
+    return p&&typeof p==='object'?(p.save&&typeof p.save==='object'?p.save:p):{};
+  };
+  const snapProfile=row=>{
+    const p=row&&row.profile_json;
+    return p&&typeof p==='object'&&p.profile&&typeof p.profile==='object'?p.profile:{};
+  };
+  const profileDay=(profile,key)=>{
+    const out={shots:0,makes:0,swishes:0,banks:0,luckies:0};
+    const hd=profile&&profile.heroDay;
+    if(!hd||hd.key!==key||!hd.stats) return out;
+    for(const id of Object.keys(hd.stats)){
+      const d=hd.stats[id]||{};
+      out.shots+=Math.max(0,Number(d.shots)||0);
+      out.makes+=Math.max(0,Number(d.makes)||0);
+      out.swishes+=Math.max(0,Number(d.swishes)||0);
+      out.banks+=Math.max(0,Number(d.banks)||0);
+      out.luckies+=Math.max(0,Number(d.luckies)||0);
+    }
+    out.makes=Math.min(out.makes,out.shots);
+    return out;
+  };
+
+  const oldTotals=Game.prototype._playerDayTotals;
+  Game.prototype._playerDayTotals=function(){
+    const base=oldTotals?oldTotals.call(this):{key:this._dayKey?this._dayKey():'',shots:0,makes:0};
+    const out={key:base.key,shots:base.shots||0,makes:base.makes||0,swishes:0,banks:0,luckies:0};
+    const p=this._loadProfile&&this._loadProfile();
+    if(!p||!p.heroDay||p.heroDay.key!==out.key) return out;
+    const stats=p.heroDay.stats||{};
+    for(const id of Object.keys(stats)){
+      const d=stats[id]||{};
+      out.swishes+=Math.max(0,Number(d.swishes)||0);
+      out.banks+=Math.max(0,Number(d.banks)||0);
+      out.luckies+=Math.max(0,Number(d.luckies)||0);
+    }
+    return out;
+  };
+
+  const oldRecord=Game.prototype._recordShot;
+  Game.prototype._recordShot=function(id,made,type){
+    const before=this._playerDayTotals?this._playerDayTotals():null;
+    const ret=oldRecord?oldRecord.apply(this,arguments):undefined;
+    if(!this.save||this.save.admin||!made) return ret;
+    const after=this._playerDayTotals?this._playerDayTotals():null;
+    if(!before||!after||after.shots===before.shots) return ret;
+    const d=this._heroDay&&this._heroDay(id);
+    if(d){
+      if(type==='swish') d.swishes=(d.swishes||0)+1;
+      else if(type==='bank') d.banks=(d.banks||0)+1;
+      else if(type==='lucky') d.luckies=(d.luckies||0)+1;
+    }
+    if(type==='lucky'&&this._heroProg){
+      const h=this._heroProg(id);
+      h.luckies=(h.luckies||0)+1;
+    }
+    this._saveProfile&&this._saveProfile();
+    this._syncLeaderboardStats&&this._syncLeaderboardStats(false);
+    return ret;
+  };
+
+  const oldSubset=Game.prototype._progressSaveSubset;
+  Game.prototype._progressSaveSubset=function(){
+    const out=oldSubset?oldSubset.call(this):{};
+    const s=this.save||{};
+    for(const k of ['endlessBestScore','endlessBestBosses','endlessBestKills','endlessBestCombo']) out[k]=copy(s[k]);
+    return out;
+  };
+
+  const oldApply=Game.prototype._applyCloudProgressSnapshot;
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    let changed=oldApply?!!oldApply.call(this,remote):false;
+    const rs=remote&&remote.save&&typeof remote.save==='object'?remote.save:null;
+    if(rs&&this.save){
+      for(const k of ['endlessBestScore','endlessBestBosses','endlessBestKills','endlessBestCombo']){
+        if(rs[k]!=null){
+          const nv=Math.max(Number(this.save[k])||0,Number(rs[k])||0);
+          if(nv!==(Number(this.save[k])||0)){ this.save[k]=nv; changed=true; }
+        }
+      }
+      if(changed) persist(this.save);
+    }
+    return changed;
+  };
+
+  Game.prototype._leaderboardLocalRow=function(){
+    const t=this._playerDayTotals?this._playerDayTotals():{key:this._dayKey&&this._dayKey(),shots:0,makes:0};
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()||'本機玩家');
+    return {player_name:name,today_key:t.key,today_shots:t.shots,today_makes:t.makes,today_swishes:t.swishes||0,today_banks:t.banks||0,today_luckies:t.luckies||0,profile_json:this._progressSnapshot?this._progressSnapshot():null,_local:true};
+  };
+
+  Game.prototype._normalLeaderboardRow=function(row){
+    if(!row) return null;
+    const name=String(row.player_name||row.name||'').trim();
+    if(!name) return null;
+    const day=profileDay(snapProfile(row),this._dayKey?this._dayKey():'');
+    const shots=Math.max(0,Number(row.today_shots!=null?row.today_shots:row.shots)||day.shots||0);
+    const makes=clamp(Number(row.today_makes!=null?row.today_makes:row.makes)||day.makes||0,0,shots);
+    const swishes=Math.max(0,Number(row.today_swishes)||day.swishes||0);
+    const banks=Math.max(0,Number(row.today_banks)||day.banks||0);
+    const luckies=Math.max(0,Number(row.today_luckies)||day.luckies||0);
+    return {name,shots,makes,swishes,banks,luckies,local:!!row._local,qualified:shots>=MIN_DAILY_SHOTS,acc:shots?makes/shots:0,score:this._fairAccScore?this._fairAccScore(makes,shots):(shots?makes/shots:0),updated:row.last_login_at||row.profile_updated_at||''};
+  };
+
+  Game.prototype._leaderboardRows=function(){
+    const rows=[], add=row=>{
+      const r=this._normalLeaderboardRow(row);
+      if(!r) return;
+      const key=r.name.toLowerCase();
+      const i=rows.findIndex(x=>x.name.toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const c=rows[i];
+        if(r.local||r.shots>c.shots||(r.shots===c.shots&&r.makes>c.makes)) rows[i]=Object.assign(c,r,{local:c.local||r.local});
+      }
+    };
+    for(const r of (Array.isArray(this._leaderboardCache)?this._leaderboardCache:[])) add(r);
+    add(this._leaderboardLocalRow());
+    rows.sort((a,b)=>a.qualified!==b.qualified?(a.qualified?-1:1):(b.score-a.score)||(b.makes-a.makes)||(b.swishes-a.swishes)||(b.luckies-a.luckies)||(b.shots-a.shots)||a.name.localeCompare(b.name,'zh-Hant'));
+    let rank=1;
+    for(const r of rows) r.rank=r.qualified?rank++:'觀察';
+    return rows.slice(0,50);
+  };
+
+  Game.prototype._endlessLeaderboardRows=function(){
+    const rows=[], add=row=>{
+      if(!row) return;
+      const name=String(row.player_name||row.name||'').trim();
+      if(!name) return;
+      const s=snapSave(row);
+      const depth=Math.max(0,Number(row.endless_best)||Number(s.endlessBest)||0);
+      if(depth<=0&&!row._local) return;
+      const r={name,depth,score:Math.max(0,Number(row.endless_best_score)||Number(s.endlessBestScore)||Number(s.stats&&s.stats.bestScore)||0),bosses:Math.max(0,Number(row.endless_best_bosses)||Number(s.endlessBestBosses)||0),kills:Math.max(0,Number(s.endlessBestKills)||0),combo:Math.max(0,Number(s.endlessBestCombo)||Number(s.stats&&s.stats.bestCombo)||0),local:!!row._local,updated:row.last_login_at||row.profile_updated_at||''};
+      const key=name.toLowerCase();
+      const i=rows.findIndex(x=>x.name.toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const c=rows[i];
+        if(r.local||r.depth>c.depth||(r.depth===c.depth&&r.score>c.score)) rows[i]=Object.assign(c,r,{local:c.local||r.local});
+      }
+    };
+    for(const r of (Array.isArray(this._leaderboardCache)?this._leaderboardCache:[])) add(r);
+    const L=this.save&&this.save.login?this.save.login:{};
+    add({player_name:String((L.name||'').trim()||'本機玩家'),_local:true,profile_json:this._progressSnapshot?this._progressSnapshot():{save:this.save||{}}});
+    rows.sort((a,b)=>(b.depth-a.depth)||(b.score-a.score)||(b.bosses-a.bosses)||a.name.localeCompare(b.name,'zh-Hant'));
+    let rank=1;
+    for(const r of rows) r.rank=r.depth>0?rank++:'觀察';
+    return rows.slice(0,50);
+  };
+
+  Game.prototype._openLeaderboard=function(mode){
+    this._leaderboardMode=mode==='endless'?'endless':'daily';
+    this._leaderboardOpen=true;
+    this._leaderboardLoading=true;
+    this._leaderboardStatus='載入雲端排行榜...';
+    this._syncLeaderboardStats&&this._syncLeaderboardStats(true);
+    this._fetchLeaderboard&&this._fetchLeaderboard();
+    this.render&&this.render();
+  };
+
+  Game.prototype._syncLeaderboardNow=async function(){
+    const L=this.save&&this.save.login?this.save.login:{};
+    const name=String((L.name||'').trim()), code=String((L.code||'').trim());
+    if(!name||!this._writeCloudAccount) return false;
+    const t=this._playerDayTotals?this._playerDayTotals():{key:this._dayKey&&this._dayKey(),shots:0,makes:0};
+    const snap=this._progressSnapshot?this._progressSnapshot():null;
+    await this._writeCloudAccount(name,code,{today_key:t.key,today_shots:t.shots,today_makes:t.makes,profile_json:snap,profile_updated_at:snap&&snap.updatedAt});
+    return true;
+  };
+
+  Game.prototype._fetchLeaderboard=async function(){
+    const cfg=this._supabaseCfg?this._supabaseCfg():{};
+    if(!cfg.url||!cfg.key){ this._leaderboardLoading=false; this._leaderboardStatus='目前顯示本機成績'; this.render&&this.render(); return; }
+    const base=cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts');
+    const headers={apikey:cfg.key,Authorization:'Bearer '+cfg.key};
+    try{
+      const q='?select='+encodeURIComponent('player_name,today_key,today_shots,today_makes,last_login_at,profile_json,profile_updated_at')+'&order=last_login_at.desc&limit=150';
+      const res=await fetch(base+q,{headers});
+      if(!res.ok) throw new Error(await res.text());
+      this._leaderboardCache=await res.json();
+      this._leaderboardStatus=(this._leaderboardCache&&this._leaderboardCache.length)?'雲端排行榜已更新':'目前沒有雲端成績';
+    }catch(e){
+      try{
+        const q='?select=player_name,today_key,today_shots,today_makes,last_login_at&today_key=eq.'+encodeURIComponent(this._dayKey&&this._dayKey())+'&order=today_shots.desc&limit=100';
+        const res=await fetch(base+q,{headers});
+        if(!res.ok) throw new Error(await res.text());
+        this._leaderboardCache=await res.json();
+        this._leaderboardStatus='雲端排行榜已更新（基本欄位）';
+      }catch(e2){
+        this._leaderboardCache=[];
+        this._leaderboardStatus='雲端排行榜讀取失敗，先顯示本機成績';
+        try{ console.warn('[HB leaderboard]',e,e2); }catch(_e){}
+      }
+    }finally{
+      this._leaderboardLoading=false;
+      this.render&&this.render();
+    }
+  };
+
+  Game.prototype._hbLeaderTab=function(x,y,w,h,label,active,cb){
+    const ctx=this.ctx;
+    this.rr(x,y,w,h,12);
+    const g=ctx.createLinearGradient(0,y,0,y+h);
+    if(active){ g.addColorStop(0,'#d8ff44'); g.addColorStop(1,'#6b9d16'); }
+    else { g.addColorStop(0,'rgba(39,28,18,0.96)'); g.addColorStop(1,'rgba(10,7,8,0.98)'); }
+    ctx.fillStyle=g; ctx.fill();
+    ctx.lineWidth=2.2; ctx.strokeStyle=active?'#ffe7a6':'rgba(215,169,69,0.44)';
+    this.rr(x,y,w,h,12); ctx.stroke();
+    this.text(label,x+w/2,y+h/2,24,active?'#111706':'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+    this.btn(x,y,w,h,'lb_tab_'+label,cb);
+  };
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx, IL=this.insL||0, IR=this.insR||0, IT=this.insT||0, IB=this.insB||0;
+    const mode=this._leaderboardMode==='endless'?'endless':'daily';
+    ctx.save(); ctx.fillStyle='rgba(3,1,7,0.94)'; ctx.fillRect(-4000,-4000,BW+8000,BH+8000); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+    const x=IL+32,y=IT+20,w=BW-IL-IR-64,h=BH-IT-IB-42;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(24,16,11,0.98)'); bg.addColorStop(0.5,'rgba(9,7,10,0.99)'); bg.addColorStop(1,'rgba(5,4,8,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.34)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+    this.text(mode==='endless'?'無盡深淵排行榜':'今日命中排行榜',x+w/2,y+52,44,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+    this.text(mode==='endless'?'依最高層數排序；同層比最佳分數，再比 Boss 擊破數':'每日重置倒數 '+resetCountdown()+' · 空心與幸運球會列入今日命中分項',x+w/2,y+91,22,mode==='endless'?'#c8b894':'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this._hbLeaderTab(x+44,y+28,150,52,'今日命中',mode==='daily',()=>{this._leaderboardMode='daily';this.render();});
+    this._hbLeaderTab(x+206,y+28,150,52,'無盡深淵',mode==='endless',()=>{this._leaderboardMode='endless';this.render();});
+    this._hbDrawLeaderButton(x+w-158,y+28,116,52,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    this._hbDrawLeaderButton(x+w-292,y+28,116,52,'刷新','leaderboard_refresh',()=>{ this._leaderboardLoading=true; this._leaderboardStatus='重新整理...'; this._fetchLeaderboard&&this._fetchLeaderboard(); this.render(); },true);
+    const tx=x+44,ty=y+134,tw=w-88,headerH=54,rowH=Math.max(72,Math.min(84,Math.floor((h-246)/7)));
+    this.rr(tx,ty,tw,headerH,12); ctx.fillStyle='rgba(215,169,69,0.13)'; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(215,169,69,0.38)'; this.rr(tx,ty,tw,headerH,12); ctx.stroke();
+    if(mode==='endless'){
+      const cols={rank:tx+72,name:tx+190,depth:tx+tw*0.56,score:tx+tw*0.72,boss:tx+tw*0.86,kills:tx+tw-70};
+      [['名次',cols.rank,1],['投手',cols.name,0],['最高層',cols.depth,1],['分數',cols.score,1],['Boss',cols.boss,1],['擊殺',cols.kills,1]].forEach(c=>this.text(c[0],c[1],ty+headerH/2,c[0]==='投手'?24:25,'#d7a945',c[2]?{align:'center',baseline:'middle',weight:'900'}:{baseline:'middle',weight:'900'}));
+      const rows=this._endlessLeaderboardRows?this._endlessLeaderboardRows():[], maxRows=Math.max(4,Math.floor((y+h-ty-headerH-72)/rowH));
+      for(let i=0;i<Math.min(rows.length,maxRows);i++){
+        const r=rows[i], ry=ty+headerH+10+i*rowH, mid=ry+(rowH-8)/2;
+        this.rr(tx,ry,tw,rowH-8,12); ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.16)'); ctx.fill();
+        ctx.lineWidth=r.local?2.2:1.2; ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)'; this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const bx=tx+18,by=ry+10,bw=110,bh=rowH-28; this.rr(bx,by,bw,bh,14); ctx.fillStyle='rgba(215,169,69,0.16)'; ctx.fill(); ctx.lineWidth=1.8; ctx.strokeStyle='rgba(255,231,166,0.48)'; this.rr(bx,by,bw,bh,14); ctx.stroke();
+        this.text(String(r.rank||'觀察'),bx+bw/2,mid,30,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+        this.text(this._clip?this._clip(name,cols.depth-cols.name-36,28,'900'):name,cols.name,mid-10,28,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(r.depth>=25?'深層循環':'第 '+(r.depth||0)+' 層',cols.name,mid+21,16,r.depth>=25?'#c89bff':'#9e9178',{baseline:'middle',weight:'800'});
+        this.text(String(r.depth||0),cols.depth,mid,32,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.score||0),cols.score,mid,27,'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.bosses||0),cols.boss,mid,27,'#e6c068',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(r.kills||0),cols.kills,mid,27,'#b8ad96',{align:'center',baseline:'middle',weight:'900'});
+      }
+      if(!rows.length) this.text('還沒有無盡紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }else{
+      const cols={rank:tx+72,name:tx+194,shot:tx+tw*0.56,special:tx+tw*0.72,acc:tx+tw*0.86,score:tx+tw-70};
+      [['名次',cols.rank],['出手 / 命中',cols.shot],['空心 / 幸運',cols.special],['命中率',cols.acc],['穩定',cols.score]].forEach(c=>this.text(c[0],c[1],ty+headerH/2,23,'#d7a945',{align:'center',baseline:'middle',weight:'900'}));
+      this.text('投手',cols.name,ty+headerH/2,24,'#d7a945',{baseline:'middle',weight:'900'});
+      const rows=this._leaderboardRows?this._leaderboardRows():[], maxRows=Math.max(4,Math.floor((y+h-ty-headerH-72)/rowH));
+      for(let i=0;i<Math.min(rows.length,maxRows);i++){
+        const r=rows[i], ry=ty+headerH+10+i*rowH, mid=ry+(rowH-8)/2, shots=Math.max(0,Number(r.shots)||0), makes=Math.max(0,Number(r.makes)||0), q=!!r.qualified, need=Math.max(0,MIN_DAILY_SHOTS-shots);
+        this.rr(tx,ry,tw,rowH-8,12); ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.16)'); ctx.fill();
+        ctx.lineWidth=r.local?2.2:1.2; ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)'; this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const bx=tx+18,by=ry+10,bw=110,bh=rowH-28; this.rr(bx,by,bw,bh,14); ctx.fillStyle=q?'rgba(215,169,69,0.16)':'rgba(159,224,36,0.15)'; ctx.fill(); ctx.lineWidth=1.8; ctx.strokeStyle=q?'rgba(255,231,166,0.48)':'rgba(159,224,36,0.58)'; this.rr(bx,by,bw,bh,14); ctx.stroke();
+        this.text(q?String(r.rank):'觀察',bx+bw/2,mid-(q?0:9),q?30:24,q?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+        if(!q) this.text('差 '+need+' 球',bx+bw/2,mid+18,15,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+        this.text(this._clip?this._clip(name,cols.shot-cols.name-36,28,'900'):name,cols.name,mid-10,28,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(q?'已入榜 · 樣本 '+shots+' 球':'未滿 '+MIN_DAILY_SHOTS+' 球先觀察',cols.name,mid+21,16,q?'#a99a7a':'#9fe024',{baseline:'middle',weight:'800'});
+        this.text(shots+' / '+makes,cols.shot,mid-5,27,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+        this.text('出手 / 命中',cols.shot,mid+22,15,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text((r.swishes||0)+' / '+(r.luckies||0),cols.special,mid-5,27,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        this.text('空心 / 幸運',cols.special,mid+22,15,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text(shots?Math.round((r.acc||0)*100)+'%':'0%',cols.acc,mid,29,q?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(p100(r.score!=null?r.score:r.acc)),cols.score,mid,28,q?'#ffe7a6':'#9e9178',{align:'center',baseline:'middle',weight:'900'});
+      }
+      if(!rows.length) this.text('今天還沒有命中紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+    this.text(this._leaderboardLoading?'載入中...':(this._leaderboardStatus||''),x+w/2,y+h-34,21,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  Game.prototype._drawFbStatCards=function(LO){
+    const U=LO.U, s=this.save||{}, t=this._playerDayTotals?this._playerDayTotals():{shots:0,makes:0,swishes:0,luckies:0};
+    const acc=t.shots?Math.round(t.makes/t.shots*100):0;
+    this._gothCard(LO.statL,U); this._statIcon('target',LO.statL.x+18*U,LO.statL.y+LO.statL.h*0.62,7*U);
+    this.text('今日命中',LO.statL.x+14*U,LO.statL.y+16*U,11*U,'#a2926e');
+    this.text(acc+'%',LO.statL.x+32*U,LO.statL.y+LO.statL.h*0.56,22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text((t.shots||0)+' / '+(t.makes||0),LO.statL.x+LO.statL.w-16*U,LO.statL.y+LO.statL.h*0.54,10*U,'#9fe024',{align:'right',baseline:'middle',weight:'800'});
+    this.text('空 '+(t.swishes||0)+'  幸 '+(t.luckies||0),LO.statL.x+LO.statL.w-16*U,LO.statL.y+LO.statL.h*0.75,9*U,'#c8b894',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›',LO.statL.x+LO.statL.w-14*U,LO.statL.y+18*U,9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statL.x,LO.statL.y,LO.statL.w,Math.max(44*U,LO.statL.h),'fb_leaderboard_daily',()=>this._openLeaderboard&&this._openLeaderboard('daily'));
+    this._gothCard(LO.statR,U); this._statIcon('crown',LO.statR.x+18*U,LO.statR.y+LO.statR.h*0.62,7*U);
+    this.text('無盡最佳',LO.statR.x+14*U,LO.statR.y+16*U,11*U,'#a2926e');
+    this.text(String(s.endlessBest|0),LO.statR.x+32*U,LO.statR.y+LO.statR.h*0.56,22*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    this.text('Boss '+(s.endlessBestBosses|0),LO.statR.x+LO.statR.w-16*U,LO.statR.y+LO.statR.h*0.54,10*U,'#e6c068',{align:'right',baseline:'middle',weight:'800'});
+    this.text('排行榜 ›',LO.statR.x+LO.statR.w-14*U,LO.statR.y+18*U,9*U,'#d7a945',{align:'right',baseline:'middle',weight:'900'});
+    this.btn(LO.statR.x,LO.statR.y,LO.statR.w,Math.max(44*U,LO.statR.h),'fb_leaderboard_endless',()=>this._openLeaderboard&&this._openLeaderboard('endless'));
+  };
+
+  const oldSpawn=Game.prototype.spawnGuard;
+  Game.prototype.spawnGuard=function(type){
+    const g=oldSpawn.apply(this,arguments), run=this.run;
+    if(!g||!run||!run.endless||g.sandbag) return g;
+    const biome=run.endlessBiome||((this._endlessBiome&&this._endlessBiome(run.endlessDepth||1).id)||'rift');
+    const id=(EM[biome]&&EM[biome][type])||(EM.rift[type])||'crack_runner', info=E[id]||E.crack_runner;
+    g.endlessEnemyId=id; g.endlessName=info.n; g.endlessSprite=info.s; g.endlessColor=info.c; g.drawScale=(g.drawScale||1)*(info.z||1);
+    const depth=Math.max(1,Number(run.endlessDepth)||1), greed=Number(run.endlessGreedStacks)||0;
+    if(greed>0){ const mul=1+Math.min(0.45,greed*0.08); g.maxhp=Math.ceil((g.maxhp||g.hp||1)*mul); g.hp=Math.ceil((g.hp||g.maxhp)*mul); }
+    if(id==='screen_idol') g.shieldUp=true;
+    if(id==='iron_whistle') g.endlessMissTax=true;
+    if(id==='cold_rim_guard') g.endlessFreezeHoop=true;
+    if(id==='shattered_board_collector') g.endlessDebt=true;
+    if(!g.endlessAffix&&Math.random()<Math.min(0.56,0.12+Math.max(0,depth-4)*0.018+(g.elite?0.22:0))){
+      const a=AF[Math.floor(Math.random()*AF.length)];
+      g.endlessAffix=a[0]; g.endlessAffixName=a[1]; g.endlessAffixShort=a[2]; g.endlessAffixColor=a[3];
+      if(a[0]==='crown'){ g.elite=true; g.maxhp=Math.ceil((g.maxhp||g.hp||1)*1.65); g.hp=Math.ceil((g.hp||g.maxhp)*1.65); g.r=(g.r||24)*1.08; }
+      else if(a[0]==='mirror') g.endlessMirror=1;
+      else if(a[0]==='countdown') g.endlessCountdown=Math.max(7,15-Math.floor(depth/5));
+      else if(a[0]==='lockrim') g.endlessLocksHoop=true;
+      else if(a[0]==='greed') g.endlessGreed=true;
+    }
+    return g;
+  };
+
+  const oldEndlessGuard=Game.prototype.drawEndlessGuard;
+  Game.prototype.drawEndlessGuard=function(g){
+    const run=this.run;
+    if(run&&run.stage&&run.stage.boss) return;
+    const info=E[(g&&g.endlessEnemyId)||'crack_runner']||E.crack_runner;
+    const im=this._endlessImg?this._endlessImg('enemy_'+((g&&g.endlessEnemyId)||'crack_runner'),info.s):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return oldEndlessGuard?oldEndlessGuard.call(this,g):undefined;
+    const ctx=this.ctx, base=g.r||28, bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4, scale=(g.drawScale||1)*(g.elite?1.08:1);
+    let H=base*3.15*scale, W=H*im.naturalWidth/im.naturalHeight;
+    const maxW=base*4.25*scale;
+    if(W>maxW){ W=maxW; H=W*im.naturalHeight/im.naturalWidth; }
+    const x=-W/2, y=bob+base*1.04-H;
+    ctx.save(); ctx.translate(g.x,g.y); ctx.globalAlpha=g.phased?0.48:1; this.shadow(0,base*0.92,base*1.1,0.25);
+    const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,base*2.6);
+    glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.22)':'rgba(155,255,50,0.18)'); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,bob-base*0.4,base*2.35,0,TAU); ctx.fill();
+    ctx.drawImage(im,x,y,W,H);
+    if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.7); ctx.drawImage(im,x,y,W,H); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; }
+    if(g.shieldUp){ ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.88)'; ctx.beginPath(); ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU); ctx.stroke(); }
+    if(g.endlessAffix){
+      const col=g.endlessAffixColor||'#ffe14d';
+      ctx.save(); ctx.translate(0,y-18); this.rr(-24,-16,48,32,10); ctx.fillStyle='rgba(9,6,5,0.88)'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=col; ctx.stroke(); this.text(g.endlessAffixShort||'菁',0,2,20,col,{align:'center',baseline:'middle',weight:'900',glow:8}); ctx.restore();
+      if(g.endlessCountdown>0) this.text(Math.ceil(g.endlessCountdown),0,y+22,18,'#ff6a4a',{align:'center',baseline:'middle',weight:'900'});
+    }
+    ctx.restore(); this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  Game.prototype._endlessBossSprite=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    const b=BS.find(x=>depth<=x[0])||BS[BS.length-1];
+    return {key:b[1],src:b[2]};
+  };
+
+  Game.prototype.drawEndlessBossArt=function(){
+    const ctx=this.ctx, run=this.run, boss=this._endlessBossSprite(run&&run.endlessDepth), im=this._endlessImg?this._endlessImg('boss_'+boss.key,boss.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const nw=im.naturalWidth,nh=im.naturalHeight; let H=BH*0.72,W=H*nw/nh; if(W>BW*0.62){ W=BW*0.62; H=W*nh/nw; }
+    const cx=BW*0.67,by=BH-18; ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,30,cx,by-H*0.48,W*0.66); glow.addColorStop(0,'rgba(160,255,48,0.22)'); glow.addColorStop(0.58,'rgba(100,255,36,0.08)'); glow.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(cx,by-H*0.45,W*0.6,H*0.52,0,0,TAU); ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.42); sh.addColorStop(0,'rgba(0,0,0,0.58)'); sh.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(cx,by-8,W*0.42,H*0.08,0,0,TAU); ctx.fill();
+    let lp=0; if(run&&run._mobLunge>0){ const tt=1-run._mobLunge/0.34; lp=Math.sin(clamp(tt,0,1)*Math.PI); } if(lp>0){ ctx.translate(cx,by); ctx.scale(1+lp*0.05,1+lp*0.05); ctx.translate(-cx-lp*54,-by); }
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run&&run._mobHitFlash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.45,run._mobHitFlash*0.65); ctx.drawImage(im,cx-W/2,by-H,W,H); }
+    ctx.restore();
+  };
+
+  const oldHurt=Game.prototype.hurtGuard;
+  Game.prototype.hurtGuard=function(g,dmg,c,primary){
+    const run=this.run;
+    if(run&&run.endless&&g&&!g.dead){
+      if(g.endlessMirror>0){ g.endlessMirror=0; g.flash=1; this.floater(g.x,g.y-(g.r||24)-24,'鏡框反彈','#8fe8ff',22,{crit:true}); this.shockFx&&this.shockFx(g.x,g.y,'#8fe8ff',220,0.34); this.audio&&this.audio.sfx&&this.audio.sfx('rim'); return; }
+      if(g.endlessFreezeHoop&&run.hoop){ run.endlessHoopFreeze=Math.max(run.endlessHoopFreeze||0,1.05); this.floater(run.hoop.x,run.hoop.y-96,'寒框鎖定','#6fd8ff',20); }
+      if(g.endlessLocksHoop&&run.hoop) run.endlessHoopLock=Math.max(run.endlessHoopLock||0,1.25);
+    }
+    return oldHurt.apply(this,arguments);
+  };
+
+  const oldKill=Game.prototype.killGuard;
+  Game.prototype.killGuard=function(g){
+    const run=this.run, dead=!!(g&&g.dead), r=oldKill.apply(this,arguments);
+    if(run&&run.endless&&g&&!dead&&g.dead&&!g.sandbag){
+      if(g.endlessAffix==='crown'&&!run.stage.boss) this._endlessAddProgress&&this._endlessAddProgress(12);
+      if(g.endlessGreed){ run.endlessGreedStacks=(run.endlessGreedStacks||0)+1; if(!run.stage.boss) this._endlessAddProgress&&this._endlessAddProgress(8); this.floater(g.x,g.y-(g.r||24)-26,'貪分 +難度','#c89bff',22,{crit:true}); }
+      if(g.endlessDebt){ run.endlessDebtShots=Math.max(run.endlessDebtShots||0,1); this.floater(g.x,g.y-(g.r||24)-26,'碎板債','#ffb34d',22); }
+    }
+    return r;
+  };
+
+  const oldEndShot=Game.prototype.endShot;
+  Game.prototype.endShot=function(scored){
+    const run=this.run, missTax=run&&run.endless&&!scored&&run.guards&&run.guards.some(g=>!g.dead&&g.endlessMissTax), debt=run&&run.endless&&!scored&&run.endlessDebtShots>0;
+    const r=oldEndShot.apply(this,arguments);
+    if(run&&run.endless&&!scored){
+      if(missTax){ this.playerHurt&&this.playerHurt(4+Math.floor((run.endlessDepth||1)/5)); this.floater(BW/2,BH*0.30,'鐵哨加罰','#ffe14d',26,{crit:true}); }
+      if(debt){ run.endlessDebtShots=Math.max(0,(run.endlessDebtShots||0)-1); this.playerHurt&&this.playerHurt(5+Math.floor((run.endlessDepth||1)/4)); this.floater(BW/2,BH*0.36,'碎板債討回','#ff6a4a',26,{crit:true}); }
+    }
+    return r;
+  };
+
+  const oldPick=Game.prototype.pickHoopPos;
+  Game.prototype.pickHoopPos=function(force){
+    const run=this.run;
+    if(run&&run.endless&&run.hoop&&(run.endlessHoopLock>0||run.endlessHoopFreeze>0)){ run.repos=0; if(run.host){ run.host.tx=run.host.x; run.host.ty=run.host.y; } run.hoop.tx=run.hoop.x; run.hoop.ty=run.hoop.y; return; }
+    return oldPick.apply(this,arguments);
+  };
+
+  const oldUpdate=Game.prototype.updateBattle;
+  Game.prototype.updateBattle=function(dt){
+    const r=oldUpdate.apply(this,arguments), run=this.run;
+    if(run&&run.endless&&!run.modal){
+      if(run.endlessHoopLock>0) run.endlessHoopLock=Math.max(0,run.endlessHoopLock-dt);
+      if(run.endlessHoopFreeze>0) run.endlessHoopFreeze=Math.max(0,run.endlessHoopFreeze-dt);
+      for(const g of (run.guards||[])){
+        if(!g||g.dead||!(g.endlessCountdown>0)) continue;
+        g.endlessCountdown-=dt;
+        if(g.endlessCountdown<=0&&!g._endlessCountdownFired){
+          g._endlessCountdownFired=true;
+          if(run.stage&&run.stage.boss) run.endlessBossTime=Math.max(0,(run.endlessBossTime||0)-8);
+          else run.endlessProgress=Math.max(0,(run.endlessProgress||0)-10);
+          this.floater(g.x,g.y-(g.r||24)-26,'倒數懲罰','#ff6a4a',22,{crit:true});
+          this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+        }
+      }
+      if(run.stage&&run.stage.boss&&run.guards&&run.guards.some(g=>!g.dead&&g.endlessEnemyId==='war_drum_leader')) run.endlessBossTime=Math.max(0,(run.endlessBossTime||0)-dt*0.18);
+    }
+    return r;
+  };
+
+  Game.prototype._recordEndlessCheckpoint=function(run){
+    if(!run||!run.endless||!this.save||this.save.admin) return;
+    const depth=Math.max(1,Number(run.endlessDepth)||1), bosses=Math.max(Number(this.save.endlessBestBosses)||0,Number(run.endlessBosses||0)+(run.stage&&run.stage.boss?1:0));
+    this.save.endless=true; this.save.endlessBest=Math.max(Number(this.save.endlessBest)||0,depth); this.save.endlessBestScore=Math.max(Number(this.save.endlessBestScore)||0,Number(run.score)||0); this.save.endlessBestKills=Math.max(Number(this.save.endlessBestKills)||0,Number(run.kills)||0); this.save.endlessBestCombo=Math.max(Number(this.save.endlessBestCombo)||0,Number(run.bestCombo)||0); this.save.endlessBestBosses=bosses;
+    persist(this.save); this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(false);
+  };
+
+  const oldAdvance=Game.prototype._endlessAdvanceDepth;
+  Game.prototype._endlessAdvanceDepth=function(){ if(this.run&&this.run.endless) this._recordEndlessCheckpoint(this.run); return oldAdvance.apply(this,arguments); };
+  const oldFinishEndless=Game.prototype.finishEndlessRun;
+  Game.prototype.finishEndlessRun=function(won){ if(this.run&&this.run.endless) this._recordEndlessCheckpoint(this.run); return oldFinishEndless.apply(this,arguments); };
 })();
