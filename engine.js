@@ -17,7 +17,21 @@ function resetLocalDataIfRequested(){
     return true;
   }catch(e){ return false; }
 }
-function start(canvas, root){ const didReset=resetLocalDataIfRequested(); const G=new Game(canvas,root); G.boot(); try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){} if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} } return G; }
+function start(canvas, root){
+  const didReset=resetLocalDataIfRequested();
+  const G=new Game(canvas,root);
+  G.boot();
+  try{
+    const ready=G._bootPreloadAllAssets?G._bootPreloadAllAssets():null;
+    G._initialPreloadReady=ready&&typeof ready.then==='function'?ready:Promise.resolve(true);
+  }catch(e){
+    try{ console.warn('[HB initial preload]',e); }catch(_e){}
+    G._initialPreloadReady=Promise.resolve(false);
+  }
+  try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){}
+  if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} }
+  return G;
+}
 try{ window.HBStart = start; }catch(e){}
 
 // ---------- math / util ----------
@@ -10027,5 +10041,151 @@ Object.assign(Game.prototype,{
     if(Array.isArray(cache)) this._leaderboardCache=cache.filter(r=>!isClearedRow(r));
     try{ return oldEndlessRows?oldEndlessRows.apply(this,arguments):[]; }
     finally{ this._leaderboardCache=cache; }
+  };
+})();
+
+// === final activation v20: preload all runtime image assets before entry ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const uniq=list=>{
+    const seen={}, out=[];
+    for(const src of list||[]){
+      const s=String(src||'').trim();
+      if(!s||seen[s]) continue;
+      seen[s]=1; out.push(s);
+    }
+    return out;
+  };
+  const seq=(a,b,fn)=>{ const out=[]; for(let i=a;i<=b;i++) out.push(fn(i)); return out; };
+  const mobCounts={1:10,2:12,3:18,4:15,5:22};
+  const mobStageAssets=()=>{
+    const out=[];
+    for(let stage=1;stage<=5;stage++){
+      out.push('/assets/mob/stage'+stage+'/group.webp');
+      for(let i=0;i<mobCounts[stage];i++) out.push('/assets/mob/stage'+stage+'/m'+i+'.webp');
+    }
+    return out;
+  };
+  const mobActGroupAssets=()=>{
+    const out=[];
+    for(let act=2;act<=5;act++) for(let stage=1;stage<=5;stage++) out.push('/assets/mob/act'+act+'/stage'+stage+'/group.webp');
+    return out;
+  };
+  const relicNames=['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png'];
+  const endlessEnemyNames=['crack_runner','screen_idol','iron_whistle','oil_monk','mist_librarian','cold_rim_guard','war_drum_leader','shattered_board_collector'];
+  const endlessBossNames=['free_throw_executioner','broken_rim_stitcher','coldflame_scorekeeper','thunderbone_announcer','abyss_hoop_lord'];
+  const runtimeImagesBase=[
+    '/assets/ui/loading_splash_hoopbreaker.png',
+    '/assets/ui/loading_splash_hoopbreaker.png?v=20260628_loading_splash_v1',
+    '/assets/ui/login_panel_user.png',
+    '/assets/ui/login_panel_user_trans.png',
+    '/assets/atlas_base_clean_no_nodes_1704x786.webp',
+    '/assets/background/home_bg_dark_1704x786.webp',
+    '/assets/background/home_scene_flat_1704x786.webp',
+    '/assets/final_bench_menu/final_bench_menu_full_flat_1704x786.webp',
+    '/assets/hero_select/bg_clean.webp',
+    '/assets/hero_select/sel_btn.webp',
+    '/assets/host_guide/bean_demon_minimal_transparent_512.png',
+    '/assets/host_guide/codex_bg_flat.webp',
+    '/assets/character/hero_shadow_shooter.png',
+    '/assets/decor/basketball_hoop_cluster.png',
+    '/assets/decor/graffiti_dunk_or_die.png',
+    '/assets/decor/skull_crowd_left.png',
+    '/assets/decor/skull_crowd_right.png',
+    '/assets/effects/flame_center.png',
+    '/assets/logo/logo_english_purple.png',
+    '/assets/logo/logo_zh_lime.png',
+    '/assets/endless/endless_cracked_court.png',
+    '/assets/endless/bg_iron_cage_stands.png',
+    '/assets/endless/bg_coldflame_zone.png',
+    '/assets/endless/bg_thunderbone_dome.png',
+    '/assets/endless/bg_final_abyss_cathedral.png',
+    '/assets/endless/boss_hoop_guardian.png',
+    '/hero_shade.png','/hero_axer.png','/hero_elem.png','/hero_bone.png','/hero_archer.png','/hero_beast.png','/hero_whistle.png',
+    '/hub_group.png','/icon-180.png','/icon-192.png','/icon-512.png'
+  ]
+    .concat(seq(1,5,i=>'/assets/battle/act'+i+'_bg.webp'))
+    .concat(seq(1,5,i=>'/assets/stage'+i+'_route_base_1704x786.webp'))
+    .concat(seq(1,5,i=>'/assets/mob/speed/act'+i+'.webp'))
+    .concat(mobStageAssets())
+    .concat(mobActGroupAssets())
+    .concat(endlessEnemyNames.map(n=>'/assets/endless/enemies/'+n+'.png'))
+    .concat(endlessBossNames.map(n=>'/assets/endless/bosses/'+n+'.png'));
+
+  Game.prototype._hbFullPreloadImages=function(){
+    const relics=relicNames.map(name=>this._hbRelicUiUrl?this._hbRelicUiUrl(name):('/assets/relic_ui/'+name));
+    return uniq(runtimeImagesBase.concat(relics));
+  };
+
+  const preloadLabel=src=>{
+    if(src.includes('/relic_ui/')) return '載入聖物背包';
+    if(src.includes('/endless/')) return '載入無盡深淵';
+    if(src.includes('/mob/')) return '載入怪物圖';
+    if(src.includes('/hero_')||src.includes('/hero_select/')) return '載入英雄圖';
+    if(src.includes('/battle/')||src.includes('stage')||src.includes('atlas')||src.includes('/background/')||src.includes('/final_bench_menu/')||src.includes('/host_guide/')) return '載入場景圖';
+    return '載入介面圖';
+  };
+
+  Game.prototype._preloadEntryAssets=async function(){
+    if(!this._preloadImage) return;
+    const st=this._assetLoading||{};
+    if(this._hbFullPreloadDone){
+      st.label='圖片已就緒'; st.detail='全部資源已載入'; st.progress=1;
+      this.render&&this.render();
+      return;
+    }
+    const list=this._hbFullPreloadImages?this._hbFullPreloadImages():[];
+    const total=Math.max(1,list.length);
+    let done=0, failed=0, idx=0;
+    const loadOne=async(src)=>{
+      st.label=preloadLabel(src);
+      st.detail=(done+1)+' / '+total+' · '+((src.split('/').pop()||src).split('?')[0]);
+      st.progress=Math.min(0.985,done/total);
+      this.render&&this.render();
+      let ok=false;
+      try{ ok=await this._preloadImage(src); }
+      catch(e){ try{ console.warn('[HB preload asset]',src,e); }catch(_e){} }
+      if(!ok) failed++;
+      done++;
+      st.detail=done+' / '+total+(failed?(' · 跳過 '+failed+' 張'):'');
+      st.progress=Math.min(0.995,done/total);
+      this.render&&this.render();
+    };
+    const worker=async()=>{
+      while(idx<list.length){
+        const src=list[idx++];
+        await loadOne(src);
+      }
+    };
+    await Promise.all([worker(),worker(),worker(),worker()]);
+    this._ensureLoadingSplash&&this._ensureLoadingSplash();
+    this._preloadRelicUiAssets&&this._preloadRelicUiAssets();
+    this._hbFullPreloadDone=true;
+    st.label='準備開球';
+    st.detail='已載入 '+done+' 張圖片'+(failed?('，跳過 '+failed+' 張'):'');
+    st.progress=1;
+    this.render&&this.render();
+  };
+
+  Game.prototype._bootPreloadAllAssets=async function(){
+    if(this._hbBootPreloadPromise) return this._hbBootPreloadPromise;
+    this._hbBootPreloadPromise=(async()=>{
+      if(this._hbFullPreloadDone) return true;
+      this._assetLoading={active:true,progress:0,label:'載入全部圖片',detail:'準備 Hoopbreaker'};
+      this.render&&this.render();
+      try{ await this._preloadEntryAssets(); }
+      catch(e){ try{ console.warn('[HB boot preload]',e); }catch(_e){} }
+      if(this._assetLoading){
+        this._assetLoading.progress=1;
+        this._assetLoading.label='載入完成';
+        this._assetLoading.detail='進入遊戲';
+        this.render&&this.render();
+      }
+      await new Promise(r=>setTimeout(r,160));
+      this._assetLoading=null;
+      this.render&&this.render();
+      return true;
+    })();
+    return this._hbBootPreloadPromise;
   };
 })();
