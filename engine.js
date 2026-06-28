@@ -9138,6 +9138,25 @@ Object.assign(Game.prototype,{
     const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,base*2.6);
     glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.22)':'rgba(155,255,50,0.18)'); glow.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,bob-base*0.4,base*2.35,0,TAU); ctx.fill();
+    const rimCol=g.endlessAffixColor||g.endlessColor||info.c||'#9fe024';
+    ctx.save();
+    ctx.globalAlpha=g.phased?0.28:0.52;
+    ctx.filter='brightness(0) opacity(0.95)';
+    const outline=Math.max(2.5,base*0.12);
+    ctx.drawImage(im,x-outline,y,W,H);
+    ctx.drawImage(im,x+outline,y,W,H);
+    ctx.drawImage(im,x,y-outline,W,H);
+    ctx.drawImage(im,x,y+outline,W,H);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha=g.phased?0.32:0.82;
+    ctx.shadowColor=rimCol;
+    ctx.shadowBlur=base*(g.elite?0.95:0.72);
+    ctx.drawImage(im,x,y,W,H);
+    ctx.shadowColor='rgba(255,238,166,0.72)';
+    ctx.shadowBlur=base*0.28;
+    ctx.drawImage(im,x,y,W,H);
+    ctx.restore();
     ctx.drawImage(im,x,y,W,H);
     if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.7); ctx.drawImage(im,x,y,W,H); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; }
     if(g.shieldUp){ ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.88)'; ctx.beginPath(); ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU); ctx.stroke(); }
