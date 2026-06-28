@@ -503,7 +503,7 @@ class Game{
   vibrate(ms){ if(this.save.settings.vibrate&&navigator.vibrate){ try{navigator.vibrate(ms);}catch(e){} } }
   toast(m,sub){ this._toast={m,sub,t:2.6}; }
   confirm(m,onYes){ this._confirm={m,onYes}; }
-  go(s){ this._closeLogin&&this._closeLogin(false); this._relicSheet=null; this._talSheet=null; this._bag=null; this._heroSheet=null; this._detailOpen=false; this._detailIntf=null; this._peek=null; this._peekFromChip=false; if(s==='heroes'){ this._heroView=Math.max(0,HEROES.findIndex(h=>h.id===this.save.hero)); } if(s==='hub') this._fromHome=false; this.screen=s; this._scroll=0; this.particles.length=0; this.floaters.length=0; this.audio.sfx('ui'); this.render(); }
+  go(s){ this._closeLogin&&this._closeLogin(false); this._relicSheet=null; this._talSheet=null; this._bag=null; this._heroSheet=null; this._endlessIntro=false; this._detailOpen=false; this._detailIntf=null; this._peek=null; this._peekFromChip=false; if(s==='heroes'){ this._heroView=Math.max(0,HEROES.findIndex(h=>h.id===this.save.hero)); } if(s==='hub') this._fromHome=false; this.screen=s; this._scroll=0; this.particles.length=0; this.floaters.length=0; this.audio.sfx('ui'); this.render(); }
 
   // ---- buttons ----
   btn(x,y,w,h,id,cb,opts){ this.buttons.push({x,y,w,h,id,cb,opts:opts||{}}); }
@@ -550,6 +550,7 @@ class Game{
     }
     if(this.screen!=='battle') this.drawFx();
     if(this._toast) this.drawToast();
+    if(this._endlessIntro&&this.screen==='hub') this._drawEndlessIntroPanel&&this._drawEndlessIntroPanel();
     if(this._confirm) this.drawConfirm();
     if(this._loginOpen) this.drawLoginModal(); else this._hideLoginInputs&&this._hideLoginInputs();
     if(this.save.layoutMode && this.screen==='route') this.drawLayoutBar();
@@ -4523,10 +4524,96 @@ Object.assign(Game.prototype, {
     this._fbBtn(a,'無盡模式',this._press(a),'inf',!endlessReady);
     this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_entry',()=>{
       if(!this.save.endless){ this.toast('無盡模式','標準或腐化第 5 幕通關後解鎖'); return; }
-      this.toast('無盡模式','入口已放在板凳席，下一階段接正式玩法');
+      this._toast=null; this._endlessIntro=true; this.render();
     });
     const b=LO.bR; this._fbBtn(b,'天梯榜',false,'crown',true); this.btn(b.x,b.y,b.w,Math.max(44*U,b.h),'fb_ladder_locked',()=>this.toast('天梯榜','即將開放'));
     if(LO.endless){ const e=LO.endless; this._fbBtn(e,'∞ 無盡加時 (最佳 '+(this.save.endlessBest|0)+')',this._press(e),null); this.btn(e.x,e.y,e.w,Math.max(44*U,e.h),'fb_endless',()=>this.startEndless()); }
+  },
+  _drawEndlessIntroPanel(){
+    const ctx=this.ctx,U=this._U||1;
+    ctx.save();
+    const veil=ctx.createLinearGradient(0,0,0,BH);
+    veil.addColorStop(0,'rgba(2,1,5,0.88)');
+    veil.addColorStop(0.52,'rgba(6,4,8,0.94)');
+    veil.addColorStop(1,'rgba(2,1,5,0.90)');
+    ctx.fillStyle=veil;
+    ctx.fillRect(0,0,BW,BH);
+    ctx.fillStyle='rgba(159,224,36,0.05)';
+    ctx.fillRect(0,BH*0.56,BW,BH*0.44);
+    ctx.restore();
+    this.btn(0,0,BW,BH,'endless_intro_scrim',()=>{ this._endlessIntro=false; this.render(); });
+
+    const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+    const x=IL+24*U, y=IT+18*U, w=BW-IL-IR-48*U, h=BH-IT-IB-36*U;
+    this.rr(x,y,w,h,24*U);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(22,15,10,0.88)');
+    bg.addColorStop(0.48,'rgba(8,6,10,0.82)');
+    bg.addColorStop(1,'rgba(6,4,8,0.90)');
+    ctx.fillStyle=bg;
+    ctx.fill();
+    ctx.lineWidth=3*U;
+    ctx.strokeStyle='rgba(215,169,69,0.78)';
+    this.rr(x,y,w,h,24*U);
+    ctx.stroke();
+    ctx.lineWidth=1.4*U;
+    ctx.strokeStyle='rgba(159,224,36,0.34)';
+    this.rr(x+12*U,y+12*U,w-24*U,h-24*U,18*U);
+    ctx.stroke();
+
+    const ix=x+56*U, iy=y+58*U;
+    ctx.save();
+    ctx.shadowBlur=22*U;
+    ctx.shadowColor='rgba(159,224,36,0.7)';
+    this.rr(ix-28*U,iy-28*U,56*U,56*U,16*U);
+    ctx.fillStyle='rgba(15,24,8,0.96)';
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.lineWidth=2*U;
+    ctx.strokeStyle='rgba(159,224,36,0.78)';
+    this.rr(ix-28*U,iy-28*U,56*U,56*U,16*U);
+    ctx.stroke();
+    ctx.restore();
+    this._statIcon('inf',ix,iy,15*U);
+
+    this.text('無盡深淵',x+w/2,y+50*U,36*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12*U});
+    this.text('連續推進模式 · 第一階段入口',x+w/2,y+83*U,18*U,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+
+    const rows=[
+      ['深淵進度','集滿進度，Boss 降臨'],
+      ['限時擊破','擊破 Boss，升級並跳層'],
+      ['雲端紀錄','深度、Boss 數與獎勵']
+    ];
+    const rx=x+54*U, rw=w-108*U, gap=16*U;
+    const buttonH=48*U, buttonY=y+h-66*U, statusH=38*U, statusY=buttonY-54*U;
+    const topY=y+124*U, rh=Math.max(72*U,Math.min(92*U,statusY-topY-18*U));
+    const cw=(rw-gap*2)/3;
+    for(let i=0;i<rows.length;i++){
+      const cx=rx+i*(cw+gap), ry=topY;
+      this.rr(cx,ry,cw,rh,16*U);
+      ctx.fillStyle=i%2?'rgba(255,255,255,0.035)':'rgba(159,224,36,0.06)';
+      ctx.fill();
+      ctx.lineWidth=1.2*U;
+      ctx.strokeStyle='rgba(215,169,69,0.22)';
+      this.rr(cx,ry,cw,rh,16*U);
+      ctx.stroke();
+      this.text(rows[i][0],cx+24*U,ry+26*U,20*U,'#e6c068',{baseline:'middle',weight:'900'});
+      this.text(this._clip(rows[i][1],cw-48*U,15*U,'800'),cx+24*U,ry+58*U,15*U,'#ece0c4',{baseline:'middle',weight:'800'});
+    }
+
+    const sy=statusY;
+    this.rr(rx,sy,rw,statusH,14*U);
+    ctx.fillStyle='rgba(159,224,36,0.10)';
+    ctx.fill();
+    ctx.lineWidth=1.4*U;
+    ctx.strokeStyle='rgba(159,224,36,0.42)';
+    this.rr(rx,sy,rw,statusH,14*U);
+    ctx.stroke();
+    this.text('目前狀態：入口已接上，下一階段接正式戰鬥流程',x+w/2,sy+statusH/2,17*U,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+
+    const bw=190*U,bh=buttonH,by=buttonY;
+    this.button(x+w/2-bw-22*U,by,bw,bh,'返回','endless_intro_close',()=>{ this._endlessIntro=false; this.render(); },{size:24*U});
+    this.button(x+w/2+22*U,by,bw,bh,'下一階段開放','endless_intro_next',()=>this.toast('無盡深淵','下一步接入正式戰鬥流程'),{primary:true,size:22*U,weight:'900'});
   },
   _drawFbBack(LO){ const ctx=this.ctx,U=LO.U; const r=LO.back; const pr=this._press(r);
     // hide the baked "back" button from the flat art with a soft dark halo (corner is already dark scene)
