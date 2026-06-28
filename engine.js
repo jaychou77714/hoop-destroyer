@@ -2518,11 +2518,7 @@ Object.assign(Game.prototype,{
     '/assets/endless/bosses/coldflame_scorekeeper.png',
     '/assets/endless/bosses/thunderbone_announcer.png',
     '/assets/endless/bosses/abyss_hoop_lord.png',
-    '/assets/mob/stage1/group.webp',
-    '/assets/mob/act2/stage1/group.webp',
-    '/assets/mob/act3/stage1/group.webp',
-    '/assets/mob/act4/stage1/group.webp',
-    '/assets/mob/act5/stage1/group.webp',
+    ...(()=>{ const out=[]; for(let act=1;act<=5;act++) for(let i=0;i<6;i++) out.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1'); return out; })(),
     '/assets/mob/speed/act1.webp',
     '/assets/mob/speed/act2.webp',
     '/assets/mob/speed/act3.webp',
@@ -5711,15 +5707,9 @@ Object.assign(Game.prototype, {
   },
   _ensureBattleBg(act){ this._battleBg=this._battleBg||{}; if(this._battleBg[act]===undefined){ try{ if(act>=1&&act<=5){ const im=new Image(); im.onerror=()=>{im._err=true;}; im.onload=()=>{try{if(this.screen==='battle'&&this.render)this.render();}catch(e){}}; im.src='/assets/battle/act'+act+'_bg.webp'; this._battleBg[act]=im; } else this._battleBg[act]=null; }catch(e){ this._battleBg[act]=null; } } return this._battleBg[act]; }
   ,_MOB_COUNTS:{1:10,2:12,3:18,4:15,5:22}
-  ,_ensureMobSprites(act,pi){ if(act!==1) return []; const folder=(pi|0)+1; this._mobImg=this._mobImg||{}; if(this._mobImg[folder]===undefined){ const cnt=this._MOB_COUNTS[folder]||0; const arr=[]; for(let i=0;i<cnt;i++){ try{ const im=new Image(); im.onload=()=>{try{if(this.screen==='battle'&&this.render)this.render();}catch(e){}}; im.src='/assets/mob/stage'+folder+'/m'+i+'.webp'; arr.push(im); }catch(e){} } this._mobImg[folder]=arr; } return this._mobImg[folder]; }
-  ,_mobSpriteFor(g){ const run=this.run; if(run.act!==1) return null; const pool=this._ensureMobSprites(run.act,run.pi); if(!pool.length) return null;
-    if(g._mobImg) return g._mobImg;
-    if(g._mobIdx==null) g._mobIdx=(Math.random()*pool.length)|0;
-    const good=im=>!!(im&&im.complete&&im.naturalWidth&&(im.naturalWidth/im.naturalHeight)>=0.55&&(im.naturalWidth/im.naturalHeight)<=1.9);
-    let im=pool[g._mobIdx]; if(good(im)){ g._mobImg=im; return im; }
-    if(im&&im.complete){ for(let k=1;k<=pool.length;k++){ const c=pool[(g._mobIdx+k)%pool.length]; if(good(c)){ g._mobIdx=(g._mobIdx+k)%pool.length; g._mobImg=c; return c; } } }
-    return pool.find(good)||null; }
-  ,_ensureMobGroup(){ const run=this.run; if(run.act<1||run.act>5) return null; let si=(STAGES[run.act]?STAGES[run.act].indexOf(run.stage):-1); if(si<0) si=(run.pi|0); const folder=si+1; const key=run.act+'-'+folder; const src=(run.act===1)?('/assets/mob/stage'+folder+'/group.webp'):('/assets/mob/act'+run.act+'/stage'+folder+'/group.webp'); this._mobGrp=this._mobGrp||{}; if(this._mobGrp[key]===undefined){ try{ const im=new Image(); im.onerror=()=>{im._err=true;}; im.onload=()=>{try{if(this.screen==='battle'&&this.render)this.render();}catch(e){}}; im.src=src; this._mobGrp[key]=im; }catch(e){ this._mobGrp[key]=null; } } return this._mobGrp[key]; }
+  ,_ensureMobSprites(){ return []; }
+  ,_mobSpriteFor(){ return null; }
+  ,_ensureMobGroup(){ return null; }
   ,_ensureSandbag(act){ const sb=SANDBAGS[act]; if(!sb) return null; this._sbImg=this._sbImg||{}; if(this._sbImg[act]===undefined){ try{ const im=new Image(); im.onerror=()=>{im._err=true;}; im.onload=()=>{try{if(this.screen==='battle'&&this.render)this.render();}catch(e){}}; im.src=sb.file; this._sbImg[act]=im; }catch(e){ this._sbImg[act]=null; } } return this._sbImg[act]; }
   ,drawSandbag(){ const ctx=this.ctx; const run=this.run; const im=this._ensureSandbag(run.act); if(!im||!im.complete||!im.naturalWidth||im._err) return;
     const nw=im.naturalWidth, nh=im.naturalHeight; let H=BH*0.82, W=H*nw/nh; const maxW=BW*0.5; if(W>maxW){ W=maxW; H=W*nh/nw; }
@@ -7945,11 +7935,7 @@ Object.assign(Game.prototype,{
     '/assets/endless/bosses/coldflame_scorekeeper.png',
     '/assets/endless/bosses/thunderbone_announcer.png',
     '/assets/endless/bosses/abyss_hoop_lord.png',
-    '/assets/mob/stage1/group.webp',
-    '/assets/mob/act2/stage1/group.webp',
-    '/assets/mob/act3/stage1/group.webp',
-    '/assets/mob/act4/stage1/group.webp',
-    '/assets/mob/act5/stage1/group.webp',
+    ...(()=>{ const out=[]; for(let act=1;act<=5;act++) for(let i=0;i<6;i++) out.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1'); return out; })(),
     '/assets/mob/speed/act1.webp',
     '/assets/mob/speed/act2.webp',
     '/assets/mob/speed/act3.webp',
@@ -10147,6 +10133,120 @@ Object.assign(Game.prototype,{
   };
 })();
 
+// === final activation v20: standard stage bean enemy sprites ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const BEAN_MOB_VER='20260629_bean_mobs_v1';
+  const TYPE_TO_BEAN={skel:0,mummy:0,chain:1,imp:1,drummer:1,shield:2,zombie:3,slime:3,spider:3,bat:4,frost:4,eye:4,wizard:4};
+  function isStandardRun(run){ return !!(run&&!run.endless&&!run.sandbag&&run.act>=1&&run.act<=5); }
+  function beanMobSrc(act,idx){ return '/assets/mob/standard/act'+act+'/enemy_'+idx+'.png?v='+BEAN_MOB_VER; }
+
+  Game.prototype._standardBeanMobImg=function(act,idx){
+    this._standardBeanMobs=this._standardBeanMobs||{};
+    const key=act+'_'+idx;
+    if(this._standardBeanMobs[key]!==undefined) return this._standardBeanMobs[key];
+    try{
+      const im=new Image();
+      im.onerror=()=>{ im._err=true; };
+      im.onload=()=>{ try{ if(this.screen==='battle'&&this.render) this.render(); }catch(_e){} };
+      im.src=beanMobSrc(act,idx);
+      this._standardBeanMobs[key]=im;
+      return im;
+    }catch(e){
+      this._standardBeanMobs[key]=null;
+      return null;
+    }
+  };
+
+  Game.prototype._standardBeanMobIndex=function(g){
+    if(g&&g.elite) return 5;
+    return TYPE_TO_BEAN[(g&&g.type)||''] ?? ((g&&g.slot)||0)%5;
+  };
+
+  Game.prototype._standardBeanMobSpriteFor=function(g){
+    const run=this.run;
+    if(!isStandardRun(run)) return null;
+    return this._standardBeanMobImg(run.act,this._standardBeanMobIndex(g));
+  };
+
+  const oldDrawMobGroup=Game.prototype.drawMobGroup;
+  Game.prototype.drawMobGroup=function(){
+    if(isStandardRun(this.run)) return;
+    return oldDrawMobGroup?oldDrawMobGroup.apply(this,arguments):undefined;
+  };
+
+  const oldDrawGuard=Game.prototype.drawGuard;
+  Game.prototype.drawGuard=function(g){
+    const run=this.run;
+    if(isStandardRun(run)&&g&&!g.dead){
+      const ctx=this.ctx, im=this._standardBeanMobSpriteFor(g), sc=(g.drawScale||1)*(g.elite?1.08:1);
+      const bob=Math.sin((this.t||0)*2.1+(g.slot||0))*3;
+      const foot=g.y+g.r*0.74;
+      if(im&&im.complete&&im.naturalWidth&&!im._err){
+        const baseH=g.r*(g.elite?4.65:4.25)*sc;
+        const maxH=BH*0.27;
+        const H=Math.min(baseH,maxH);
+        const W=H*im.naturalWidth/im.naturalHeight;
+        ctx.save();
+        ctx.globalAlpha=g.phased?0.5:1;
+        const sh=ctx.createRadialGradient(g.x,foot-4,8,g.x,foot-4,W*0.46);
+        sh.addColorStop(0,'rgba(0,0,0,0.42)');
+        sh.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=sh;
+        ctx.beginPath();
+        ctx.ellipse(g.x,foot-4,W*0.42,H*0.075,0,0,TAU);
+        ctx.fill();
+        if(g.elite){
+          const glow=ctx.createRadialGradient(g.x,foot-H*0.48,10,g.x,foot-H*0.48,W*0.62);
+          glow.addColorStop(0,'rgba(255,210,88,0.20)');
+          glow.addColorStop(1,'rgba(255,210,88,0)');
+          ctx.fillStyle=glow;
+          ctx.beginPath();
+          ctx.ellipse(g.x,foot-H*0.48,W*0.56,H*0.52,0,0,TAU);
+          ctx.fill();
+        }
+        if(g.frozen){
+          ctx.globalAlpha=0.32;
+          ctx.fillStyle='#6fd8ff';
+          ctx.beginPath();
+          ctx.ellipse(g.x,foot-H*0.48,W*0.5,H*0.48,0,0,TAU);
+          ctx.fill();
+          ctx.globalAlpha=g.phased?0.5:1;
+        }
+        ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+        if(g.flash>0){
+          ctx.globalCompositeOperation='lighter';
+          ctx.globalAlpha=Math.min(0.6,g.flash*0.7);
+          ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+          ctx.globalCompositeOperation='source-over';
+          ctx.globalAlpha=g.phased?0.5:1;
+        }
+        ctx.restore();
+        this.drawGuardTags&&this.drawGuardTags(g);
+        return;
+      }
+
+      const base=g.r;
+      ctx.save();
+      ctx.translate(g.x,g.y);
+      ctx.scale(sc,sc);
+      ctx.globalAlpha=g.phased?0.48:1;
+      this.shadow(0,base*0.95,base*0.95,0.22);
+      this._bean(0,-base*0.08+bob,base*1.2,base*(g.elite?1.85:1.68),g.color||'#d8d0c0',{lw:7,seed:29,wob:2});
+      ctx.fillStyle='#11100f';
+      ctx.beginPath();
+      ctx.arc(-base*0.22,-base*0.34+bob,base*0.075,0,TAU);
+      ctx.arc(base*0.08,-base*0.34+bob,base*0.075,0,TAU);
+      ctx.fill();
+      if(g.flash>0){ ctx.globalAlpha=g.flash*0.62; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,0,base*1.08,0,TAU); ctx.fill(); }
+      ctx.restore();
+      this.drawGuardTags&&this.drawGuardTags(g);
+      return;
+    }
+    return oldDrawGuard?oldDrawGuard.apply(this,arguments):undefined;
+  };
+})();
+
 // === final activation v20: preload all runtime image assets before entry ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -10160,18 +10260,9 @@ Object.assign(Game.prototype,{
     return out;
   };
   const seq=(a,b,fn)=>{ const out=[]; for(let i=a;i<=b;i++) out.push(fn(i)); return out; };
-  const mobCounts={1:10,2:12,3:18,4:15,5:22};
-  const mobStageAssets=()=>{
+  const standardBeanMobAssets=()=>{
     const out=[];
-    for(let stage=1;stage<=5;stage++){
-      out.push('/assets/mob/stage'+stage+'/group.webp');
-      for(let i=0;i<mobCounts[stage];i++) out.push('/assets/mob/stage'+stage+'/m'+i+'.webp');
-    }
-    return out;
-  };
-  const mobActGroupAssets=()=>{
-    const out=[];
-    for(let act=2;act<=5;act++) for(let stage=1;stage<=5;stage++) out.push('/assets/mob/act'+act+'/stage'+stage+'/group.webp');
+    for(let act=1;act<=5;act++) for(let i=0;i<6;i++) out.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1');
     return out;
   };
   const relicNames=['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png'];
@@ -10210,8 +10301,7 @@ Object.assign(Game.prototype,{
     .concat(seq(1,5,i=>'/assets/battle/act'+i+'_bg.webp'))
     .concat(seq(1,5,i=>'/assets/stage'+i+'_route_base_1704x786.webp'))
     .concat(seq(1,5,i=>'/assets/mob/speed/act'+i+'.webp'))
-    .concat(mobStageAssets())
-    .concat(mobActGroupAssets())
+    .concat(standardBeanMobAssets())
     .concat(endlessEnemyNames.map(n=>'/assets/endless/enemies/'+n+'.png'))
     .concat(endlessBossNames.map(n=>'/assets/endless/bosses/'+n+'.png'));
 
