@@ -154,15 +154,7 @@
         try {
           game = window.HBStart(canvas, root);
           window.__HB = game;
-          var ready = game && game._initialPreloadReady;
-          if (ready && typeof ready.then === 'function') {
-            ready.then(hideLoading, function (err) {
-              if (window.console && console.warn) console.warn('[Hoopbreaker preload]', err);
-              hideLoading();
-            });
-          } else {
-            hideLoading();
-          }
+          hideLoading();
         } catch (err) {
           showError(err);
         }

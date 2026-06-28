@@ -17,21 +17,7 @@ function resetLocalDataIfRequested(){
     return true;
   }catch(e){ return false; }
 }
-function start(canvas, root){
-  const didReset=resetLocalDataIfRequested();
-  const G=new Game(canvas,root);
-  G.boot();
-  try{
-    const ready=G._bootPreloadAllAssets?G._bootPreloadAllAssets():null;
-    G._initialPreloadReady=ready&&typeof ready.then==='function'?ready:Promise.resolve(true);
-  }catch(e){
-    try{ console.warn('[HB initial preload]',e); }catch(_e){}
-    G._initialPreloadReady=Promise.resolve(false);
-  }
-  try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){}
-  if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} }
-  return G;
-}
+function start(canvas, root){ const didReset=resetLocalDataIfRequested(); const G=new Game(canvas,root); G.boot(); try{window.__HB=G; window.__HB_RESET_DONE=didReset;}catch(e){} if(didReset){ try{ setTimeout(()=>G.toast('本機資料已清除','可以重新開始遊玩'),200); }catch(e){} } return G; }
 try{ window.HBStart = start; }catch(e){}
 
 // ---------- math / util ----------
@@ -2719,7 +2705,7 @@ Object.assign(Game.prototype,{
   Game.prototype.onUp=function(x,y){ if(this._assetLoading&&this._assetLoading.active) return; return priorOnUp.call(this,x,y); };
 
   Game.prototype._entryLoadingToHub=async function(status){
-    this._assetLoading={active:true,progress:0,label:'載入背景圖',detail:status||'準備進入板凳席'};
+    this._assetLoading={active:true,progress:0,label:'載入全部圖片',detail:status||'準備進入板凳席'};
     this.render();
     try{ await this._preloadEntryAssets(); }catch(e){ try{console.warn('[HB preload]',e);}catch(_e){} }
     this._assetLoading.progress=1;
