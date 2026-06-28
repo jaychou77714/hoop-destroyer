@@ -10003,3 +10003,29 @@ Object.assign(Game.prototype,{
     return prevFinishRun.apply(this,arguments);
   };
 })();
+
+// === final activation v19: hide cleared and stale cloud leaderboard rows ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const isClearedRow=row=>{
+    const name=String((row&&row.player_name)||(row&&row.name)||'').trim();
+    const key=String(row&&row.today_key||'').trim();
+    return !row||/^__deleted__/i.test(name)||key==='deleted';
+  };
+  const oldNormalRow=Game.prototype._normalLeaderboardRow;
+  Game.prototype._normalLeaderboardRow=function(row){
+    if(row&&!row._local){
+      if(isClearedRow(row)) return null;
+      const today=this._dayKey&&this._dayKey();
+      if(today&&row.today_key&&row.today_key!==today) return null;
+    }
+    return oldNormalRow?oldNormalRow.call(this,row):null;
+  };
+  const oldEndlessRows=Game.prototype._endlessLeaderboardRows;
+  Game.prototype._endlessLeaderboardRows=function(){
+    const cache=this._leaderboardCache;
+    if(Array.isArray(cache)) this._leaderboardCache=cache.filter(r=>!isClearedRow(r));
+    try{ return oldEndlessRows?oldEndlessRows.apply(this,arguments):[]; }
+    finally{ this._leaderboardCache=cache; }
+  };
+})();
