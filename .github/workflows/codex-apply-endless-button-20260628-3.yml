@@ -1,0 +1,76 @@
+name: Codex Apply Endless Button 3
+
+"on":
+  push:
+    paths:
+      - ".github/workflows/codex-apply-endless-button-20260628-3.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Patch final bench endless button
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'engine.js';
+          let s = fs.readFileSync(path, 'utf8');
+          if (s.includes('final activation v5') || s.includes('endlessAbyss')) {
+            throw new Error('Unexpected endless battle prototype marker found; refusing broader changes.');
+          }
+          const oldLayout = "    let endless=this.save.endless?J({x:552,y:376,w:282,h:30}):null;";
+          const newLayout = "    let endless=null;";
+          if (s.includes(oldLayout)) {
+            s = s.replace(oldLayout, newLayout);
+          } else if (!s.includes(newLayout)) {
+            throw new Error('Could not find final bench endless layout line.');
+          }
+          const label = '\u7121\u76e1\u6a21\u5f0f';
+          const locked = '\u6a19\u6e96\u6216\u8150\u5316\u7b2c 5 \u5e55\u901a\u95dc\u5f8c\u89e3\u9396';
+          const ready = '\u5165\u53e3\u5df2\u653e\u5728\u677f\u51f3\u5e2d\uff0c\u4e0b\u4e00\u968e\u6bb5\u63a5\u6b63\u5f0f\u73a9\u6cd5';
+          const newButton = [
+            "    const a=LO.bL, endlessReady=!!(this.save&&this.save.endless);",
+            "    this._fbBtn(a,'" + label + "',this._press(a),'inf',!endlessReady);",
+            "    this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_entry',()=>{",
+            "      if(!this.save.endless){ this.toast('" + label + "','" + locked + "'); return; }",
+            "      this.toast('" + label + "','" + ready + "');",
+            "    });"
+          ].join('\n');
+          const oldButtonPattern = /    const a=LO\.bL; this\._fbBtn\(a,[^\n]+?'fb_endless_locked',[^\n]+?\);/;
+          if (oldButtonPattern.test(s)) {
+            s = s.replace(oldButtonPattern, newButton);
+          } else if (!s.includes('fb_endless_entry')) {
+            throw new Error('Could not find final bench endless button line.');
+          }
+          fs.writeFileSync(path, s, 'utf8');
+          NODE
+      - name: Verify patched engine
+        shell: bash
+        run: |
+          node --check engine.js
+          grep -q "fb_endless_entry" engine.js
+          ! grep -q "endlessAbyss" engine.js
+          ! grep -q "final activation v5" engine.js
+      - name: Commit patch and remove temporary workflows
+        shell: bash
+        run: |
+          git config user.name "codex"
+          git config user.email "codex@openai.com"
+          rm -f .github/workflows/codex-apply-endless-button-20260628-1.yml
+          rm -f .github/workflows/codex-apply-endless-button-20260628-2.yml
+          rm -f .github/workflows/codex-apply-endless-button-20260628-3.yml
+          git add engine.js .github/workflows/codex-apply-endless-button-20260628-1.yml .github/workflows/codex-apply-endless-button-20260628-2.yml .github/workflows/codex-apply-endless-button-20260628-3.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add final bench endless mode button"
+            git push
+          fi
