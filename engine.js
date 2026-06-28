@@ -3204,7 +3204,8 @@ Object.assign(Game.prototype,{
     // Phase 4-3: loadout = display + opening form ONLY (never feeds relicIds/old hooks)
     const _loSrc=(s.loadout&&s.loadout.some(Boolean))? s.loadout : s.relics;
     const loadout=[0,1,2,3,4].map(i=> (_loSrc&&_loSrc[i]!=null)? _loSrc[i] : null);
-    let startForm='normal'; for(const id of loadout){ if(id && RELICS[id] && RELICS[id].form){ startForm=RELICS[id].form; break; } }
+    const ballId=loadout[2];
+    let startForm=(ballId&&RELICS[ballId]&&RELICS[ballId].form)?RELICS[ballId].form:'normal';
     const hero=HEROES.find(h=>h.id===heroId);
     this.run={ act:actId, route:routeType, stone:stoneId, path, pi:0, stage:null,
       heroId, hero, relics, relicIds:s.relics.filter(Boolean), loadout,
@@ -7414,6 +7415,8 @@ Object.assign(Game.prototype,{
   function tierCol(it){ return TIER_COL[(it&&it.tier)|0]||'#e6c068'; }
   function tierName(it){ return TIER_NAME[(it&&it.tier)|0]||'普通'; }
   function validSlot(i){ return Number.isInteger(i)&&i>=0&&i<5; }
+  const BALL_SLOT=2;
+  const SIDE_SLOTS=[0,1,3,4];
 
   Game.prototype._hbRelicUiUrl=function(name){ return RELIC_UI_PATH+name+'?v='+RELIC_UI_VER; };
   Game.prototype._relicUiImg=function(name){
@@ -7449,20 +7452,99 @@ Object.assign(Game.prototype,{
     if(it&&TYPE_LABEL[it.type]) it.core=TYPE_LABEL[it.type];
     return it;
   };
-  Game.prototype._hbSlotCandidates=function(slot){
+  Game.prototype._hbIsBallRelic=function(id){
+    const it=this._hbRelicDisplay(id);
+    return !!(it&&it.type==='ball');
+  };
+  Game.prototype._hbSlotAccepts=function(slot,idOrItem){
+    if(!validSlot(slot)) return false;
+    const item=typeof idOrItem==='string'?this._hbRelicDisplay(idOrItem):idOrItem;
+    if(!item) return false;
+    return item.type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT;
+  };
+  Game.prototype._hbFirstOpenSlotFor=function(item){
+    const load=(this.save&&this.save.loadout)||[];
+    if(item&&item.type==='ball') return BALL_SLOT;
+    for(const slot of SIDE_SLOTS) if(!load[slot]) return slot;
+    return -1;
+  };
+  Game.prototype._hbKeepOwned=function(id){
     const s=this.save||{};
-    const load=s.loadout||[];
-    return this._hbOwnedRelicIds(false).filter(id=>!load.includes(id));
+    if(!id||!RELICS[id]) return;
+    if(!Array.isArray(s.library)) s.library=[];
+    if(!(s.loadout||[]).includes(id)&&!s.library.includes(id)&&s.library.length<40) s.library.push(id);
+  };
+  Game.prototype._hbNormalizeLoadoutSlots=function(){
+    const s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    while(s.loadout.length<5) s.loadout.push(null);
+    if(s.loadout.length>5) s.loadout=s.loadout.slice(0,5);
+    let changed=false;
+    const load=s.loadout;
+    const overflow=[];
+
+    for(let i=0;i<5;i++){
+      const id=load[i];
+      if(!id||!RELICS[id]){
+        if(id){ load[i]=null; changed=true; }
+        continue;
+      }
+      const isBall=this._hbIsBallRelic(id);
+      if((isBall&&i!==BALL_SLOT)||(!isBall&&i===BALL_SLOT)){
+        overflow.push(id);
+        load[i]=null;
+        changed=true;
+      }
+    }
+
+    for(const id of overflow){
+      const item=this._hbRelicDisplay(id);
+      if(!item){ this._hbKeepOwned(id); continue; }
+      const targets=item.type==='ball'?[BALL_SLOT]:SIDE_SLOTS;
+      let placed=false;
+      for(const slot of targets){
+        if(!load[slot]){
+          load[slot]=id;
+          placed=true;
+          break;
+        }
+      }
+      if(!placed) this._hbKeepOwned(id);
+    }
+
+    let seenBall=false;
+    for(let i=0;i<5;i++){
+      const id=load[i];
+      if(!id) continue;
+      const isBall=this._hbIsBallRelic(id);
+      if(isBall){
+        if(i!==BALL_SLOT||seenBall){
+          load[i]=null;
+          this._hbKeepOwned(id);
+          changed=true;
+        }else{
+          seenBall=true;
+        }
+      }else if(i===BALL_SLOT){
+        load[i]=null;
+        this._hbKeepOwned(id);
+        changed=true;
+      }
+    }
+    if(changed) persist(s);
+    return load;
+  };
+  Game.prototype._hbSlotCandidates=function(slot){
+    const load=this._hbNormalizeLoadoutSlots();
+    return this._hbOwnedRelicIds(false).filter(id=>!load.includes(id)&&this._hbSlotAccepts(slot,id));
   };
   Game.prototype._hbCompareTargetFor=function(item){
     if(!item) return null;
     if(item.type!=='ball') return null;
-    const load=(this.save&&this.save.loadout)||[];
-    for(const id of load){
-      if(!id||id===item.id) continue;
-      const d=this._hbRelicDisplay(id);
-      if(d&&d.type===item.type) return id;
-    }
+    const load=this._hbNormalizeLoadoutSlots();
+    const id=load[BALL_SLOT];
+    if(id&&id!==item.id) return id;
     return null;
   };
   Game.prototype._selectedEquipFor=function(item){
@@ -7472,15 +7554,20 @@ Object.assign(Game.prototype,{
     opts=opts||{};
     const s=this.save||{};
     if(!s.loadout) s.loadout=[null,null,null,null,null];
+    const load=this._hbNormalizeLoadoutSlots();
     const item=this._hbRelicDisplay(rid);
     if(!item) return;
     this._bagSel=rid;
-    const equippedSlot=s.loadout.indexOf(rid);
+    const equippedSlot=load.indexOf(rid);
     if(equippedSlot>=0){
       this._relicCompare={rid,current:null,slot:equippedSlot,inspect:true,equipped:true};
     }else{
-      const current=opts.current!==undefined?opts.current:this._hbCompareTargetFor(item);
-      this._relicCompare={rid,current:current||null,slot:validSlot(opts.slot)?opts.slot:(validSlot(this._relicSlotTarget)?this._relicSlotTarget:-1),inspect:!current,equipped:false};
+      let slot=-1;
+      if(validSlot(opts.slot)&&this._hbSlotAccepts(opts.slot,item)) slot=opts.slot;
+      else if(validSlot(this._relicSlotTarget)&&this._hbSlotAccepts(this._relicSlotTarget,item)) slot=this._relicSlotTarget;
+      else if(item.type==='ball') slot=BALL_SLOT;
+      const current=opts.current!==undefined?opts.current:(item.type==='ball'?this._hbCompareTargetFor(item):null);
+      this._relicCompare={rid,current:current||null,slot,inspect:!current,equipped:false};
     }
     this.audio&&this.audio.sfx&&this.audio.sfx('ui');
     this.render();
@@ -7546,7 +7633,9 @@ Object.assign(Game.prototype,{
     if(!s.loadout) s.loadout=[null,null,null,null,null];
     if(!s.library) s.library=[];
     if(!rid||!RELICS[rid]) return;
-    const load=s.loadout;
+    const load=this._hbNormalizeLoadoutSlots();
+    const item=this._hbRelicDisplay(rid);
+    if(!item) return;
     const have=load.indexOf(rid);
     if(have>=0){
       this._relicCompare=null;
@@ -7556,14 +7645,12 @@ Object.assign(Game.prototype,{
       return;
     }
 
-    let slot=validSlot(opts.slot)?opts.slot:-1;
+    let slot=(validSlot(opts.slot)&&this._hbSlotAccepts(opts.slot,item))?opts.slot:-1;
     if(opts.current&&load.includes(opts.current)) slot=load.indexOf(opts.current);
-    if(!validSlot(slot)){
-      const same=this._hbCompareTargetFor(this._hbRelicDisplay(rid));
-      if(same&&load.includes(same)) slot=load.indexOf(same);
-    }
-    if(!validSlot(slot)) slot=load.indexOf(null);
-    if(!validSlot(slot)){
+    if(!this._hbSlotAccepts(slot,item)) slot=-1;
+    if(item.type==='ball') slot=BALL_SLOT;
+    if(!validSlot(slot)) slot=this._hbFirstOpenSlotFor(item);
+    if(!validSlot(slot)||!this._hbSlotAccepts(slot,item)){
       this.toast&&this.toast('聖物已滿','先點已裝備聖物卸下；籃球會自動替換唯一核心');
       this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
       this._relicCompare=null;
@@ -7571,15 +7658,18 @@ Object.assign(Game.prototype,{
       return;
     }
 
-    const def=RELICS[rid];
-    if(def&&def.form){
+    if(item.type==='ball'){
       for(let k=0;k<load.length;k++){
         const ex=load[k];
-        if(k!==slot&&ex&&RELICS[ex]&&RELICS[ex].form) load[k]=null;
+        if(k!==slot&&ex&&this._hbIsBallRelic(ex)){
+          load[k]=null;
+          this._hbKeepOwned(ex);
+        }
       }
     }
 
     load[slot]=rid;
+    this._hbNormalizeLoadoutSlots();
     persist(s);
     this._relicCompare=null;
     this._relicSlotTarget=null;
@@ -7597,6 +7687,7 @@ Object.assign(Game.prototype,{
     const ctx=this.ctx, s=this.save;
     if(!s.loadout) s.loadout=[null,null,null,null,null];
     if(!s.library) s.library=[];
+    this._hbNormalizeLoadoutSlots();
     this.btn(0,0,BW,BH,'hero_bag_blocker',()=>{});
 
     const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png');
@@ -7660,7 +7751,13 @@ Object.assign(Game.prototype,{
         ctx.restore();
         this.text('+',r.x+r.w/2,r.y+r.h/2-8,48,target?'#d8ff44':'rgba(215,169,69,0.56)',{align:'center',baseline:'middle',weight:'800'});
         this.text(target?'選擇中':'空欄',r.x+r.w/2,r.y+r.h/2+33,18,target?'#d8ff44':'rgba(200,190,170,0.48)',{align:'center',baseline:'middle',weight:'900'});
-        ((slot,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'hero_bag_empty_'+slot,()=>{ this._relicSlotTarget=slot; this._bagSel=null; this._relicCompare=null; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(i,r);
+        const slotLabel=i===BALL_SLOT?'籃球槽':(target?'選此欄':'空欄');
+        ctx.save();
+        ctx.fillStyle='rgba(7,5,8,0.76)';
+        ctx.fillRect(r.x+12,r.y+r.h/2+17,r.w-24,28);
+        ctx.restore();
+        this.text(slotLabel,r.x+r.w/2,r.y+r.h/2+33,18,i===BALL_SLOT?'#ffe7a6':(target?'#d8ff44':'rgba(200,190,170,0.62)'),{align:'center',baseline:'middle',weight:'900'});
+        ((slot,rr)=>this.btn(rr.x,rr.y,rr.w,rr.h,'hero_bag_empty_'+slot,()=>{ this._relicSlotTarget=slot; if(slot===BALL_SLOT) this._relicTabHero='ball'; else if(this._relicTabHero==='ball') this._relicTabHero=''; this._bagSel=null; this._relicCompare=null; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(i,r);
       }
     }
 
