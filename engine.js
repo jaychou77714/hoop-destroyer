@@ -7012,3 +7012,114 @@ Object.assign(Game.prototype,{
     }
   };
 })();
+
+// === final activation v4: leaderboard data density and observer badge layout ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const MIN_LEADERBOARD_SHOTS=10;
+  const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
+  const countdown=()=>{
+    const now=new Date(), next=new Date(now);
+    next.setHours(24,0,0,0);
+    const total=Math.floor(Math.max(0,next-now)/1000);
+    return pad2(total/3600)+':'+pad2((total%3600)/60)+':'+pad2(total%60);
+  };
+  const pct=n=>Math.max(0,Math.min(100,Math.round((Number(n)||0)*100)));
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx;
+    const IL=this.insL||0,IR=this.insR||0,IT=this.insT||0,IB=this.insB||0;
+    ctx.save();
+    ctx.fillStyle='rgba(3,1,7,0.93)';
+    ctx.fillRect(-4000,-4000,BW+8000,BH+8000);
+    ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+
+    const x=IL+34,y=IT+24,w=BW-IL-IR-68,h=BH-IT-IB-48;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(23,16,12,0.98)');
+    bg.addColorStop(0.52,'rgba(10,8,11,0.99)');
+    bg.addColorStop(1,'rgba(6,4,9,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.34)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+
+    this.text('今日命中排行榜',x+w/2,y+56,46,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
+    this.text('每日重置倒數 '+countdown()+'  ·  本機午夜刷新',x+w/2,y+96,24,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this.text('滿 '+MIN_LEADERBOARD_SHOTS+' 球才列入名次；穩定分用保守命中率計算，避免小樣本霸榜',x+w/2,y+126,20,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    this._hbDrawLeaderButton(x+w-158,y+30,116,54,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    this._hbDrawLeaderButton(x+42,y+30,116,54,'刷新','leaderboard_refresh',()=>{
+      this._leaderboardLoading=true;
+      this._leaderboardStatus='重新整理...';
+      this._fetchLeaderboard&&this._fetchLeaderboard();
+      this.render();
+    },true);
+
+    const tx=x+44, ty=y+154, tw=w-88;
+    const headerH=56;
+    const rowH=Math.max(76,Math.min(88,Math.floor((h-268)/7)));
+    const cols={
+      rankX:tx+72,
+      nameX:tx+190,
+      shotX:tx+tw*0.61,
+      accX:tx+tw*0.78,
+      scoreX:tx+tw-92
+    };
+
+    this.rr(tx,ty,tw,headerH,12);
+    ctx.fillStyle='rgba(215,169,69,0.13)'; ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(215,169,69,0.38)'; this.rr(tx,ty,tw,headerH,12); ctx.stroke();
+    this.text('名次',cols.rankX,ty+headerH/2,26,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('投手',cols.nameX,ty+headerH/2,25,'#d7a945',{baseline:'middle',weight:'900'});
+    this.text('出手 / 命中',cols.shotX,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('命中率',cols.accX,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+    this.text('穩定分',cols.scoreX,ty+headerH/2,24,'#d7a945',{align:'center',baseline:'middle',weight:'900'});
+
+    const rows=(this._leaderboardRows?this._leaderboardRows():[]);
+    const maxRows=Math.max(4,Math.floor((y+h-ty-headerH-76)/rowH));
+    for(let i=0;i<Math.min(rows.length,maxRows);i++){
+      const r=rows[i], ry=ty+headerH+12+i*rowH, mid=ry+(rowH-8)/2;
+      const shots=Math.max(0,Number(r.shots)||0);
+      const makes=Math.max(0,Number(r.makes)||0);
+      const qualified=!!r.qualified;
+      const need=Math.max(0,MIN_LEADERBOARD_SHOTS-shots);
+      const muted=qualified?'#efe3ca':'#b8ad96';
+      const score=pct(r.score!=null?r.score:r.acc);
+
+      this.rr(tx,ry,tw,rowH-8,12);
+      ctx.fillStyle=r.local?'rgba(159,224,36,0.18)':(i%2?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.15)');
+      ctx.fill();
+      ctx.lineWidth=r.local?2.2:1.2;
+      ctx.strokeStyle=r.local?'rgba(185,255,47,0.58)':'rgba(215,169,69,0.20)';
+      this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+
+      const badgeX=tx+18, badgeY=ry+12, badgeW=108, badgeH=rowH-32;
+      this.rr(badgeX,badgeY,badgeW,badgeH,14);
+      ctx.fillStyle=qualified?'rgba(215,169,69,0.16)':'rgba(159,224,36,0.15)';
+      ctx.fill();
+      ctx.lineWidth=1.8;
+      ctx.strokeStyle=qualified?'rgba(255,231,166,0.48)':'rgba(159,224,36,0.58)';
+      this.rr(badgeX,badgeY,badgeW,badgeH,14); ctx.stroke();
+      this.text(qualified?String(r.rank):'觀察',badgeX+badgeW/2,badgeY+badgeH/2-(qualified?0:9),qualified?31:25,qualified?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+      if(!qualified) this.text('差 '+need+' 球',badgeX+badgeW/2,badgeY+badgeH/2+18,15,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+
+      const name=(r.local?'你 · ':'')+String(r.name||'未命名投手');
+      const nameW=Math.max(260,cols.shotX-cols.nameX-40);
+      this.text(this._clip?this._clip(name,nameW,29,'900'):name,cols.nameX,mid-10,29,r.local?'#d8ff44':muted,{baseline:'middle',weight:'900'});
+      this.text(qualified?('已入榜 · 樣本 '+shots+' 球'):('還差 '+need+' 球列入名次'),cols.nameX,mid+22,17,qualified?'#a99a7a':'#9fe024',{baseline:'middle',weight:'800'});
+
+      this.text(shots+' / '+makes,cols.shotX,mid-4,28,muted,{align:'center',baseline:'middle',weight:'900'});
+      this.text(qualified?'正式樣本':('進度 '+shots+'/'+MIN_LEADERBOARD_SHOTS),cols.shotX,mid+24,16,qualified?'#8f8068':'#9fe024',{align:'center',baseline:'middle',weight:'800'});
+      this.text(shots?Math.round((r.acc||0)*100)+'%':'0%',cols.accX,mid,30,qualified?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+      this.text(String(score),cols.scoreX,mid-4,29,qualified?'#ffe7a6':'#9e9178',{align:'center',baseline:'middle',weight:'900'});
+      this.text('保守',cols.scoreX,mid+24,15,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+    }
+    if(!rows.length){
+      this.text('今天還沒有命中紀錄',x+w/2,y+h/2+18,36,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+    const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
+    this.text(status,x+w/2,y+h-38,22,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+})();
