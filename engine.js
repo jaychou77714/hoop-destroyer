@@ -4426,17 +4426,15 @@ Object.assign(Game.prototype,{
     for(let i=0;i<ACTS.length;i++){ const A=ACTS[i], C=CARDS[i]; if(A.id<=this._unlockedActs()){ const aid=A.id; this.btn(D(C.x),D(C.y),D(C.w),D(C.h),'a'+aid,()=>{ this._selAct=aid; this.audio.sfx('ui'); }); } }
     this.btn(D(685),D(676),D(340),D(70),'route',()=>this.go('route'));
   }
-  ,_drawAtlasAttackLabel(D,U,pressed){ const ctx=this.ctx, hit={x:D(685),y:D(676),w:D(340),h:D(70)}, x=D(855), y=D(681)+(pressed?D(3):0), fs=(pressed?25:26)*U, pulse=0.5+0.5*Math.sin(this.t*2.8);
+  ,_drawAtlasAttackLabel(D,U,pressed){ const ctx=this.ctx, x=D(855), y=D(681)+(pressed?D(3):0), fs=(pressed?25:26)*U, pulse=0.5+0.5*Math.sin(this.t*2.8);
     ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.save();
-    this.rr(hit.x+D(5),hit.y+D(8)+(pressed?D(2):0),hit.w-D(10),hit.h-D(16),D(14));
-    ctx.fillStyle=pressed?'rgba(216,255,68,0.16)':'rgba(8,5,3,0.10)';
-    ctx.fill();
-    ctx.lineWidth=D(pressed?3.2:1.8);
-    ctx.strokeStyle=pressed?'rgba(216,255,68,0.98)':'rgba(255,224,126,'+(0.38+pulse*0.2)+')';
-    ctx.shadowBlur=D(pressed?18:8+pulse*5);
-    ctx.shadowColor=pressed?'rgba(216,255,68,0.78)':'rgba(255,198,80,0.48)';
-    ctx.stroke();
+    const pressGlow=ctx.createRadialGradient(x,y,D(12),x,y,D(pressed?190:150));
+    pressGlow.addColorStop(0,pressed?'rgba(216,255,68,0.24)':'rgba(255,210,88,0.12)');
+    pressGlow.addColorStop(0.58,pressed?'rgba(216,255,68,0.10)':'rgba(255,210,88,0.05)');
+    pressGlow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=pressGlow;
+    ctx.fillRect(x-D(230),y-D(52),D(460),D(104));
     ctx.restore();
     const halo=ctx.createRadialGradient(x,y,D(18),x,y,D(175)); halo.addColorStop(0,'rgba(255,210,88,'+(0.16+pulse*0.08)+')'); halo.addColorStop(0.55,'rgba(150,230,60,0.08)'); halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo; ctx.fillRect(x-D(200),y-D(48),D(400),D(96));
@@ -4553,17 +4551,16 @@ Object.assign(Game.prototype,{
     const rNm=({fast:'速投線',std:'標準遠征',corrupt:'腐化加時'})[this._selRoute]||'標準遠征';
     const stNm=this._selStone?((ROUTE_STONES.find(z=>z.id===this._selStone)||{}).name||'不帶石板'):'不帶石板';
     { const v=lv('summary',{x:852,y:686,s:15}); T('出戰摘要 ｜ '+hero.name+'　·　'+rNm+'　·　'+stNm,v.x,v.y,v.s,'#d8cba8',{align:'center',baseline:'middle',weight:'700'}); HH('summary',v.x,v.y); }
-    // CTA frame is baked into the route art; overlay feedback makes taps obvious.
+    // CTA frame is baked into the route art; use glow/text feedback without drawing a second box.
     { const ctaHit={x:D(560),y:D(705),w:D(586),h:D(62)}, pressed=this._press(ctaHit), v=lv('cta',{x:853,y:737,s:26}), pulse=0.5+0.5*Math.sin(this.t*2.4);
       ctx.save();
-      this.rr(ctaHit.x+D(8),ctaHit.y+D(8)+(pressed?D(2):0),ctaHit.w-D(16),ctaHit.h-D(16),D(14));
-      ctx.fillStyle=pressed?'rgba(216,255,68,0.18)':'rgba(255,225,120,0.07)';
-      ctx.fill();
-      ctx.lineWidth=D(pressed?3:1.8);
-      ctx.strokeStyle=pressed?'rgba(216,255,68,0.98)':'rgba(255,230,160,'+(0.42+pulse*0.16)+')';
-      ctx.shadowBlur=D(pressed?18:8+pulse*5);
-      ctx.shadowColor=pressed?'rgba(216,255,68,0.72)':'rgba(255,198,80,0.46)';
-      ctx.stroke();
+      const gx=D(v.x), gy=D(v.y)+(pressed?D(3):0);
+      const shine=ctx.createRadialGradient(gx,gy,D(16),gx,gy,D(pressed?330:270));
+      shine.addColorStop(0,pressed?'rgba(216,255,68,0.28)':'rgba(255,225,120,0.10)');
+      shine.addColorStop(0.48,pressed?'rgba(216,255,68,0.11)':'rgba(255,225,120,0.05)');
+      shine.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=shine;
+      ctx.fillRect(ctaHit.x-D(30),ctaHit.y-D(24),ctaHit.w+D(60),ctaHit.h+D(48));
       ctx.restore();
       this.text('進入第 '+A.id+' 幕',D(v.x),D(v.y)+(pressed?D(3):0),v.s*U,pressed?'#f1ffbc':'#ffe6b0',{align:'center',baseline:'middle',weight:'900',glow:pressed?12:6});
       this.btn(ctaHit.x,ctaHit.y,ctaHit.w,ctaHit.h,'go',()=>{ if(this._modeActs(this._selRoute)<this._selAct){ this.toast('此模式尚未解鎖本幕','需先在此模式通關前一幕'); this.audio.sfx('hurt'); return; } this.startRun(this._selAct,this._selRoute,this._selStone,this._selNode); }); HH('cta',v.x,v.y); }
@@ -7459,6 +7456,7 @@ Object.assign(Game.prototype,{
   };
   Game.prototype._hbCompareTargetFor=function(item){
     if(!item) return null;
+    if(item.type!=='ball') return null;
     const load=(this.save&&this.save.loadout)||[];
     for(const id of load){
       if(!id||id===item.id) continue;
@@ -7566,7 +7564,7 @@ Object.assign(Game.prototype,{
     }
     if(!validSlot(slot)) slot=load.indexOf(null);
     if(!validSlot(slot)){
-      this.toast&&this.toast('聖物已滿','先點已裝備聖物卸下，或選同類型替換');
+      this.toast&&this.toast('聖物已滿','先點已裝備聖物卸下；籃球會自動替換唯一核心');
       this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
       this._relicCompare=null;
       this.render();
