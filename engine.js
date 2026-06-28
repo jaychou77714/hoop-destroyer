@@ -9412,3 +9412,226 @@ Object.assign(Game.prototype,{
     }
   };
 })();
+
+// === final activation v16c: endless save-and-resume, active last ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const clone=o=>{ try{return o==null?o:JSON.parse(JSON.stringify(o));}catch(e){return o;} };
+  const num=(v,d)=>Number.isFinite(Number(v))?Number(v):(d||0);
+
+  Game.prototype._hbHasEndlessResume=function(){
+    const r=this.save&&this.save.endlessResume;
+    return !!(r&&r.v===1&&r.run&&num(r.run.endlessDepth,0)>0);
+  };
+
+  Game.prototype._hbEndlessResumeTitle=function(){
+    const r=this.save&&this.save.endlessResume;
+    if(!r||!r.run) return '沒有可繼續的無盡存檔';
+    return '第 '+(r.run.endlessDepth||1)+' 層 · 分數 '+(r.run.score||0)+' · Boss '+(r.run.endlessBosses||0);
+  };
+
+  Game.prototype._hbCanSaveEndlessRun=function(){
+    const run=this.run, b=run&&run.ball;
+    if(!run||!run.endless) return {ok:false,msg:'目前不是無盡模式'};
+    if(this.screen!=='battle') return {ok:false,msg:'只能在戰鬥中保存'};
+    if(run.modal||this._detailOpen) return {ok:false,msg:'請先關閉目前視窗'};
+    if(run._stageClearing||run._endlessSummoning) return {ok:false,msg:'深淵正在結算，稍等一下'};
+    if(run.levelUpsPending>0) return {ok:false,msg:'請先完成升級選擇'};
+    if(!b||b.live||!b.held||run.aiming||run.repos>0||run.nextBall>0) return {ok:false,msg:'請等球回到手上再保存'};
+    if(run.guards&&run.guards.length===0) return {ok:false,msg:'場上正在切換階段'};
+    return {ok:true,msg:'可保存'};
+  };
+
+  Game.prototype._hbEndlessResumeSnapshot=function(run){
+    const keys=['act','route','stone','pi','heroId','hp','maxhp','shield','form','level','xp','xpNext','levelUpsPending','gold','abilities','words','comboMax','combo','score','shots','makes','swishes','banks','kills','bestCombo','shotCount','firstMissUsed','riftUsed','hexN','siphonCd','corrupt','heat','nextBall','_scoredBalls','_boardBuff','rewardLog','mut','_firstElemDone','_stageMakes','_missStageShield','mods','modStacks','loadout','relicIds','endlessDepth','endlessBosses','endlessProgress','endlessProgressMax','endlessBossTimeMax','endlessBossTime','endlessBossActive','endlessTimedOut','endlessBiome','endlessBiomeName','endlessGreedStacks','endlessDebtShots','endlessHoopFreeze','endlessHoopLock','_endlessGearRewards'];
+    const data={};
+    for(const k of keys) if(k in run) data[k]=clone(run[k]);
+    data.stageBoss=!!(run.stage&&run.stage.boss);
+    data.stageName=(run.stage&&run.stage.name)||'無盡深淵';
+    data.guardsTotal=run.guardsTotal||0;
+    data.spawned=run.spawned||0;
+    data.bossWave=run.bossWave||0;
+    data.waveSize=run.waveSize||0;
+    data.repos=0;
+    data.hoopAct=clone(run.hoopAct||null);
+    data.nextHoopAct=clone(run.nextHoopAct||null);
+    data.host=clone(run.host||null);
+    data.hoop=clone(run.hoop||null);
+    data.boss=clone(run.boss||null);
+    data.ball=clone(run.ball||null);
+    data.guards=clone(run.guards||[]);
+    data.intf=clone(run.intf||[]);
+    data.projectiles=[];
+    data.fx=[];
+    return {v:1,savedAt:new Date().toISOString(),run:data};
+  };
+
+  Game.prototype._hbStoreEndlessResume=function(){
+    const can=this._hbCanSaveEndlessRun();
+    if(!can.ok){ this.toast&&this.toast('暫時不能保存',can.msg); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); return false; }
+    const snap=this._hbEndlessResumeSnapshot(this.run);
+    this.save.endlessResume=snap;
+    this.save.endless=true;
+    this._recordEndlessCheckpoint&&this._recordEndlessCheckpoint(this.run);
+    persist(this.save);
+    this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(true);
+    return true;
+  };
+
+  Game.prototype._hbClearEndlessResume=function(sync){
+    if(this.save&&this.save.endlessResume){
+      this.save.endlessResume=null;
+      persist(this.save);
+      if(sync!==false) this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(true);
+    }
+  };
+
+  Game.prototype._hbSaveAndExitEndless=function(){
+    if(!this._hbStoreEndlessResume()) return;
+    this._paused=false;
+    this.run=null;
+    this.particles.length=0;
+    this.floaters.length=0;
+    this.screen='hub';
+    this.toast&&this.toast('無盡已保存','下次可選擇繼續或重開');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  const prevStartEndless=Game.prototype.startEndless;
+  Game.prototype._hbStartFreshEndless=function(){
+    this._endlessResumePrompt=false;
+    this._hbClearEndlessResume(true);
+    return prevStartEndless.apply(this,arguments);
+  };
+
+  Game.prototype._hbResumeEndlessRun=function(){
+    const snap=this.save&&this.save.endlessResume;
+    if(!snap||!snap.run){ this._endlessResumePrompt=false; return prevStartEndless.call(this); }
+    const data=clone(snap.run), title=this._hbEndlessResumeTitle();
+    this._endlessResumePrompt=false;
+    this._hbClearEndlessResume(true);
+    prevStartEndless.call(this);
+    let run=this.run;
+    if(!run) return;
+    run.endless=true;
+    run.endlessDepth=Math.max(1,num(data.endlessDepth,1));
+    run.path=this._endlessPath?this._endlessPath():run.path;
+    this._primeEndlessRun&&this._primeEndlessRun(run);
+    this.enterStage(data.stageBoss?1:0);
+    run=this.run;
+    if(!run) return;
+    run.path=this._endlessPath?this._endlessPath():run.path;
+    run.pi=data.stageBoss?1:0;
+    run.stage=run.path[run.pi]||run.stage;
+    for(const k of Object.keys(data)){
+      if(['stageBoss','stageName','host','hoop','boss','ball','guards','intf','projectiles','fx'].includes(k)) continue;
+      run[k]=clone(data[k]);
+    }
+    run.host=clone(data.host||run.host);
+    run.hoop=clone(data.hoop||run.hoop);
+    run.boss=clone(data.boss||run.boss);
+    run.ball=clone(data.ball||run.ball);
+    run.guards=Array.isArray(data.guards)?clone(data.guards):run.guards;
+    run.intf=Array.isArray(data.intf)?clone(data.intf):[];
+    run.projectiles=[];
+    run.fx=[];
+    run.modal=null;
+    run.banner={text:'無盡續戰',sub:'讀取 '+title,t:2.4};
+    run._stageClearing=false;
+    run._endlessSummoning=false;
+    run.aiming=false;
+    run.repos=0;
+    if(!run.ball||run.ball.live||!run.ball.held) this.spawnBall&&this.spawnBall();
+    this.screen='battle';
+    this._paused=false;
+    this.toast&&this.toast('已繼續無盡深淵','續戰存檔已消耗，避免重複讀檔洗分');
+    this.render&&this.render();
+  };
+
+  Game.prototype.startEndless=function(opts){
+    if(opts&&opts.resume) return this._hbResumeEndlessRun();
+    if(opts&&opts.fresh) return this._hbStartFreshEndless();
+    if(this._hbHasEndlessResume()){
+      this._endlessIntro=false;
+      this._endlessResumePrompt=true;
+      this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+      this.render&&this.render();
+      return;
+    }
+    return prevStartEndless.apply(this,arguments);
+  };
+
+  const prevDrawPause=Game.prototype.drawPause;
+  Game.prototype.drawPause=function(){
+    const run=this.run;
+    if(!run||!run.endless) return prevDrawPause.apply(this,arguments);
+    const ctx=this.ctx, IT=this.insT||0;
+    const can=this._hbCanSaveEndlessRun();
+    ctx.fillStyle='rgba(3,2,4,0.88)';
+    ctx.fillRect(0,0,BW,BH);
+    this.text('無盡暫停',BW/2,IT+176,72,'#ece0c4',{align:'center',weight:'800',glow:14});
+    this.text('第 '+(run.endlessDepth||1)+' 層 · 分數 '+(run.score||0)+' · '+can.msg,BW/2,IT+232,26,can.ok?'#d8ff44':'#e6c068',{align:'center',baseline:'middle',weight:'900'});
+    const bw=560,bh=88,gap=18,x=BW/2-bw/2; let y=IT+278;
+    this.button(x,y,bw,bh,'繼續','res',()=>{ this._paused=false; },{primary:true,size:38}); y+=bh+gap;
+    this.button(x,y,bw,bh,'保存後退出','endless_save_exit',()=>this._hbSaveAndExitEndless(),{size:36,color:can.ok?'#d8ff44':'#a99c80',weight:'900'}); y+=bh+gap;
+    this.button(x,y,bw,bh,'放棄本局','quit',()=>{ this.confirm('放棄本次無盡挑戰？不會保留續戰存檔。',()=>{ this._hbClearEndlessResume(true); this._paused=false; this.run=null; this.screen='hub'; this.render&&this.render(); }); },{size:34,color:'#f0c0b0'}); y+=bh+gap;
+    const st=this.save.settings,tw=(bw-20)/2;
+    this.button(x,y,tw,76,st.music?'音樂 開':'音樂 關','pm',()=>{ st.music=!st.music; this.audio.setMusic(st.music); persist(this.save); },{size:28});
+    this.button(x+tw+20,y,tw,76,st.sfx?'音效 開':'音效 關','ps',()=>{ st.sfx=!st.sfx; this.audio.setSfx(st.sfx); persist(this.save); },{size:28});
+  };
+
+  Game.prototype._drawEndlessResumePrompt=function(){
+    if(!this._endlessResumePrompt) return;
+    const ctx=this.ctx, U=this._U||1, IL=this.insL||0, IR=this.insR||0, IT=this.insT||0;
+    ctx.save(); ctx.fillStyle='rgba(2,1,5,0.82)'; ctx.fillRect(-4000,-4000,BW+8000,BH+8000); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'endless_resume_scrim',()=>{});
+    const w=Math.min(760,BW-IL-IR-72*U), h=430*U, x=BW/2-w/2, y=IT+Math.max(72*U,(BH-IT-h)/2);
+    this.rr(x,y,w,h,22*U);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(24,16,10,0.98)');
+    bg.addColorStop(1,'rgba(7,5,9,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=3*U; ctx.strokeStyle='rgba(215,169,69,0.86)'; this.rr(x,y,w,h,22*U); ctx.stroke();
+    ctx.lineWidth=1.4*U; ctx.strokeStyle='rgba(185,255,47,0.34)'; this.rr(x+12*U,y+12*U,w-24*U,h-24*U,16*U); ctx.stroke();
+    this.text('偵測到無盡存檔',x+w/2,y+70*U,42*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12*U});
+    this.text(this._hbEndlessResumeTitle(),x+w/2,y+122*U,25*U,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this.wrap('繼續會消耗這份續戰存檔；重新開始會刪除它，避免重複讀檔洗分。',x+w/2,y+184*U,w-120*U,30*U,'#c8b894',22*U,'center');
+    const bw=220*U,bh=66*U,gap=24*U,by=y+h-104*U;
+    this.button(x+w/2-bw-gap/2,by,bw,bh,'繼續深淵','endless_resume_continue',()=>this.startEndless({resume:true}),{primary:true,size:25*U,weight:'900'});
+    this.button(x+w/2+gap/2,by,bw,bh,'重新開始','endless_resume_fresh',()=>this.startEndless({fresh:true}),{size:25*U,color:'#f0c0b0',weight:'900'});
+    this.button(x+w-112*U,y+24*U,72*U,50*U,'×','endless_resume_close',()=>{ this._endlessResumePrompt=false; this.render&&this.render(); },{size:32*U,color:'#f0c0b0'});
+  };
+
+  const prevRender=Game.prototype.render;
+  Game.prototype.render=function(){
+    const r=prevRender.apply(this,arguments);
+    if(this._endlessResumePrompt) this._drawEndlessResumePrompt();
+    return r;
+  };
+
+  const prevFinishEndless=Game.prototype.finishEndlessRun;
+  Game.prototype.finishEndlessRun=function(won){
+    this._hbClearEndlessResume(true);
+    return prevFinishEndless.apply(this,arguments);
+  };
+
+  const prevSubset=Game.prototype._progressSaveSubset;
+  Game.prototype._progressSaveSubset=function(){
+    const out=prevSubset?prevSubset.call(this):{};
+    out.endlessResume=this.save&&this.save.endlessResume?clone(this.save.endlessResume):null;
+    return out;
+  };
+
+  const prevApply=Game.prototype._applyCloudProgressSnapshot;
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    const changed=prevApply?!!prevApply.call(this,remote):false;
+    const rs=remote&&remote.save&&typeof remote.save==='object'?remote.save:null;
+    if(rs&&this.save&&Object.prototype.hasOwnProperty.call(rs,'endlessResume')){
+      this.save.endlessResume=rs.endlessResume&&rs.endlessResume.v===1?clone(rs.endlessResume):null;
+      persist(this.save);
+      return true;
+    }
+    return changed;
+  };
+})();
