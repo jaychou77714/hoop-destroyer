@@ -1,0 +1,53 @@
+name: Codex Apply Leaderboard V4
+
+on:
+  push:
+    paths:
+      - .github/workflows/codex-apply-leaderboard-v4.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply leaderboard v4
+        env:
+          ENGINE_MARKER: "// === final activation v4: leaderboard data density and observer badge layout ==="
+          ENGINE_SHA256: "020782dfe933b5a6520c2c07ad3621a7f8faaac7604e6fdfb1035ba2afa7b223"
+          ENGINE_GZIP_BASE64: "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"
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const zlib = require('zlib');
+          const marker = process.env.ENGINE_MARKER;
+          const block = zlib.gunzipSync(Buffer.from(process.env.ENGINE_GZIP_BASE64, 'base64')).toString('utf8');
+          const sha = crypto.createHash('sha256').update(block, 'utf8').digest('hex');
+          if (sha !== process.env.ENGINE_SHA256) throw new Error('Block checksum mismatch: ' + sha);
+          let engine = fs.readFileSync('engine.js', 'utf8');
+          const idx = engine.indexOf(marker);
+          if (idx >= 0) engine = engine.slice(0, idx).trimEnd() + '\n\n';
+          else engine = engine.trimEnd() + '\n\n';
+          fs.writeFileSync('engine.js', engine + block, 'utf8');
+          NODE
+      - name: Validate syntax
+        run: node --check engine.js
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/codex-apply-leaderboard-v4.yml
+          git add engine.js
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Polish daily leaderboard layout"
+          git push
