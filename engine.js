@@ -761,6 +761,564 @@ class Game{
   };
 })();
 
+// === final activation v22: last-write bean art wiring ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ART_VER='20260629_bean_all_v1';
+  const RELIC_VER='20260629_bean_relics_7x_v1';
+  const mobUrl=p=>p+'?v='+ART_VER;
+  const lim=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const isStdRun=run=>!!(run&&!run.endless&&!run.sandbag&&run.act>=1&&run.act<=5);
+
+  if(typeof SANDBAGS!=='undefined'){
+    for(let i=1;i<=5;i++) if(SANDBAGS[i]) SANDBAGS[i].file=mobUrl('/assets/mob/speed/act'+i+'.png');
+  }
+
+  const spread=[
+    {x:-500,y:132,s:1.20,layer:2},{x:-365,y:54,s:1.10,layer:1},{x:-230,y:150,s:1.18,layer:2},
+    {x:-455,y:-76,s:0.98,layer:0},{x:-285,y:-118,s:0.96,layer:0},{x:-104,y:-72,s:1.00,layer:0},
+    {x:82,y:-58,s:0.98,layer:0},{x:230,y:38,s:1.08,layer:1},{x:300,y:146,s:1.16,layer:2},
+    {x:-570,y:14,s:1.06,layer:1},{x:-46,y:178,s:1.12,layer:2},{x:142,y:116,s:1.08,layer:2}
+  ];
+  const prevSpawn=Game.prototype.spawnGuard;
+  Game.prototype.spawnGuard=function(type){
+    const g=prevSpawn.apply(this,arguments), run=this.run, host=run&&run.host;
+    if(!g||g.sandbag||!run||!host) return g;
+    const slot=spread[(g.slot||0)%spread.length], cycle=Math.floor((g.slot||0)/spread.length);
+    const dir=(this.save&&this.save.settings&&this.save.settings.lefty)?-1:1;
+    const jitter=((cycle%2)?42:-28)*(1+Math.min(2,cycle)*0.35);
+    g.bx=slot.x*dir+jitter*dir;
+    g.by=slot.y+((cycle%3)-1)*18;
+    g.layer=slot.layer;
+    g.drawScale=slot.s*(g.elite?1.16:1);
+    g.x=lim(host.x+g.bx,80,BW-80);
+    g.y=lim(host.baseY+g.by,BH*0.26,BH-88);
+    return g;
+  };
+
+  const prevGuard=Game.prototype.drawGuard;
+  Game.prototype.drawGuard=function(g){
+    const run=this.run;
+    if(isStdRun(run)&&g&&!g.dead){
+      const ctx=this.ctx, im=this._standardBeanMobSpriteFor&&this._standardBeanMobSpriteFor(g);
+      if(!im||!im.complete||!im.naturalWidth||im._err) return prevGuard?prevGuard.call(this,g):undefined;
+      const sc=(g.drawScale||1)*(g.elite?1.12:1), bob=Math.sin((this.t||0)*2.1+(g.slot||0))*3, foot=g.y+g.r*0.78;
+      const H=Math.min(Math.max(g.r*(g.elite?5.45:5.05)*sc,g.elite?222:172),BH*(g.elite?0.35:0.31));
+      const W=H*im.naturalWidth/im.naturalHeight, rim=g.elite?'#ffe14d':'rgba(160,255,48,0.72)';
+      ctx.save(); ctx.globalAlpha=g.phased?0.5:1;
+      const sh=ctx.createRadialGradient(g.x,foot-4,8,g.x,foot-4,W*0.52);
+      sh.addColorStop(0,'rgba(0,0,0,0.48)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(g.x,foot-4,W*0.48,H*0.075,0,0,TAU); ctx.fill();
+      ctx.save(); ctx.globalAlpha=g.phased?0.26:0.62; ctx.filter='brightness(0) opacity(0.96)';
+      const outline=Math.max(3,H*0.025);
+      ctx.drawImage(im,g.x-W/2-outline,foot+bob-H,W,H); ctx.drawImage(im,g.x-W/2+outline,foot+bob-H,W,H);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H-outline,W,H); ctx.drawImage(im,g.x-W/2,foot+bob-H+outline,W,H);
+      ctx.restore();
+      ctx.save(); ctx.shadowColor=rim; ctx.shadowBlur=H*(g.elite?0.15:0.10); ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H); ctx.restore();
+      ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      if(g.frozen){ ctx.globalAlpha=0.32; ctx.fillStyle='#6fd8ff'; ctx.beginPath(); ctx.ellipse(g.x,foot-H*0.48,W*0.5,H*0.48,0,0,TAU); ctx.fill(); ctx.globalAlpha=1; }
+      if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.72); ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H); }
+      ctx.restore(); this.drawGuardTags&&this.drawGuardTags(g); return;
+    }
+    return prevGuard?prevGuard.apply(this,arguments):undefined;
+  };
+
+  Game.prototype._hbChapterBossImg=function(act){
+    this._hbChapterBossImgs=this._hbChapterBossImgs||{};
+    const key='v22_'+act;
+    if(this._hbChapterBossImgs[key]!==undefined) return this._hbChapterBossImgs[key];
+    try{
+      const im=new Image();
+      im.onerror=()=>{ im._err=true; };
+      im.onload=()=>{ try{ if(this.screen==='battle'&&this.render) this.render(); }catch(_e){} };
+      im.src=mobUrl('/assets/mob/bosses/act'+act+'.png');
+      this._hbChapterBossImgs[key]=im;
+      return im;
+    }catch(e){ this._hbChapterBossImgs[key]=null; return null; }
+  };
+  Game.prototype._hbDrawChapterBossArt=function(){
+    const run=this.run, host=run&&run.host;
+    if(!run||!host||run.endless||run.sandbag||!run.stage||!run.stage.boss) return;
+    const im=this._hbChapterBossImg(run.act);
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const ctx=this.ctx, nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.72, W=H*nw/nh;
+    if(W>BW*0.48){ W=BW*0.48; H=W*nh/nw; }
+    const cx=host.x, by=BH-20;
+    ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,32,cx,by-H*0.48,W*0.72);
+    glow.addColorStop(0,'rgba(185,255,47,0.18)'); glow.addColorStop(0.54,'rgba(126,60,190,0.12)'); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(cx,by-H*0.46,W*0.64,H*0.54,0,0,TAU); ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.44);
+    sh.addColorStop(0,'rgba(0,0,0,0.58)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(cx,by-8,W*0.44,H*0.08,0,0,TAU); ctx.fill();
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run._mobHitFlash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.46,run._mobHitFlash*0.65); ctx.drawImage(im,cx-W/2,by-H,W,H); }
+    ctx.restore();
+  };
+  const prevHostHoop=Game.prototype.drawHostAndHoop;
+  Game.prototype.drawHostAndHoop=function(){
+    this._hbDrawChapterBossArt&&this._hbDrawChapterBossArt();
+    return prevHostHoop?prevHostHoop.apply(this,arguments):undefined;
+  };
+
+  const eMeta={
+    crack_runner:{s:mobUrl('/assets/endless/enemies/crack_runner.png'),c:'#9fe024',z:1.18},
+    screen_idol:{s:mobUrl('/assets/endless/enemies/screen_idol.png'),c:'#d7a945',z:1.34},
+    iron_whistle:{s:mobUrl('/assets/endless/enemies/iron_whistle.png'),c:'#ffe14d',z:1.12},
+    oil_monk:{s:mobUrl('/assets/endless/enemies/oil_monk.png'),c:'#6fbe30',z:1.24},
+    mist_librarian:{s:mobUrl('/assets/endless/enemies/mist_librarian.png'),c:'#b980ff',z:1.18},
+    cold_rim_guard:{s:mobUrl('/assets/endless/enemies/cold_rim_guard.png'),c:'#6fd8ff',z:1.25},
+    war_drum_leader:{s:mobUrl('/assets/endless/enemies/war_drum_leader.png'),c:'#ffb34d',z:1.25},
+    shattered_board_collector:{s:mobUrl('/assets/endless/enemies/shattered_board_collector.png'),c:'#d8ff44',z:1.20}
+  };
+  const prevEndGuard=Game.prototype.drawEndlessGuard;
+  Game.prototype.drawEndlessGuard=function(g){
+    const run=this.run;
+    if(run&&run.stage&&run.stage.boss) return;
+    const id=(g&&g.endlessEnemyId)||'crack_runner', info=eMeta[id]||eMeta.crack_runner;
+    const im=this._endlessImg?this._endlessImg('enemy_'+id+'_'+ART_VER,info.s):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return prevEndGuard?prevEndGuard.call(this,g):undefined;
+    const ctx=this.ctx, base=g.r||28, bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4, scale=(g.drawScale||1)*(info.z||1)*(g.elite?1.12:1);
+    let H=Math.min(Math.max(base*(g.elite?5.3:4.85)*scale,g.elite?225:172),BH*(g.elite?0.36:0.31));
+    let W=H*im.naturalWidth/im.naturalHeight;
+    const maxW=base*(g.elite?7.2:6.2)*scale;
+    if(W>maxW){ W=maxW; H=W*im.naturalHeight/im.naturalWidth; }
+    const x=-W/2, y=bob+base*1.05-H, rimCol=g.endlessAffixColor||g.endlessColor||info.c||'#9fe024';
+    ctx.save(); ctx.translate(g.x,g.y); ctx.globalAlpha=g.phased?0.48:1; this.shadow(0,base*0.94,base*1.18,0.28);
+    const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,Math.max(base*2.7,W*0.68));
+    glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.24)':'rgba(155,255,50,0.20)'); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,bob-base*0.4,Math.max(base*2.35,W*0.58),0,TAU); ctx.fill();
+    ctx.save(); ctx.globalAlpha=g.phased?0.28:0.58; ctx.filter='brightness(0) opacity(0.96)';
+    const outline=Math.max(3,H*0.026);
+    ctx.drawImage(im,x-outline,y,W,H); ctx.drawImage(im,x+outline,y,W,H); ctx.drawImage(im,x,y-outline,W,H); ctx.drawImage(im,x,y+outline,W,H);
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha=g.phased?0.34:0.86; ctx.shadowColor=rimCol; ctx.shadowBlur=H*(g.elite?0.16:0.11); ctx.drawImage(im,x,y,W,H); ctx.restore();
+    ctx.drawImage(im,x,y,W,H);
+    if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.7); ctx.drawImage(im,x,y,W,H); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; }
+    if(g.shieldUp){ ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.88)'; ctx.beginPath(); ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU); ctx.stroke(); }
+    if(g.endlessAffix){
+      const col=g.endlessAffixColor||'#ffe14d';
+      ctx.save(); ctx.translate(0,y-18); this.rr(-24,-16,48,32,10); ctx.fillStyle='rgba(9,6,5,0.88)'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=col; ctx.stroke(); this.text(g.endlessAffixShort||'菁',0,2,20,col,{align:'center',baseline:'middle',weight:'900',glow:8}); ctx.restore();
+      if(g.endlessCountdown>0) this.text(Math.ceil(g.endlessCountdown),0,y+22,18,'#ff6a4a',{align:'center',baseline:'middle',weight:'900'});
+    }
+    ctx.restore(); this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  const eBoss=[
+    [5,'free_throw_executioner',mobUrl('/assets/endless/bosses/free_throw_executioner.png')],
+    [10,'broken_rim_stitcher',mobUrl('/assets/endless/bosses/broken_rim_stitcher.png')],
+    [15,'coldflame_scorekeeper',mobUrl('/assets/endless/bosses/coldflame_scorekeeper.png')],
+    [20,'thunderbone_announcer',mobUrl('/assets/endless/bosses/thunderbone_announcer.png')],
+    [9999,'abyss_hoop_lord',mobUrl('/assets/endless/bosses/abyss_hoop_lord.png')]
+  ];
+  Game.prototype._endlessBossSprite=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    const b=eBoss.find(x=>depth<=x[0])||eBoss[eBoss.length-1];
+    return {key:b[1],src:b[2]};
+  };
+  const prevEndBoss=Game.prototype.drawEndlessBossArt;
+  Game.prototype.drawEndlessBossArt=function(){
+    const ctx=this.ctx, run=this.run, boss=this._endlessBossSprite(run&&run.endlessDepth), im=this._endlessImg?this._endlessImg('boss_'+boss.key+'_'+ART_VER,boss.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return prevEndBoss?prevEndBoss.call(this):undefined;
+    const nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.76, W=H*nw/nh;
+    if(W>BW*0.64){ W=BW*0.64; H=W*nh/nw; }
+    const cx=BW*0.67, by=BH-18; ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,30,cx,by-H*0.48,W*0.72);
+    glow.addColorStop(0,'rgba(160,255,48,0.24)'); glow.addColorStop(0.58,'rgba(100,255,36,0.09)'); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(cx,by-H*0.45,W*0.64,H*0.54,0,0,TAU); ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.42);
+    sh.addColorStop(0,'rgba(0,0,0,0.58)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(cx,by-8,W*0.42,H*0.08,0,0,TAU); ctx.fill();
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run&&run._mobHitFlash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.45,run._mobHitFlash*0.65); ctx.drawImage(im,cx-W/2,by-H,W,H); }
+    ctx.restore();
+  };
+
+  const typeInfo={
+    ball:{label:'籃球',tab:'籃球',sheet:'icons_balls.png',names:['冠軍金球','冷焰籃球','燼鏈戰球','深淵紫球','碎玻璃球','毒裂籃球','幸運空心球']},
+    wrist:{label:'護腕',tab:'護腕',sheet:'icons_wrist.png',names:['骨哨護腕','鐵鏈護腕','黏油護腕','血紅腕帶','雷骨腕甲','霜封護腕','冠軍腕甲']},
+    shoes:{label:'球鞋',tab:'球鞋',sheet:'icons_shoes.png',names:['羽翼疾鞋','鐵底球鞋','霜步球鞋','燼火鞋','影步鞋','荊棘戰靴','遠投金靴']},
+    charm:{label:'護符',tab:'護符',sheet:'icons_charms.png',names:['骷髏墜飾','深淵護符','幸運框牌','碎鏡吊墜','綠焰符牌','裁判哨符','小王冠印']},
+    mask:{label:'面具',tab:'面具',sheet:'icons_masks.png',names:['裁判面罩','影客兜帽','冷焰骨面','教練骨面','血戰面甲','毒沼面具','王冠金面']},
+    hoop:{label:'籃框',tab:'籃框',sheet:'icons_hoops.png',names:['破金籃框','鎖鏈鐵框','深淵紫框','冷焰冰框','黏油毒框','燼火紅框','骷髏冠框']}
+  };
+  const order=['ball','wrist','shoes','charm','mask','hoop'];
+  const baseDesc='基底外觀固定；實際掉落強度、品質與詞綴由 RNG 決定。';
+  const baseDefs={
+    ball:[['hb_ball_0','冠軍金球','normal'],['hb_ball_1','冷焰籃球','ice'],['hb_ball_2','燼鏈戰球','fire'],['hb_ball_3','深淵紫球','lightning'],['hb_ball_4','碎玻璃球','arrow'],['hb_ball_5','毒裂籃球','axe'],['hb_ball_6','幸運空心球','normal']],
+    wrist:[['hb_wrist_0','骨哨護腕'],['hb_wrist_1','鐵鏈護腕'],['hb_wrist_2','黏油護腕'],['hb_wrist_3','血紅腕帶'],['hb_wrist_4','雷骨腕甲'],['hb_wrist_5','霜封護腕'],['hb_wrist_6','冠軍腕甲']],
+    shoes:[['hb_shoes_0','羽翼疾鞋'],['hb_shoes_1','鐵底球鞋'],['hb_shoes_2','霜步球鞋'],['hb_shoes_3','燼火鞋'],['hb_shoes_4','影步鞋'],['hb_shoes_5','荊棘戰靴'],['hb_shoes_6','遠投金靴']],
+    charm:[['hb_charm_0','骷髏墜飾'],['hb_charm_1','深淵護符'],['hb_charm_2','幸運框牌'],['hb_charm_3','碎鏡吊墜'],['hb_charm_4','綠焰符牌'],['hb_charm_5','裁判哨符'],['hb_charm_6','小王冠印']],
+    mask:[['hb_mask_0','裁判面罩'],['hb_mask_1','影客兜帽'],['hb_mask_2','冷焰骨面'],['hb_mask_3','教練骨面'],['hb_mask_4','血戰面甲'],['hb_mask_5','毒沼面具'],['hb_mask_6','王冠金面']],
+    hoop:[['hb_hoop_0','破金籃框'],['hb_hoop_1','鎖鏈鐵框'],['hb_hoop_2','深淵紫框'],['hb_hoop_3','冷焰冰框'],['hb_hoop_4','黏油毒框'],['hb_hoop_5','燼火紅框'],['hb_hoop_6','骷髏冠框']]
+  };
+  const visualById={
+    abbey_ember:['ball',2],sand_bow:['ball',4],citadel_battery:['ball',3],red_axe:['hoop',5],final_chill:['ball',1],
+    ember_saint:['charm',4],iron_hook:['hoop',1],coldflame_tesla:['ball',1],thunderbone:['wrist',4],absolute_zero:['ball',1],
+    broken_glass:['ball',4],deadeye_sigil:['mask',0],kings_seal:['mask',6],blood_chalice:['charm',0],hex_idol:['charm',1],
+    pilgrim_bone:['charm',0],rift_feather:['shoes',0],champ_ball:['ball',0],bench_towel:['wrist',3],ref_glasses:['mask',0],board_brace:['wrist',6]
+  };
+  if(typeof RELICS!=='undefined'){
+    for(const type of order){
+      for(let i=0;i<baseDefs[type].length;i++){
+        const def=baseDefs[type][i], id=def[0];
+        visualById[id]=[type,i];
+        if(!RELICS[id]) RELICS[id]={name:def[1],cls:type==='ball'?'core':(type==='charm'||type==='hoop'?'oath':'feel'),equipType:type,form:def[2]||null,desc:baseDesc};
+      }
+    }
+  }
+  Game.prototype._hbRelicUiUrl=function(name){ return '/assets/relic_ui/'+name+'?v='+RELIC_VER; };
+  Game.prototype._relicUiImg=function(name){
+    this._relicUi=this._relicUi||{};
+    const key=name+'?v='+RELIC_VER;
+    if(this._relicUi[key]!==undefined) return this._relicUi[key];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=this._hbRelicUiUrl(name);
+      this._relicUi[key]=im;
+      return im;
+    }catch(e){ this._relicUi[key]=null; return null; }
+  };
+  Game.prototype._preloadRelicUiAssets=function(){
+    for(const name of ['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) this._relicUiImg(name);
+  };
+  Game.prototype._relicVisual=function(rid){
+    if(visualById[rid]) return {type:visualById[rid][0],idx:visualById[rid][1]};
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{};
+    if(R.equipType&&typeInfo[R.equipType]) return {type:R.equipType,idx:0};
+    if(R.form) return {type:'ball',idx:({fire:2,ice:1,lightning:3,axe:5,arrow:4,normal:6}[R.form]||0)};
+    if(R.cls==='oath') return {type:'charm',idx:1};
+    if(R.cls==='feel') return {type:'wrist',idx:0};
+    return {type:'hoop',idx:0};
+  };
+  Game.prototype._relicBaseName=function(type,idx){
+    const t=typeInfo[type]||typeInfo.ball;
+    return t.names[idx%7]||t.label;
+  };
+  Game.prototype._allRelicCatalog=function(){
+    const out=[];
+    for(const type of order){
+      const t=typeInfo[type];
+      for(let i=0;i<7;i++) out.push({catalog:true,id:'cat_'+type+'_'+i,type,idx:i,name:t.names[i],core:t.label,tier:i%5,tab:t.tab});
+    }
+    return out;
+  };
+  Game.prototype._relicDisplay=function(rid,owned){
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{}, v=this._relicVisual(rid), meta=owned&&this._relicMeta?this._relicMeta(rid):null;
+    const t=typeInfo[v.type]||typeInfo.ball;
+    return {id:rid,name:R.name||this._relicBaseName(v.type,v.idx),type:v.type,idx:v.idx%7,cls:R.cls||'core',core:t.label,desc:R.desc||baseDesc,tier:meta?meta.tier:0,q:meta?meta.q:0,affixes:meta&&meta.affixes?meta.affixes:[]};
+  };
+
+  const prevFull=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=prevFull?prevFull.call(this):[], add=[];
+    for(let i=1;i<=5;i++){ add.push(mobUrl('/assets/mob/speed/act'+i+'.png')); add.push(mobUrl('/assets/mob/bosses/act'+i+'.png')); }
+    for(let act=1;act<=5;act++) for(let i=0;i<6;i++) add.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1');
+    for(const id of Object.keys(eMeta)) add.push(eMeta[id].s);
+    for(const b of eBoss) add.push(b[2]);
+    for(const name of ['icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) add.push(this._hbRelicUiUrl?this._hbRelicUiUrl(name):('/assets/relic_ui/'+name));
+    const seen={}, out=[];
+    for(const src of base.concat(add)){ if(src&&!seen[src]){ seen[src]=1; out.push(src); } }
+    return out;
+  };
+})();
+
+// === final activation v21: approved bean assets, 7 relic bases per slot ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ART_VER='20260629_bean_all_v1';
+  const RELIC_VER='20260629_bean_relics_7x_v1';
+  const mobUrl=p=>p+'?v='+ART_VER;
+  const lim=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const isStdRun=run=>!!(run&&!run.endless&&!run.sandbag&&run.act>=1&&run.act<=5);
+
+  if(typeof SANDBAGS!=='undefined'){
+    for(let i=1;i<=5;i++) if(SANDBAGS[i]) SANDBAGS[i].file=mobUrl('/assets/mob/speed/act'+i+'.png');
+  }
+
+  const slotSpread=[
+    {x:-500,y:132,s:1.20,layer:2},{x:-365,y:54,s:1.10,layer:1},{x:-230,y:150,s:1.18,layer:2},
+    {x:-455,y:-76,s:0.98,layer:0},{x:-285,y:-118,s:0.96,layer:0},{x:-104,y:-72,s:1.00,layer:0},
+    {x:82,y:-58,s:0.98,layer:0},{x:230,y:38,s:1.08,layer:1},{x:300,y:146,s:1.16,layer:2},
+    {x:-570,y:14,s:1.06,layer:1},{x:-46,y:178,s:1.12,layer:2},{x:142,y:116,s:1.08,layer:2}
+  ];
+  const prevSpawnGuard=Game.prototype.spawnGuard;
+  Game.prototype.spawnGuard=function(type){
+    const g=prevSpawnGuard.apply(this,arguments);
+    const run=this.run, host=run&&run.host;
+    if(!g||g.sandbag||!run||!host) return g;
+    const slot=slotSpread[(g.slot||0)%slotSpread.length];
+    const cycle=Math.floor((g.slot||0)/slotSpread.length);
+    const dir=(this.save&&this.save.settings&&this.save.settings.lefty)?-1:1;
+    const jitter=((cycle%2)?42:-28)*(1+Math.min(2,cycle)*0.35);
+    g.bx=slot.x*dir+jitter*dir;
+    g.by=slot.y+((cycle%3)-1)*18;
+    g.layer=slot.layer;
+    g.drawScale=slot.s*(g.elite?1.16:1);
+    g.x=lim(host.x+g.bx,80,BW-80);
+    g.y=lim(host.baseY+g.by,BH*0.26,BH-88);
+    return g;
+  };
+
+  const prevDrawGuard=Game.prototype.drawGuard;
+  Game.prototype.drawGuard=function(g){
+    const run=this.run;
+    if(isStdRun(run)&&g&&!g.dead){
+      const ctx=this.ctx, im=this._standardBeanMobSpriteFor&&this._standardBeanMobSpriteFor(g);
+      if(!im||!im.complete||!im.naturalWidth||im._err) return prevDrawGuard?prevDrawGuard.call(this,g):undefined;
+      const sc=(g.drawScale||1)*(g.elite?1.12:1);
+      const bob=Math.sin((this.t||0)*2.1+(g.slot||0))*3;
+      const foot=g.y+g.r*0.78;
+      const rawH=g.r*(g.elite?5.45:5.05)*sc;
+      const H=Math.min(Math.max(rawH,g.elite?222:172),BH*(g.elite?0.35:0.31));
+      const W=H*im.naturalWidth/im.naturalHeight;
+      ctx.save();
+      ctx.globalAlpha=g.phased?0.5:1;
+      const sh=ctx.createRadialGradient(g.x,foot-4,8,g.x,foot-4,W*0.52);
+      sh.addColorStop(0,'rgba(0,0,0,0.48)');
+      sh.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(g.x,foot-4,W*0.48,H*0.075,0,0,TAU); ctx.fill();
+      const rim=g.elite?'#ffe14d':'rgba(160,255,48,0.72)';
+      ctx.save();
+      ctx.globalAlpha=g.phased?0.26:0.62;
+      ctx.filter='brightness(0) opacity(0.96)';
+      const outline=Math.max(3,H*0.025);
+      ctx.drawImage(im,g.x-W/2-outline,foot+bob-H,W,H);
+      ctx.drawImage(im,g.x-W/2+outline,foot+bob-H,W,H);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H-outline,W,H);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H+outline,W,H);
+      ctx.restore();
+      ctx.save();
+      ctx.shadowColor=rim;
+      ctx.shadowBlur=H*(g.elite?0.15:0.10);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      ctx.restore();
+      ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      if(g.frozen){ ctx.globalAlpha=0.32; ctx.fillStyle='#6fd8ff'; ctx.beginPath(); ctx.ellipse(g.x,foot-H*0.48,W*0.5,H*0.48,0,0,TAU); ctx.fill(); ctx.globalAlpha=1; }
+      if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.72); ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H); }
+      ctx.restore();
+      this.drawGuardTags&&this.drawGuardTags(g);
+      return;
+    }
+    return prevDrawGuard?prevDrawGuard.apply(this,arguments):undefined;
+  };
+
+  Game.prototype._hbChapterBossImg=function(act){
+    this._hbChapterBossImgs=this._hbChapterBossImgs||{};
+    const key='act'+act;
+    if(this._hbChapterBossImgs[key]!==undefined) return this._hbChapterBossImgs[key];
+    try{
+      const im=new Image();
+      im.onerror=()=>{ im._err=true; };
+      im.onload=()=>{ try{ if(this.screen==='battle'&&this.render) this.render(); }catch(_e){} };
+      im.src=mobUrl('/assets/mob/bosses/act'+act+'.png');
+      this._hbChapterBossImgs[key]=im;
+      return im;
+    }catch(e){ this._hbChapterBossImgs[key]=null; return null; }
+  };
+  Game.prototype._hbDrawChapterBossArt=function(){
+    const run=this.run, host=run&&run.host;
+    if(!run||!host||run.endless||run.sandbag||!run.stage||!run.stage.boss) return;
+    const im=this._hbChapterBossImg(run.act);
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const ctx=this.ctx, nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.72, W=H*nw/nh;
+    if(W>BW*0.48){ W=BW*0.48; H=W*nh/nw; }
+    const cx=host.x, by=BH-20;
+    ctx.save();
+    const g=ctx.createRadialGradient(cx,by-H*0.48,32,cx,by-H*0.48,W*0.72);
+    g.addColorStop(0,'rgba(185,255,47,0.18)');
+    g.addColorStop(0.54,'rgba(126,60,190,0.12)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(cx,by-H*0.46,W*0.64,H*0.54,0,0,TAU); ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.44);
+    sh.addColorStop(0,'rgba(0,0,0,0.58)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(cx,by-8,W*0.44,H*0.08,0,0,TAU); ctx.fill();
+    let lp=0; if(run._mobLunge>0){ const tt=1-run._mobLunge/0.34; lp=Math.sin(lim(tt,0,1)*Math.PI); }
+    if(lp>0){ ctx.translate(cx,by); ctx.scale(1+lp*0.045,1+lp*0.045); ctx.translate(-cx-lp*46,-by); }
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run._mobHitFlash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.46,run._mobHitFlash*0.65); ctx.drawImage(im,cx-W/2,by-H,W,H); }
+    ctx.restore();
+  };
+  const prevDrawHostAndHoop=Game.prototype.drawHostAndHoop;
+  Game.prototype.drawHostAndHoop=function(){
+    this._hbDrawChapterBossArt&&this._hbDrawChapterBossArt();
+    return prevDrawHostAndHoop?prevDrawHostAndHoop.apply(this,arguments):undefined;
+  };
+
+  const endlessMeta={
+    crack_runner:{s:mobUrl('/assets/endless/enemies/crack_runner.png'),c:'#9fe024',z:1.18},
+    screen_idol:{s:mobUrl('/assets/endless/enemies/screen_idol.png'),c:'#d7a945',z:1.34},
+    iron_whistle:{s:mobUrl('/assets/endless/enemies/iron_whistle.png'),c:'#ffe14d',z:1.12},
+    oil_monk:{s:mobUrl('/assets/endless/enemies/oil_monk.png'),c:'#6fbe30',z:1.24},
+    mist_librarian:{s:mobUrl('/assets/endless/enemies/mist_librarian.png'),c:'#b980ff',z:1.18},
+    cold_rim_guard:{s:mobUrl('/assets/endless/enemies/cold_rim_guard.png'),c:'#6fd8ff',z:1.25},
+    war_drum_leader:{s:mobUrl('/assets/endless/enemies/war_drum_leader.png'),c:'#ffb34d',z:1.25},
+    shattered_board_collector:{s:mobUrl('/assets/endless/enemies/shattered_board_collector.png'),c:'#d8ff44',z:1.20}
+  };
+  const prevDrawEndlessGuard=Game.prototype.drawEndlessGuard;
+  Game.prototype.drawEndlessGuard=function(g){
+    const run=this.run;
+    if(run&&run.stage&&run.stage.boss) return;
+    const id=(g&&g.endlessEnemyId)||'crack_runner';
+    const info=endlessMeta[id]||endlessMeta.crack_runner;
+    const im=this._endlessImg?this._endlessImg('enemy_'+id+'_'+ART_VER,info.s):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return prevDrawEndlessGuard?prevDrawEndlessGuard.call(this,g):undefined;
+    const ctx=this.ctx, base=g.r||28, bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4, scale=(g.drawScale||1)*(info.z||1)*(g.elite?1.12:1);
+    let H=Math.min(Math.max(base*(g.elite?5.3:4.85)*scale,g.elite?225:172),BH*(g.elite?0.36:0.31));
+    let W=H*im.naturalWidth/im.naturalHeight;
+    const maxW=base*(g.elite?7.2:6.2)*scale;
+    if(W>maxW){ W=maxW; H=W*im.naturalHeight/im.naturalWidth; }
+    const x=-W/2, y=bob+base*1.05-H;
+    ctx.save(); ctx.translate(g.x,g.y); ctx.globalAlpha=g.phased?0.48:1; this.shadow(0,base*0.94,base*1.18,0.28);
+    const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,Math.max(base*2.7,W*0.68));
+    glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.24)':'rgba(155,255,50,0.20)'); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,bob-base*0.4,Math.max(base*2.35,W*0.58),0,TAU); ctx.fill();
+    const rimCol=g.endlessAffixColor||g.endlessColor||info.c||'#9fe024';
+    ctx.save(); ctx.globalAlpha=g.phased?0.28:0.58; ctx.filter='brightness(0) opacity(0.96)';
+    const outline=Math.max(3,H*0.026);
+    ctx.drawImage(im,x-outline,y,W,H); ctx.drawImage(im,x+outline,y,W,H); ctx.drawImage(im,x,y-outline,W,H); ctx.drawImage(im,x,y+outline,W,H);
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha=g.phased?0.34:0.86; ctx.shadowColor=rimCol; ctx.shadowBlur=H*(g.elite?0.16:0.11); ctx.drawImage(im,x,y,W,H); ctx.restore();
+    ctx.drawImage(im,x,y,W,H);
+    if(g.flash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.62,g.flash*0.7); ctx.drawImage(im,x,y,W,H); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; }
+    if(g.shieldUp){ ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.88)'; ctx.beginPath(); ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU); ctx.stroke(); }
+    if(g.endlessAffix){
+      const col=g.endlessAffixColor||'#ffe14d';
+      ctx.save(); ctx.translate(0,y-18); this.rr(-24,-16,48,32,10); ctx.fillStyle='rgba(9,6,5,0.88)'; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=col; ctx.stroke(); this.text(g.endlessAffixShort||'菁',0,2,20,col,{align:'center',baseline:'middle',weight:'900',glow:8}); ctx.restore();
+      if(g.endlessCountdown>0) this.text(Math.ceil(g.endlessCountdown),0,y+22,18,'#ff6a4a',{align:'center',baseline:'middle',weight:'900'});
+    }
+    ctx.restore(); this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  const endlessBosses=[
+    [5,'free_throw_executioner',mobUrl('/assets/endless/bosses/free_throw_executioner.png')],
+    [10,'broken_rim_stitcher',mobUrl('/assets/endless/bosses/broken_rim_stitcher.png')],
+    [15,'coldflame_scorekeeper',mobUrl('/assets/endless/bosses/coldflame_scorekeeper.png')],
+    [20,'thunderbone_announcer',mobUrl('/assets/endless/bosses/thunderbone_announcer.png')],
+    [9999,'abyss_hoop_lord',mobUrl('/assets/endless/bosses/abyss_hoop_lord.png')]
+  ];
+  Game.prototype._endlessBossSprite=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    const b=endlessBosses.find(x=>depth<=x[0])||endlessBosses[endlessBosses.length-1];
+    return {key:b[1],src:b[2]};
+  };
+  const prevDrawEndlessBossArt=Game.prototype.drawEndlessBossArt;
+  Game.prototype.drawEndlessBossArt=function(){
+    const ctx=this.ctx, run=this.run, boss=this._endlessBossSprite(run&&run.endlessDepth), im=this._endlessImg?this._endlessImg('boss_'+boss.key+'_'+ART_VER,boss.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return prevDrawEndlessBossArt?prevDrawEndlessBossArt.call(this):undefined;
+    const nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.76, W=H*nw/nh;
+    if(W>BW*0.64){ W=BW*0.64; H=W*nh/nw; }
+    const cx=BW*0.67, by=BH-18; ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,30,cx,by-H*0.48,W*0.72); glow.addColorStop(0,'rgba(160,255,48,0.24)'); glow.addColorStop(0.58,'rgba(100,255,36,0.09)'); glow.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(cx,by-H*0.45,W*0.64,H*0.54,0,0,TAU); ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.42); sh.addColorStop(0,'rgba(0,0,0,0.58)'); sh.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(cx,by-8,W*0.42,H*0.08,0,0,TAU); ctx.fill();
+    let lp=0; if(run&&run._mobLunge>0){ const tt=1-run._mobLunge/0.34; lp=Math.sin(lim(tt,0,1)*Math.PI); } if(lp>0){ ctx.translate(cx,by); ctx.scale(1+lp*0.05,1+lp*0.05); ctx.translate(-cx-lp*54,-by); }
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run&&run._mobHitFlash>0){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=Math.min(0.45,run._mobHitFlash*0.65); ctx.drawImage(im,cx-W/2,by-H,W,H); }
+    ctx.restore();
+  };
+
+  const typeInfo={
+    ball:{label:'籃球',tab:'籃球',sheet:'icons_balls.png',names:['冠軍金球','冷焰籃球','燼鏈戰球','深淵紫球','碎玻璃球','毒裂籃球','幸運空心球']},
+    wrist:{label:'護腕',tab:'護腕',sheet:'icons_wrist.png',names:['骨哨護腕','鐵鏈護腕','黏油護腕','血紅腕帶','雷骨腕甲','霜封護腕','冠軍腕甲']},
+    shoes:{label:'球鞋',tab:'球鞋',sheet:'icons_shoes.png',names:['羽翼疾鞋','鐵底球鞋','霜步球鞋','燼火鞋','影步鞋','荊棘戰靴','遠投金靴']},
+    charm:{label:'護符',tab:'護符',sheet:'icons_charms.png',names:['骷髏墜飾','深淵護符','幸運框牌','碎鏡吊墜','綠焰符牌','裁判哨符','小王冠印']},
+    mask:{label:'面具',tab:'面具',sheet:'icons_masks.png',names:['裁判面罩','影客兜帽','冷焰骨面','教練骨面','血戰面甲','毒沼面具','王冠金面']},
+    hoop:{label:'籃框',tab:'籃框',sheet:'icons_hoops.png',names:['破金籃框','鎖鏈鐵框','深淵紫框','冷焰冰框','黏油毒框','燼火紅框','骷髏冠框']}
+  };
+  const typeOrder=['ball','wrist','shoes','charm','mask','hoop'];
+  const baseDesc='基底外觀固定；實際掉落強度、品質與詞綴由 RNG 決定。';
+  const baseDefs={
+    ball:[['hb_ball_0','冠軍金球','normal'],['hb_ball_1','冷焰籃球','ice'],['hb_ball_2','燼鏈戰球','fire'],['hb_ball_3','深淵紫球','lightning'],['hb_ball_4','碎玻璃球','arrow'],['hb_ball_5','毒裂籃球','axe'],['hb_ball_6','幸運空心球','normal']],
+    wrist:[['hb_wrist_0','骨哨護腕'],['hb_wrist_1','鐵鏈護腕'],['hb_wrist_2','黏油護腕'],['hb_wrist_3','血紅腕帶'],['hb_wrist_4','雷骨腕甲'],['hb_wrist_5','霜封護腕'],['hb_wrist_6','冠軍腕甲']],
+    shoes:[['hb_shoes_0','羽翼疾鞋'],['hb_shoes_1','鐵底球鞋'],['hb_shoes_2','霜步球鞋'],['hb_shoes_3','燼火鞋'],['hb_shoes_4','影步鞋'],['hb_shoes_5','荊棘戰靴'],['hb_shoes_6','遠投金靴']],
+    charm:[['hb_charm_0','骷髏墜飾'],['hb_charm_1','深淵護符'],['hb_charm_2','幸運框牌'],['hb_charm_3','碎鏡吊墜'],['hb_charm_4','綠焰符牌'],['hb_charm_5','裁判哨符'],['hb_charm_6','小王冠印']],
+    mask:[['hb_mask_0','裁判面罩'],['hb_mask_1','影客兜帽'],['hb_mask_2','冷焰骨面'],['hb_mask_3','教練骨面'],['hb_mask_4','血戰面甲'],['hb_mask_5','毒沼面具'],['hb_mask_6','王冠金面']],
+    hoop:[['hb_hoop_0','破金籃框'],['hb_hoop_1','鎖鏈鐵框'],['hb_hoop_2','深淵紫框'],['hb_hoop_3','冷焰冰框'],['hb_hoop_4','黏油毒框'],['hb_hoop_5','燼火紅框'],['hb_hoop_6','骷髏冠框']]
+  };
+  const visualById={
+    abbey_ember:['ball',2],sand_bow:['ball',4],citadel_battery:['ball',3],red_axe:['hoop',5],final_chill:['ball',1],
+    ember_saint:['charm',4],iron_hook:['hoop',1],coldflame_tesla:['ball',1],thunderbone:['wrist',4],absolute_zero:['ball',1],
+    broken_glass:['ball',4],deadeye_sigil:['mask',0],kings_seal:['mask',6],blood_chalice:['charm',0],hex_idol:['charm',1],
+    pilgrim_bone:['charm',0],rift_feather:['shoes',0],champ_ball:['ball',0],bench_towel:['wrist',3],ref_glasses:['mask',0],board_brace:['wrist',6]
+  };
+  if(typeof RELICS!=='undefined'){
+    for(const type of typeOrder){
+      for(let i=0;i<baseDefs[type].length;i++){
+        const def=baseDefs[type][i], id=def[0];
+        visualById[id]=[type,i];
+        if(!RELICS[id]) RELICS[id]={name:def[1],cls:type==='ball'?'core':(type==='charm'||type==='hoop'?'oath':'feel'),equipType:type,form:def[2]||null,desc:baseDesc};
+      }
+    }
+  }
+  Game.prototype._hbRelicUiUrl=function(name){ return '/assets/relic_ui/'+name+'?v='+RELIC_VER; };
+  Game.prototype._relicUiImg=function(name){
+    this._relicUi=this._relicUi||{};
+    const key=name+'?v='+RELIC_VER;
+    if(this._relicUi[key]!==undefined) return this._relicUi[key];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=this._hbRelicUiUrl(name);
+      this._relicUi[key]=im;
+      return im;
+    }catch(e){ this._relicUi[key]=null; return null; }
+  };
+  Game.prototype._preloadRelicUiAssets=function(){
+    for(const name of ['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) this._relicUiImg(name);
+  };
+  Game.prototype._relicVisual=function(rid){
+    if(visualById[rid]) return {type:visualById[rid][0],idx:visualById[rid][1]};
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{};
+    if(R.equipType&&typeInfo[R.equipType]) return {type:R.equipType,idx:0};
+    if(R.form) return {type:'ball',idx:({fire:2,ice:1,lightning:3,axe:5,arrow:4,normal:6}[R.form]||0)};
+    if(R.cls==='oath') return {type:'charm',idx:1};
+    if(R.cls==='feel') return {type:'wrist',idx:0};
+    return {type:'hoop',idx:0};
+  };
+  Game.prototype._relicBaseName=function(type,idx){
+    const t=typeInfo[type]||typeInfo.ball;
+    return t.names[idx%7]||t.label;
+  };
+  Game.prototype._allRelicCatalog=function(){
+    const out=[];
+    for(const type of typeOrder){
+      const t=typeInfo[type];
+      for(let i=0;i<7;i++) out.push({catalog:true,id:'cat_'+type+'_'+i,type,idx:i,name:t.names[i],core:t.label,tier:i%5,tab:t.tab});
+    }
+    return out;
+  };
+  Game.prototype._relicDisplay=function(rid,owned){
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{}, v=this._relicVisual(rid), meta=owned&&this._relicMeta?this._relicMeta(rid):null;
+    const t=typeInfo[v.type]||typeInfo.ball;
+    return {id:rid,name:R.name||this._relicBaseName(v.type,v.idx),type:v.type,idx:v.idx%7,cls:R.cls||'core',core:t.label,desc:R.desc||baseDesc,tier:meta?meta.tier:0,q:meta?meta.q:0,affixes:meta&&meta.affixes?meta.affixes:[]};
+  };
+
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=prevFullPreload?prevFullPreload.call(this):[];
+    const add=[];
+    for(let i=1;i<=5;i++){ add.push(mobUrl('/assets/mob/speed/act'+i+'.png')); add.push(mobUrl('/assets/mob/bosses/act'+i+'.png')); }
+    for(let act=1;act<=5;act++) for(let i=0;i<6;i++) add.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1');
+    for(const id of Object.keys(endlessMeta)) add.push(endlessMeta[id].s);
+    for(const b of endlessBosses) add.push(b[2]);
+    for(const name of ['icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) add.push(this._hbRelicUiUrl?this._hbRelicUiUrl(name):('/assets/relic_ui/'+name));
+    const seen={}, out=[];
+    for(const src of base.concat(add)){ if(src&&!seen[src]){ seen[src]=1; out.push(src); } }
+    return out;
+  };
+})();
+
 // === final activation v11: endless stage banners do not inherit act names ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -10380,5 +10938,405 @@ Object.assign(Game.prototype,{
       return true;
     })();
     return this._hbBootPreloadPromise;
+  };
+})();
+
+// === final activation v23: approved bean art, spacing, and 7x6 RNG relic bases ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const ART_VER='20260629_bean_all_v2';
+  const RELIC_VER='20260629_bean_relics_7x_v2';
+  const mobUrl=p=>p+'?v='+ART_VER;
+  const clampLocal=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const isStandardRun=run=>!!(run&&!run.endless&&!run.sandbag&&run.act>=1&&run.act<=5);
+  const uniq=list=>{
+    const seen={}, out=[];
+    for(const src of list||[]){
+      const s=String(src||'').trim();
+      if(!s||seen[s]) continue;
+      seen[s]=1; out.push(s);
+    }
+    return out;
+  };
+
+  if(typeof SANDBAGS!=='undefined'){
+    for(let i=1;i<=5;i++) if(SANDBAGS[i]) SANDBAGS[i].file=mobUrl('/assets/mob/speed/act'+i+'.png');
+  }
+
+  const guardSpread=[
+    {x:-610,y:148,s:1.24,layer:2},{x:-455,y:42,s:1.15,layer:1},{x:-292,y:166,s:1.22,layer:2},
+    {x:-540,y:-86,s:1.02,layer:0},{x:-345,y:-140,s:1.00,layer:0},{x:-140,y:-84,s:1.04,layer:0},
+    {x:86,y:-92,s:1.02,layer:0},{x:286,y:28,s:1.14,layer:1},{x:418,y:156,s:1.22,layer:2},
+    {x:-690,y:12,s:1.10,layer:1},{x:-40,y:204,s:1.17,layer:2},{x:188,y:116,s:1.12,layer:2},
+    {x:540,y:-38,s:1.06,layer:0},{x:612,y:92,s:1.14,layer:1}
+  ];
+  const previousSpawnGuard=Game.prototype.spawnGuard;
+  Game.prototype.spawnGuard=function(type){
+    const g=previousSpawnGuard.apply(this,arguments);
+    const run=this.run, host=run&&run.host;
+    if(!g||g.sandbag||!run||!host) return g;
+    const slot=guardSpread[(g.slot||0)%guardSpread.length];
+    const cycle=Math.floor((g.slot||0)/guardSpread.length);
+    const dir=(this.save&&this.save.settings&&this.save.settings.lefty)?-1:1;
+    const wave=((cycle%2)?54:-36)*(1+Math.min(3,cycle)*0.28);
+    g.bx=slot.x*dir+wave*dir;
+    g.by=slot.y+((cycle%3)-1)*24;
+    g.layer=slot.layer;
+    g.drawScale=slot.s*(g.elite?1.18:1);
+    g.x=clampLocal(host.x+g.bx,72,BW-72);
+    g.y=clampLocal(host.baseY+g.by,BH*0.24,BH-82);
+    return g;
+  };
+
+  const previousDrawGuard=Game.prototype.drawGuard;
+  Game.prototype.drawGuard=function(g){
+    const run=this.run;
+    if(isStandardRun(run)&&g&&!g.dead){
+      const ctx=this.ctx, im=this._standardBeanMobSpriteFor&&this._standardBeanMobSpriteFor(g);
+      if(!im||!im.complete||!im.naturalWidth||im._err) return;
+      const sc=(g.drawScale||1)*(g.elite?1.13:1);
+      const bob=Math.sin((this.t||0)*2.1+(g.slot||0))*3;
+      const foot=g.y+g.r*0.82;
+      const rawH=g.r*(g.elite?5.85:5.28)*sc;
+      const H=Math.min(Math.max(rawH,g.elite?238:186),BH*(g.elite?0.38:0.33));
+      const W=H*im.naturalWidth/im.naturalHeight;
+      const rim=g.elite?'#ffe14d':'rgba(160,255,48,0.78)';
+      ctx.save();
+      ctx.globalAlpha=g.phased?0.5:1;
+      const sh=ctx.createRadialGradient(g.x,foot-4,8,g.x,foot-4,W*0.58);
+      sh.addColorStop(0,'rgba(0,0,0,0.52)');
+      sh.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=sh;
+      ctx.beginPath();
+      ctx.ellipse(g.x,foot-4,W*0.50,H*0.08,0,0,TAU);
+      ctx.fill();
+      ctx.save();
+      ctx.globalAlpha=g.phased?0.28:0.66;
+      ctx.filter='brightness(0) opacity(0.98)';
+      const outline=Math.max(4,H*0.028);
+      ctx.drawImage(im,g.x-W/2-outline,foot+bob-H,W,H);
+      ctx.drawImage(im,g.x-W/2+outline,foot+bob-H,W,H);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H-outline,W,H);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H+outline,W,H);
+      ctx.restore();
+      ctx.save();
+      ctx.shadowColor=rim;
+      ctx.shadowBlur=H*(g.elite?0.18:0.12);
+      ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      ctx.restore();
+      ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      if(g.frozen){
+        ctx.globalAlpha=0.32;
+        ctx.fillStyle='#6fd8ff';
+        ctx.beginPath();
+        ctx.ellipse(g.x,foot-H*0.48,W*0.5,H*0.48,0,0,TAU);
+        ctx.fill();
+        ctx.globalAlpha=1;
+      }
+      if(g.flash>0){
+        ctx.globalCompositeOperation='lighter';
+        ctx.globalAlpha=Math.min(0.66,g.flash*0.75);
+        ctx.drawImage(im,g.x-W/2,foot+bob-H,W,H);
+      }
+      ctx.restore();
+      this.drawGuardTags&&this.drawGuardTags(g);
+      return;
+    }
+    return previousDrawGuard?previousDrawGuard.apply(this,arguments):undefined;
+  };
+
+  Game.prototype._hbChapterBossImg=function(act){
+    this._hbChapterBossImgs=this._hbChapterBossImgs||{};
+    const key='act'+act+'_'+ART_VER;
+    if(this._hbChapterBossImgs[key]!==undefined) return this._hbChapterBossImgs[key];
+    try{
+      const im=new Image();
+      im.onerror=()=>{ im._err=true; };
+      im.onload=()=>{ try{ if(this.screen==='battle'&&this.render) this.render(); }catch(_e){} };
+      im.src=mobUrl('/assets/mob/bosses/act'+act+'.png');
+      this._hbChapterBossImgs[key]=im;
+      return im;
+    }catch(e){
+      this._hbChapterBossImgs[key]=null;
+      return null;
+    }
+  };
+  Game.prototype._hbDrawChapterBossArt=function(){
+    const run=this.run, host=run&&run.host;
+    if(!run||!host||run.endless||run.sandbag||!run.stage||!run.stage.boss) return false;
+    const im=this._hbChapterBossImg(run.act);
+    if(!im||!im.complete||!im.naturalWidth||im._err) return false;
+    const ctx=this.ctx, nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.78, W=H*nw/nh;
+    if(W>BW*0.52){ W=BW*0.52; H=W*nh/nw; }
+    const cx=host.x, by=BH-12;
+    ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,32,cx,by-H*0.48,W*0.76);
+    glow.addColorStop(0,'rgba(185,255,47,0.20)');
+    glow.addColorStop(0.54,'rgba(126,60,190,0.13)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-H*0.46,W*0.66,H*0.56,0,0,TAU);
+    ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.48);
+    sh.addColorStop(0,'rgba(0,0,0,0.62)');
+    sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-8,W*0.46,H*0.08,0,0,TAU);
+    ctx.fill();
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run._mobHitFlash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.48,run._mobHitFlash*0.68);
+      ctx.drawImage(im,cx-W/2,by-H,W,H);
+    }
+    ctx.restore();
+    return true;
+  };
+  const previousDrawHostAndHoop=Game.prototype.drawHostAndHoop;
+  Game.prototype.drawHostAndHoop=function(){
+    this._hbDrawChapterBossArt&&this._hbDrawChapterBossArt();
+    return previousDrawHostAndHoop?previousDrawHostAndHoop.apply(this,arguments):undefined;
+  };
+
+  const enemyMeta={
+    crack_runner:{src:mobUrl('/assets/endless/enemies/crack_runner.png'),color:'#9fe024',scale:1.20},
+    screen_idol:{src:mobUrl('/assets/endless/enemies/screen_idol.png'),color:'#d7a945',scale:1.38},
+    iron_whistle:{src:mobUrl('/assets/endless/enemies/iron_whistle.png'),color:'#ffe14d',scale:1.15},
+    oil_monk:{src:mobUrl('/assets/endless/enemies/oil_monk.png'),color:'#6fbe30',scale:1.28},
+    mist_librarian:{src:mobUrl('/assets/endless/enemies/mist_librarian.png'),color:'#b980ff',scale:1.20},
+    cold_rim_guard:{src:mobUrl('/assets/endless/enemies/cold_rim_guard.png'),color:'#6fd8ff',scale:1.28},
+    war_drum_leader:{src:mobUrl('/assets/endless/enemies/war_drum_leader.png'),color:'#ffb34d',scale:1.30},
+    shattered_board_collector:{src:mobUrl('/assets/endless/enemies/shattered_board_collector.png'),color:'#d8ff44',scale:1.22}
+  };
+  Game.prototype.drawEndlessGuard=function(g){
+    if(this.run&&this.run.stage&&this.run.stage.boss) return;
+    const id=(g&&g.endlessEnemyId)||'crack_runner';
+    const info=enemyMeta[id]||enemyMeta.crack_runner;
+    const im=this._endlessImg?this._endlessImg('enemy_'+id+'_'+ART_VER,info.src):null;
+    if(!g||!im||!im.complete||!im.naturalWidth||im._err) return;
+    const ctx=this.ctx, base=g.r||28, bob=Math.sin((this.t||0)*2.4+(g.slot||0))*4;
+    const scale=(g.drawScale||1)*(info.scale||1)*(g.elite?1.14:1);
+    let H=Math.min(Math.max(base*(g.elite?5.58:5.02)*scale,g.elite?238:186),BH*(g.elite?0.38:0.33));
+    let W=H*im.naturalWidth/im.naturalHeight;
+    const maxW=base*(g.elite?7.7:6.6)*scale;
+    if(W>maxW){ W=maxW; H=W*im.naturalHeight/im.naturalWidth; }
+    const x=-W/2, y=bob+base*1.08-H;
+    const rim=g.endlessAffixColor||g.endlessColor||info.color||'#9fe024';
+    ctx.save();
+    ctx.translate(g.x,g.y);
+    ctx.globalAlpha=g.phased?0.48:1;
+    this.shadow(0,base*0.96,base*1.22,0.30);
+    const glow=ctx.createRadialGradient(0,bob-base*0.45,4,0,bob-base*0.45,Math.max(base*2.9,W*0.72));
+    glow.addColorStop(0,g.endlessAffix?'rgba(255,225,77,0.25)':'rgba(155,255,50,0.22)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.arc(0,bob-base*0.4,Math.max(base*2.45,W*0.60),0,TAU);
+    ctx.fill();
+    ctx.save();
+    ctx.globalAlpha=g.phased?0.30:0.68;
+    ctx.filter='brightness(0) opacity(0.98)';
+    const outline=Math.max(4,H*0.028);
+    ctx.drawImage(im,x-outline,y,W,H);
+    ctx.drawImage(im,x+outline,y,W,H);
+    ctx.drawImage(im,x,y-outline,W,H);
+    ctx.drawImage(im,x,y+outline,W,H);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha=g.phased?0.36:0.88;
+    ctx.shadowColor=rim;
+    ctx.shadowBlur=H*(g.elite?0.18:0.13);
+    ctx.drawImage(im,x,y,W,H);
+    ctx.restore();
+    ctx.drawImage(im,x,y,W,H);
+    if(g.flash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.66,g.flash*0.75);
+      ctx.drawImage(im,x,y,W,H);
+      ctx.globalCompositeOperation='source-over';
+      ctx.globalAlpha=1;
+    }
+    if(g.shieldUp){
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.88)';
+      ctx.beginPath();
+      ctx.ellipse(0,bob-base*0.45,W*0.48,H*0.45,0,0,TAU);
+      ctx.stroke();
+    }
+    if(g.endlessAffix){
+      const col=g.endlessAffixColor||'#ffe14d';
+      ctx.save();
+      ctx.translate(0,y-18);
+      this.rr(-24,-16,48,32,10);
+      ctx.fillStyle='rgba(9,6,5,0.88)';
+      ctx.fill();
+      ctx.lineWidth=2.4;
+      ctx.strokeStyle=col;
+      ctx.stroke();
+      this.text(g.endlessAffixShort||'!',0,2,20,col,{align:'center',baseline:'middle',weight:'900',glow:8});
+      ctx.restore();
+      if(g.endlessCountdown>0) this.text(Math.ceil(g.endlessCountdown),0,y+22,18,'#ff6a4a',{align:'center',baseline:'middle',weight:'900'});
+    }
+    ctx.restore();
+    this.drawGuardTags&&this.drawGuardTags(g);
+  };
+
+  const endlessBosses=[
+    {limit:5,key:'free_throw_executioner',src:mobUrl('/assets/endless/bosses/free_throw_executioner.png')},
+    {limit:10,key:'broken_rim_stitcher',src:mobUrl('/assets/endless/bosses/broken_rim_stitcher.png')},
+    {limit:15,key:'coldflame_scorekeeper',src:mobUrl('/assets/endless/bosses/coldflame_scorekeeper.png')},
+    {limit:20,key:'thunderbone_announcer',src:mobUrl('/assets/endless/bosses/thunderbone_announcer.png')},
+    {limit:Infinity,key:'abyss_hoop_lord',src:mobUrl('/assets/endless/bosses/abyss_hoop_lord.png')}
+  ];
+  Game.prototype._endlessBossSprite=function(depth){
+    depth=Math.max(1,Number(depth)||1);
+    return endlessBosses.find(b=>depth<=b.limit)||endlessBosses[endlessBosses.length-1];
+  };
+  Game.prototype.drawEndlessBossArt=function(){
+    const run=this.run, boss=this._endlessBossSprite(run&&run.endlessDepth);
+    const im=this._endlessImg?this._endlessImg('boss_'+boss.key+'_'+ART_VER,boss.src):null;
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const ctx=this.ctx, nw=im.naturalWidth, nh=im.naturalHeight;
+    let H=BH*0.82, W=H*nw/nh;
+    if(W>BW*0.68){ W=BW*0.68; H=W*nh/nw; }
+    const cx=BW*0.67, by=BH-10;
+    ctx.save();
+    const glow=ctx.createRadialGradient(cx,by-H*0.48,30,cx,by-H*0.48,W*0.76);
+    glow.addColorStop(0,'rgba(160,255,48,0.26)');
+    glow.addColorStop(0.58,'rgba(100,255,36,0.10)');
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-H*0.45,W*0.66,H*0.56,0,0,TAU);
+    ctx.fill();
+    const sh=ctx.createRadialGradient(cx,by-8,20,cx,by-8,W*0.46);
+    sh.addColorStop(0,'rgba(0,0,0,0.62)');
+    sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sh;
+    ctx.beginPath();
+    ctx.ellipse(cx,by-8,W*0.44,H*0.08,0,0,TAU);
+    ctx.fill();
+    ctx.drawImage(im,cx-W/2,by-H,W,H);
+    if(run&&run._mobHitFlash>0){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=Math.min(0.48,run._mobHitFlash*0.68);
+      ctx.drawImage(im,cx-W/2,by-H,W,H);
+    }
+    ctx.restore();
+  };
+
+  const relicTypes={
+    ball:{label:'籃球',sheet:'icons_balls.png',cls:'core',names:['冠軍金球','冷焰籃球','燼鏈戰球','深淵紫球','碎玻璃球','毒裂籃球','幸運空心球'],forms:['normal','ice','fire','lightning','arrow','axe','normal']},
+    wrist:{label:'護腕',sheet:'icons_wrist.png',cls:'feel',names:['骨哨護腕','鐵鏈護腕','黏油護腕','血紅腕帶','雷骨腕甲','霜封護腕','冠軍腕甲']},
+    shoes:{label:'球鞋',sheet:'icons_shoes.png',cls:'feel',names:['羽翼疾鞋','鐵底球鞋','霜步球鞋','燼火鞋','影步鞋','荊棘戰靴','遠投金靴']},
+    charm:{label:'護符',sheet:'icons_charms.png',cls:'oath',names:['骷髏墜飾','深淵護符','幸運框牌','碎鏡吊墜','綠焰符牌','裁判哨符','小王冠印']},
+    mask:{label:'面具',sheet:'icons_masks.png',cls:'feel',names:['裁判面罩','影客兜帽','冷焰骨面','教練骨面','血戰面甲','毒沼面具','王冠金面']},
+    hoop:{label:'籃框',sheet:'icons_hoops.png',cls:'oath',names:['破金籃框','鎖鏈鐵框','深淵紫框','冷焰冰框','黏油毒框','燼火紅框','骷髏冠框']}
+  };
+  const relicOrder=['ball','wrist','shoes','charm','mask','hoop'];
+  const baseDesc='基底外觀固定；實際掉落強度、品質、素質與詞綴由 RNG 決定。';
+  const visualById={
+    abbey_ember:['ball',2],sand_bow:['ball',4],citadel_battery:['ball',3],red_axe:['hoop',5],final_chill:['ball',1],
+    ember_saint:['charm',4],iron_hook:['hoop',1],coldflame_tesla:['ball',1],thunderbone:['wrist',4],absolute_zero:['ball',1],
+    broken_glass:['ball',4],deadeye_sigil:['mask',0],kings_seal:['mask',6],blood_chalice:['charm',0],hex_idol:['charm',1],
+    pilgrim_bone:['charm',0],rift_feather:['shoes',0],champ_ball:['ball',0],bench_towel:['wrist',3],ref_glasses:['mask',0],board_brace:['wrist',6]
+  };
+  if(typeof RELICS!=='undefined'){
+    for(const type of relicOrder){
+      const info=relicTypes[type];
+      for(let i=0;i<7;i++){
+        const id='hb_'+type+'_'+i;
+        visualById[id]=[type,i];
+        const relic=RELICS[id]||{};
+        relic.name=info.names[i];
+        relic.cls=info.cls;
+        relic.equipType=type;
+        if(info.forms) relic.form=info.forms[i];
+        relic.desc=relic.desc||baseDesc;
+        RELICS[id]=relic;
+      }
+    }
+  }
+  Game.prototype._hbRelicUiUrl=function(name){ return '/assets/relic_ui/'+name+'?v='+RELIC_VER; };
+  Game.prototype._relicUiImg=function(name){
+    this._relicUi=this._relicUi||{};
+    const key=name+'?v='+RELIC_VER;
+    if(this._relicUi[key]!==undefined) return this._relicUi[key];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(_e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=this._hbRelicUiUrl(name);
+      this._relicUi[key]=im;
+      return im;
+    }catch(e){
+      this._relicUi[key]=null;
+      return null;
+    }
+  };
+  Game.prototype._preloadRelicUiAssets=function(){
+    for(const name of ['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) this._relicUiImg(name);
+  };
+  Game.prototype._relicVisual=function(rid){
+    if(visualById[rid]) return {type:visualById[rid][0],idx:visualById[rid][1]};
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{};
+    if(R.equipType&&relicTypes[R.equipType]) return {type:R.equipType,idx:0};
+    if(R.form) return {type:'ball',idx:({fire:2,ice:1,lightning:3,arrow:4,axe:5,normal:6}[R.form]||0)};
+    if(R.cls==='oath') return {type:'charm',idx:1};
+    if(R.cls==='feel') return {type:'wrist',idx:0};
+    return {type:'hoop',idx:0};
+  };
+  Game.prototype._allRelicCatalog=function(){
+    const out=[];
+    for(const type of relicOrder){
+      const info=relicTypes[type];
+      for(let i=0;i<7;i++) out.push({catalog:true,id:'cat_'+type+'_'+i,type,idx:i,name:info.names[i],core:info.label,tier:i%5,tab:info.label});
+    }
+    return out;
+  };
+  Game.prototype._relicDisplay=function(rid,owned){
+    const R=(typeof RELICS!=='undefined'&&RELICS[rid])||{};
+    const v=this._relicVisual(rid);
+    const info=relicTypes[v.type]||relicTypes.ball;
+    const meta=owned&&this._relicMeta?this._relicMeta(rid):null;
+    return {
+      id:rid,
+      name:R.name||info.names[v.idx%7]||info.label,
+      type:v.type,
+      idx:v.idx%7,
+      cls:R.cls||info.cls,
+      core:info.label,
+      desc:R.desc||baseDesc,
+      tier:meta?meta.tier:0,
+      q:meta?meta.q:0,
+      lvl:meta?Math.max(0,Number(meta.lvl)||0):0,
+      forgeCount:meta?Math.max(0,Number(meta.forgeCount)||0):0,
+      affixes:meta&&Array.isArray(meta.affixes)?meta.affixes:[]
+    };
+  };
+
+  const previousFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=(previousFullPreload?previousFullPreload.call(this):[]).filter(src=>{
+      const s=String(src||'');
+      if(/\/assets\/mob\/speed\/act\d+\.webp/.test(s)) return false;
+      if(s.includes('/assets/endless/boss_hoop_guardian.png')) return false;
+      return true;
+    });
+    const add=[];
+    for(let i=1;i<=5;i++){
+      add.push(mobUrl('/assets/mob/speed/act'+i+'.png'));
+      add.push(mobUrl('/assets/mob/bosses/act'+i+'.png'));
+    }
+    for(let act=1;act<=5;act++) for(let i=0;i<6;i++) add.push('/assets/mob/standard/act'+act+'/enemy_'+i+'.png?v=20260629_bean_mobs_v1');
+    for(const key of Object.keys(enemyMeta)) add.push(enemyMeta[key].src);
+    for(const boss of endlessBosses) add.push(boss.src);
+    for(const name of ['backpack_bg.png','compare_modal.png','icons_balls.png','icons_wrist.png','icons_shoes.png','icons_charms.png','icons_masks.png','icons_hoops.png','icons_mixed.png']) add.push(this._hbRelicUiUrl?this._hbRelicUiUrl(name):('/assets/relic_ui/'+name));
+    return uniq(base.concat(add));
   };
 })();
