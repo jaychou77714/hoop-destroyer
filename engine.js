@@ -4420,25 +4420,35 @@ Object.assign(Game.prototype,{
     { const sa=this._selAct, C=CARDS[sa-1]; if(C){ ctx.save(); const pulse=0.5+0.5*Math.sin(this.t*2.6);
       this.rr(D(C.x+5),D(C.y-7),D(C.w-10),D(C.h+14),D(16)); ctx.lineWidth=D(4); ctx.strokeStyle='rgba(255,212,110,'+(0.72+0.28*pulse)+')'; ctx.shadowBlur=D(18+12*pulse); ctx.shadowColor='rgba(255,180,70,0.95)'; ctx.stroke(); ctx.shadowBlur=0;
       ctx.restore(); } }
-    this._drawAtlasAttackLabel(D,U);
+    this._drawAtlasAttackLabel(D,U,this._press({x:D(685),y:D(676),w:D(340),h:D(70)}));
     ctx.restore();
     this.btn(D(48),D(82),D(170),D(62),'back',()=>this.go('hub'));
     for(let i=0;i<ACTS.length;i++){ const A=ACTS[i], C=CARDS[i]; if(A.id<=this._unlockedActs()){ const aid=A.id; this.btn(D(C.x),D(C.y),D(C.w),D(C.h),'a'+aid,()=>{ this._selAct=aid; this.audio.sfx('ui'); }); } }
     this.btn(D(685),D(676),D(340),D(70),'route',()=>this.go('route'));
   }
-  ,_drawAtlasAttackLabel(D,U){ const ctx=this.ctx, x=D(855), y=D(681), fs=26*U, pulse=0.5+0.5*Math.sin(this.t*2.8);
+  ,_drawAtlasAttackLabel(D,U,pressed){ const ctx=this.ctx, hit={x:D(685),y:D(676),w:D(340),h:D(70)}, x=D(855), y=D(681)+(pressed?D(3):0), fs=(pressed?25:26)*U, pulse=0.5+0.5*Math.sin(this.t*2.8);
     ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.save();
+    this.rr(hit.x+D(5),hit.y+D(8)+(pressed?D(2):0),hit.w-D(10),hit.h-D(16),D(14));
+    ctx.fillStyle=pressed?'rgba(216,255,68,0.16)':'rgba(8,5,3,0.10)';
+    ctx.fill();
+    ctx.lineWidth=D(pressed?3.2:1.8);
+    ctx.strokeStyle=pressed?'rgba(216,255,68,0.98)':'rgba(255,224,126,'+(0.38+pulse*0.2)+')';
+    ctx.shadowBlur=D(pressed?18:8+pulse*5);
+    ctx.shadowColor=pressed?'rgba(216,255,68,0.78)':'rgba(255,198,80,0.48)';
+    ctx.stroke();
+    ctx.restore();
     const halo=ctx.createRadialGradient(x,y,D(18),x,y,D(175)); halo.addColorStop(0,'rgba(255,210,88,'+(0.16+pulse*0.08)+')'); halo.addColorStop(0.55,'rgba(150,230,60,0.08)'); halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo; ctx.fillRect(x-D(200),y-D(48),D(400),D(96));
     ctx.save(); ctx.globalAlpha=0.9; const blade=ctx.createLinearGradient(0,y-D(18),0,y+D(18)); blade.addColorStop(0,'#fff0b8'); blade.addColorStop(0.55,'#e2aa31'); blade.addColorStop(1,'#7b4b12'); ctx.fillStyle=blade; ctx.shadowBlur=D(8); ctx.shadowColor='rgba(255,190,60,0.65)';
     for(const s of [-1,1]){ ctx.beginPath(); ctx.moveTo(x+s*D(110),y); ctx.lineTo(x+s*D(88),y-D(13)); ctx.lineTo(x+s*D(94),y); ctx.lineTo(x+s*D(88),y+D(13)); ctx.closePath(); ctx.fill(); }
     ctx.restore();
-    ctx.font="900 "+fs+"px 'Noto Serif TC','Noto Serif CJK TC','Microsoft JhengHei',Georgia,serif"; try{ctx.letterSpacing=D(5)+'px';}catch(e){}
-    const label='進攻目標', g=ctx.createLinearGradient(0,y-fs*0.8,0,y+fs*0.85); g.addColorStop(0,'#fff8dc'); g.addColorStop(0.38,'#ffd35a'); g.addColorStop(0.72,'#d98a20'); g.addColorStop(1,'#7a3b0d');
+    ctx.font="900 "+fs+"px 'Microsoft JhengHei','Noto Sans TC','Noto Serif TC',Georgia,serif"; try{ctx.letterSpacing='0px';}catch(e){}
+    const label='進攻目標', g=ctx.createLinearGradient(0,y-fs*0.8,0,y+fs*0.85); g.addColorStop(0,'#fffdf1'); g.addColorStop(0.34,'#ffe37a'); g.addColorStop(0.66,pressed?'#d8ff44':'#f0a734'); g.addColorStop(1,pressed?'#5f8f18':'#7a3b0d');
     ctx.lineJoin='round'; ctx.miterLimit=2; ctx.shadowColor='rgba(0,0,0,0.95)'; ctx.shadowBlur=D(4); ctx.shadowOffsetY=D(3); ctx.lineWidth=D(9); ctx.strokeStyle='rgba(19,9,3,0.95)'; ctx.strokeText(label,x,y);
     ctx.shadowColor='rgba(130,20,10,0.75)'; ctx.shadowBlur=D(9); ctx.shadowOffsetY=0; ctx.lineWidth=D(3); ctx.strokeStyle='rgba(255,96,40,0.52)'; ctx.strokeText(label,x,y);
-    ctx.shadowColor='rgba(255,214,105,'+(0.55+pulse*0.25)+')'; ctx.shadowBlur=D(11); ctx.fillStyle=g; ctx.fillText(label,x,y);
-    ctx.globalAlpha=0.95; ctx.strokeStyle='rgba(255,238,174,0.78)'; ctx.lineWidth=D(1.2); ctx.beginPath(); ctx.moveTo(x-D(78),y+D(24)); ctx.lineTo(x+D(78),y+D(24)); ctx.stroke();
+    ctx.shadowColor=pressed?'rgba(216,255,68,0.86)':'rgba(255,214,105,'+(0.55+pulse*0.25)+')'; ctx.shadowBlur=D(pressed?15:11); ctx.fillStyle=g; ctx.fillText(label,x,y);
+    ctx.globalAlpha=0.95; ctx.strokeStyle=pressed?'rgba(216,255,68,0.92)':'rgba(255,238,174,0.78)'; ctx.lineWidth=D(1.4); ctx.beginPath(); ctx.moveTo(x-D(82),y+D(24)); ctx.lineTo(x+D(82),y+D(24)); ctx.stroke();
     try{ctx.letterSpacing='0px';}catch(e){} ctx.restore(); }
 
   ,_ensureRouteBg(act){ this._rtBgs=this._rtBgs||{}; if(this._rtBgs[act]===undefined){ try{ const im=new Image(); im.onerror=()=>{im._err=true;}; im.onload=()=>{ try{ if(this.screen==='route'&&this.render)this.render(); }catch(e){} }; im.src='./assets/stage'+act+'_route_base_1704x786.webp'; this._rtBgs[act]=im; }catch(e){ this._rtBgs[act]={complete:true,naturalWidth:0,_err:true}; } } this._rtBg=this._rtBgs[act]; return this._rtBgs[act]; }
@@ -4543,8 +4553,20 @@ Object.assign(Game.prototype,{
     const rNm=({fast:'速投線',std:'標準遠征',corrupt:'腐化加時'})[this._selRoute]||'標準遠征';
     const stNm=this._selStone?((ROUTE_STONES.find(z=>z.id===this._selStone)||{}).name||'不帶石板'):'不帶石板';
     { const v=lv('summary',{x:852,y:686,s:15}); T('出戰摘要 ｜ '+hero.name+'　·　'+rNm+'　·　'+stNm,v.x,v.y,v.s,'#d8cba8',{align:'center',baseline:'middle',weight:'700'}); HH('summary',v.x,v.y); }
-    // CTA frame is already baked into the route art; only draw text and hitbox here.
-    { const v=lv('cta',{x:853,y:737,s:26}); T('進入第 '+A.id+' 幕',v.x,v.y,v.s,'#ffe6b0',{align:'center',baseline:'middle',weight:'800',glow:6}); this.btn(D(560),D(705),D(586),D(62),'go',()=>{ if(this._modeActs(this._selRoute)<this._selAct){ this.toast('此模式尚未解鎖本幕','需先在此模式通關前一幕'); this.audio.sfx('hurt'); return; } this.startRun(this._selAct,this._selRoute,this._selStone,this._selNode); }); HH('cta',v.x,v.y); }
+    // CTA frame is baked into the route art; overlay feedback makes taps obvious.
+    { const ctaHit={x:D(560),y:D(705),w:D(586),h:D(62)}, pressed=this._press(ctaHit), v=lv('cta',{x:853,y:737,s:26}), pulse=0.5+0.5*Math.sin(this.t*2.4);
+      ctx.save();
+      this.rr(ctaHit.x+D(8),ctaHit.y+D(8)+(pressed?D(2):0),ctaHit.w-D(16),ctaHit.h-D(16),D(14));
+      ctx.fillStyle=pressed?'rgba(216,255,68,0.18)':'rgba(255,225,120,0.07)';
+      ctx.fill();
+      ctx.lineWidth=D(pressed?3:1.8);
+      ctx.strokeStyle=pressed?'rgba(216,255,68,0.98)':'rgba(255,230,160,'+(0.42+pulse*0.16)+')';
+      ctx.shadowBlur=D(pressed?18:8+pulse*5);
+      ctx.shadowColor=pressed?'rgba(216,255,68,0.72)':'rgba(255,198,80,0.46)';
+      ctx.stroke();
+      ctx.restore();
+      this.text('進入第 '+A.id+' 幕',D(v.x),D(v.y)+(pressed?D(3):0),v.s*U,pressed?'#f1ffbc':'#ffe6b0',{align:'center',baseline:'middle',weight:'900',glow:pressed?12:6});
+      this.btn(ctaHit.x,ctaHit.y,ctaHit.w,ctaHit.h,'go',()=>{ if(this._modeActs(this._selRoute)<this._selAct){ this.toast('此模式尚未解鎖本幕','需先在此模式通關前一幕'); this.audio.sfx('hurt'); return; } this.startRun(this._selAct,this._selRoute,this._selStone,this._selNode); }); HH('cta',v.x,v.y); }
   }
   ,_drawRouteFlat(){ const ctx=this.ctx, s=this.save; this.backdrop('hub'); const A=ACTS[this._selAct-1];
     if(!this._selRoute)this._selRoute='std';
