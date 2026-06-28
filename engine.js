@@ -4437,7 +4437,7 @@ Object.assign(Game.prototype, {
     let prim=J({x:552,y:214,w:282,h:52});
     let sel=J({x:552,y:276,w:282,h:42});
     let bL=J({x:552,y:328,w:136,h:44}), bR=J({x:698,y:328,w:136,h:44});
-    let endless=this.save.endless?J({x:552,y:376,w:282,h:30}):null;
+    let endless=null;
     // horizontal clamp: keep right column inside right safe edge
     const colRight=Math.max(player.x+player.w, bR.x+bR.w), maxR=safeR-6*U;
     let dx=0; if(colRight>maxR) dx=colRight-maxR;
@@ -4519,7 +4519,12 @@ Object.assign(Game.prototype, {
   _drawFbButtons(LO){ const U=LO.U;
     const pr=LO.prim; this._fbPrimary(pr,'進入籃獄圖譜',this._press(pr)); this.btn(pr.x,pr.y,pr.w,Math.max(44*U,pr.h),'fb_atlas',()=>this.go('atlas'));
     const se=LO.sel; this._fbBtn(se,'選擇英雄',this._press(se),'helmet'); this.btn(se.x,se.y-((Math.max(44*U,se.h)-se.h)/2),se.w,Math.max(44*U,se.h),'fb_heroes',()=>this.go('heroes'));
-    const a=LO.bL; this._fbBtn(a,'無盡模式',false,'inf',true); this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_locked',()=>this.toast('無盡模式','即將開放'));
+    const a=LO.bL, endlessReady=!!(this.save&&this.save.endless);
+    this._fbBtn(a,'無盡模式',this._press(a),'inf',!endlessReady);
+    this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_entry',()=>{
+      if(!this.save.endless){ this.toast('無盡模式','標準或腐化第 5 幕通關後解鎖'); return; }
+      this.toast('無盡模式','入口已放在板凳席，下一階段接正式玩法');
+    });
     const b=LO.bR; this._fbBtn(b,'天梯榜',false,'crown',true); this.btn(b.x,b.y,b.w,Math.max(44*U,b.h),'fb_ladder_locked',()=>this.toast('天梯榜','即將開放'));
     if(LO.endless){ const e=LO.endless; this._fbBtn(e,'∞ 無盡加時 (最佳 '+(this.save.endlessBest|0)+')',this._press(e),null); this.btn(e.x,e.y,e.w,Math.max(44*U,e.h),'fb_endless',()=>this.startEndless()); }
   },
