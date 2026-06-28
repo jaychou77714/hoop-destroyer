@@ -761,6 +761,239 @@ class Game{
   };
 })();
 
+// === final activation v25: bold monster status text pops ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const STATUS_META={
+    fire:{text:'燃燒',color:'#ff6a2f',key:'burn'},
+    burn:{text:'燃燒',color:'#ff6a2f',key:'burn'},
+    ice:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    freeze:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    frozen:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    lightning:{text:'閃電',color:'#ffe14d',key:'lightning'},
+    shock:{text:'電擊',color:'#ffe14d',key:'shock'},
+    poison:{text:'中毒',color:'#8cff37',key:'poison'},
+    venom:{text:'中毒',color:'#8cff37',key:'poison'},
+    bleed:{text:'流血',color:'#ff4d59',key:'bleed'},
+    shield:{text:'護盾',color:'#f0d49a',key:'shield'},
+    breakShield:{text:'破盾',color:'#f0d49a',key:'breakShield'},
+    block:{text:'格擋',color:'#d8cfb8',key:'block'},
+    mirror:{text:'鏡框反彈',color:'#8fe8ff',key:'mirror'},
+    coldrim:{text:'寒框鎖定',color:'#6fd8ff',key:'coldrim'},
+    lockrim:{text:'鎖框',color:'#d8ff44',key:'lockrim'},
+    greed:{text:'貪分',color:'#c89bff',key:'greed'},
+    debt:{text:'碎板債',color:'#ffb34d',key:'debt'},
+    crown:{text:'深淵冠冕',color:'#ffe14d',key:'crown'},
+    countdown:{text:'倒數懲罰',color:'#ff6a4a',key:'countdown'}
+  };
+
+  const nowOf=()=> (typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const hasStatus=(g,names)=>{
+    if(!g) return false;
+    for(const n of names) if((Number(g[n])||0)>0 || g[n]===true) return true;
+    return false;
+  };
+  const snapStatus=g=>({
+    hp:g?Number(g.hp)||0:0,
+    shield:!!(g&&g.shieldUp),
+    mirror:Number(g&&g.endlessMirror)||0,
+    burn:Number(g&&g.burn)||0,
+    frozen:!!(g&&g.frozen),
+    freeze:Number(g&&g.freeze)||0,
+    poison:hasStatus(g,['poison','venom','toxic','poisoned']),
+    bleed:hasStatus(g,['bleed','bleeding'])
+  });
+
+  Game.prototype._hbMonsterStatusText=function(g,type,opts){
+    if(!g||g.dead&&!(opts&&opts.allowDead)) return;
+    const m=STATUS_META[type]||{text:String(type||''),color:'#ffe7a6',key:String(type||'status')};
+    if(!m.text) return;
+    const t=nowOf();
+    g._hbStatusStamp=g._hbStatusStamp||{};
+    const key=m.key||type;
+    const cooldown=(opts&&opts.cooldown!=null)?opts.cooldown:520;
+    if(g._hbStatusStamp[key] && t-g._hbStatusStamp[key]<cooldown) return;
+    g._hbStatusStamp[key]=t;
+    const elite=!!(g.elite||g.endlessAffix);
+    const base=Number(g.r)||30;
+    const size=(opts&&opts.size)||Math.round(elite?50:43);
+    const x=(Number(g.x)||BW/2)+((Math.random()*2-1)*(opts&&opts.jitterX!=null?opts.jitterX:20));
+    const y=(Number(g.y)||BH/2)-Math.max(base*1.18,46)-((opts&&opts.lift)||0);
+    this._hbStatusFloaters=this._hbStatusFloaters||[];
+    this._hbStatusFloaters.push({
+      x,y,
+      text:m.text,
+      color:m.color,
+      size,
+      t:(opts&&opts.t)||1.05,
+      t0:(opts&&opts.t)||1.05,
+      vx:(Math.random()*2-1)*18,
+      vy:(opts&&opts.vy)||-58,
+      wob:Math.random()*TAU,
+      big:!!(opts&&opts.big)
+    });
+    if(this._hbStatusFloaters.length>42) this._hbStatusFloaters.splice(0,this._hbStatusFloaters.length-42);
+  };
+
+  Game.prototype._hbStatusDiffPop=function(g,before,ctxType){
+    if(!g||!before) return;
+    const after=snapStatus(g);
+    if(before.shield&&!after.shield) this._hbMonsterStatusText(g,'breakShield',{size:48,cooldown:120});
+    else if(before.shield&&after.shield&&after.hp>=before.hp) this._hbMonsterStatusText(g,'block',{size:42,cooldown:260});
+    if(after.burn>before.burn+0.05) this._hbMonsterStatusText(g,'burn',{size:46,cooldown:320});
+    if((after.frozen&&!before.frozen)||(after.freeze>before.freeze+0.05)) this._hbMonsterStatusText(g,'freeze',{size:48,cooldown:260});
+    if(after.poison&&!before.poison) this._hbMonsterStatusText(g,'poison',{size:46,cooldown:260});
+    if(after.bleed&&!before.bleed) this._hbMonsterStatusText(g,'bleed',{size:44,cooldown:260});
+    if(ctxType==='fire') this._hbMonsterStatusText(g,'burn',{size:46,cooldown:420});
+    else if(ctxType==='ice') this._hbMonsterStatusText(g,'freeze',{size:48,cooldown:420});
+    else if(ctxType==='lightning') this._hbMonsterStatusText(g,'lightning',{size:48,cooldown:320});
+  };
+
+  const previousUpdateFx=Game.prototype.updateFx;
+  Game.prototype.updateFx=function(dt){
+    const r=previousUpdateFx?previousUpdateFx.apply(this,arguments):undefined;
+    const fs=this._hbStatusFloaters;
+    if(fs&&fs.length){
+      for(let i=fs.length-1;i>=0;i--){
+        const f=fs[i];
+        f.t-=dt;
+        if(f.t<=0){ fs.splice(i,1); continue; }
+        f.x+=f.vx*dt;
+        f.y+=f.vy*dt;
+        f.vx*=0.90;
+        f.vy*=0.91;
+      }
+    }
+    return r;
+  };
+
+  const previousDrawFx=Game.prototype.drawFx;
+  Game.prototype.drawFx=function(){
+    if(previousDrawFx) previousDrawFx.apply(this,arguments);
+    const fs=this._hbStatusFloaters;
+    if(!fs||!fs.length) return;
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.lineJoin='round';
+    for(const f of fs){
+      const a=Math.max(0,Math.min(1,f.t/f.t0));
+      const p=1-a;
+      const pop=1+Math.sin(Math.min(1,p)*Math.PI)*0.16+(f.big?0.06:0);
+      const y=f.y+Math.sin((p*5+f.wob))*5;
+      ctx.save();
+      ctx.translate(f.x,y);
+      ctx.scale(pop,pop);
+      ctx.globalAlpha=Math.min(1,a*1.25);
+      ctx.font='900 '+f.size+'px "Microsoft JhengHei","PingFang TC",Georgia,serif';
+      const w=Math.max(96,ctx.measureText(f.text).width+34);
+      const h=f.size*1.18;
+      ctx.shadowBlur=14;
+      ctx.shadowColor='rgba(0,0,0,0.95)';
+      this.rr(-w/2,-h/2,w,h,12);
+      ctx.fillStyle='rgba(0,0,0,0.58)';
+      ctx.fill();
+      ctx.lineWidth=Math.max(8,f.size*0.24);
+      ctx.strokeStyle='rgba(0,0,0,0.96)';
+      ctx.strokeText(f.text,0,1);
+      ctx.lineWidth=Math.max(3,f.size*0.08);
+      ctx.strokeStyle='rgba(255,239,190,0.42)';
+      ctx.strokeText(f.text,0,1);
+      ctx.fillStyle=f.color||'#ffe7a6';
+      ctx.shadowBlur=10;
+      ctx.shadowColor=f.color||'#ffe7a6';
+      ctx.fillText(f.text,0,0);
+      ctx.restore();
+    }
+    ctx.restore();
+  };
+
+  const previousHurtGuard=Game.prototype.hurtGuard;
+  Game.prototype.hurtGuard=function(g,dmg,c,primary){
+    const before=snapStatus(g);
+    const run=this.run;
+    const mirrorBefore=!!(run&&run.endless&&g&&Number(g.endlessMirror)>0);
+    const type=this._hbElementTextContext||null;
+    const r=previousHurtGuard.apply(this,arguments);
+    if(g){
+      this._hbStatusDiffPop(g,before,type);
+      if(mirrorBefore&&Number(g.endlessMirror||0)<=0) this._hbMonsterStatusText(g,'mirror',{size:50,cooldown:120});
+      if(run&&run.endless&&g.endlessFreezeHoop) this._hbMonsterStatusText(g,'coldrim',{size:43,cooldown:850});
+      if(run&&run.endless&&g.endlessLocksHoop) this._hbMonsterStatusText(g,'lockrim',{size:42,cooldown:850});
+      if((before.burn>0)&&!(c&&c.hx!=null)) this._hbMonsterStatusText(g,'burn',{size:38,cooldown:850});
+    }
+    return r;
+  };
+
+  const wrapElement=(name,type)=>{
+    const old=Game.prototype[name];
+    if(!old) return;
+    Game.prototype[name]=function(c){
+      const prev=this._hbElementTextContext;
+      this._hbElementTextContext=type;
+      try{ return old.apply(this,arguments); }
+      finally{ this._hbElementTextContext=prev; }
+    };
+  };
+  wrapElement('formFire','fire');
+  wrapElement('formIce','ice');
+  wrapElement('formLightning','lightning');
+
+  const previousShared=Game.prototype._applySharedSkillEffects;
+  if(previousShared){
+    Game.prototype._applySharedSkillEffects=function(ctx){
+      const run=this.run;
+      const before=new Map();
+      if(run&&Array.isArray(run.guards)){
+        for(const g of run.guards) before.set(g,snapStatus(g));
+      }
+      const r=previousShared.apply(this,arguments);
+      if(run&&Array.isArray(run.guards)){
+        for(const g of run.guards){
+          const b=before.get(g);
+          if(b) this._hbStatusDiffPop(g,b,null);
+        }
+      }
+      return r;
+    };
+  }
+
+  const previousRelicBasket=Game.prototype.relicOnBasket;
+  if(previousRelicBasket){
+    Game.prototype.relicOnBasket=function(swish,bank,ctx){
+      const run=this.run;
+      const before=new Map();
+      if(run&&Array.isArray(run.guards)){
+        for(const g of run.guards) before.set(g,snapStatus(g));
+      }
+      const r=previousRelicBasket.apply(this,arguments);
+      if(run&&Array.isArray(run.guards)){
+        for(const g of run.guards){
+          const b=before.get(g);
+          if(b) this._hbStatusDiffPop(g,b,null);
+        }
+      }
+      return r;
+    };
+  }
+
+  const previousKillGuard=Game.prototype.killGuard;
+  Game.prototype.killGuard=function(g){
+    const aff=g&&g.endlessAffix;
+    const greed=!!(g&&g.endlessGreed);
+    const debt=!!(g&&g.endlessDebt);
+    const r=previousKillGuard.apply(this,arguments);
+    if(g&&g.dead){
+      if(aff==='crown') this._hbMonsterStatusText(g,'crown',{size:46,allowDead:true,cooldown:120});
+      if(greed) this._hbMonsterStatusText(g,'greed',{size:44,allowDead:true,cooldown:120});
+      if(debt) this._hbMonsterStatusText(g,'debt',{size:44,allowDead:true,cooldown:120});
+    }
+    return r;
+  };
+})();
+
 // === final activation v22: last-write bean art wiring ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -11541,4 +11774,164 @@ Object.assign(Game.prototype,{
     if(this._detailOpen) this.drawHeroDetail();
     if(this._paused) this.drawPause();
   };
+})();
+
+// === final activation v27: last-write bold monster status text ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const META={
+    fire:{text:'燃燒',color:'#ff6a2f',key:'burn'},
+    burn:{text:'燃燒',color:'#ff6a2f',key:'burn'},
+    ice:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    freeze:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    frozen:{text:'冰凍',color:'#6fd8ff',key:'freeze'},
+    lightning:{text:'閃電',color:'#ffe14d',key:'lightning'},
+    shock:{text:'感電',color:'#ffe14d',key:'shock'},
+    poison:{text:'中毒',color:'#8cff37',key:'poison'},
+    venom:{text:'中毒',color:'#8cff37',key:'poison'},
+    bleed:{text:'流血',color:'#ff4d59',key:'bleed'},
+    breakShield:{text:'破盾',color:'#f0d49a',key:'breakShield'},
+    block:{text:'格擋',color:'#d8cfb8',key:'block'},
+    mirror:{text:'鏡框反射',color:'#8fe8ff',key:'mirror'},
+    coldrim:{text:'寒框鎖定',color:'#6fd8ff',key:'coldrim'},
+    lockrim:{text:'鎖框',color:'#d8ff44',key:'lockrim'},
+    greed:{text:'貪分',color:'#c89bff',key:'greed'},
+    debt:{text:'收債',color:'#ffb34d',key:'debt'},
+    crown:{text:'深淵冠冕',color:'#ffe14d',key:'crown'},
+    countdown:{text:'倒數懲罰',color:'#ff6a4a',key:'countdown'}
+  };
+  const stampNow=()=> (typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const statusOn=(g,names)=>!!g&&names.some(n=>(Number(g[n])||0)>0||g[n]===true);
+  const statusSnap=g=>({
+    hp:g?Number(g.hp)||0:0,
+    shield:!!(g&&g.shieldUp),
+    mirror:Number(g&&g.endlessMirror)||0,
+    burn:Number(g&&g.burn)||0,
+    frozen:!!(g&&g.frozen),
+    freeze:Number(g&&g.freeze)||0,
+    poison:statusOn(g,['poison','venom','toxic','poisoned']),
+    bleed:statusOn(g,['bleed','bleeding'])
+  });
+
+  Game.prototype._hbMonsterStatusText=function(g,type,opts){
+    if(!g||(g.dead&&!(opts&&opts.allowDead))) return;
+    const meta=META[type]||{text:String(type||''),color:'#ffe7a6',key:String(type||'status')};
+    if(!meta.text) return;
+    const now=stampNow(), key=meta.key||type, cooldown=(opts&&opts.cooldown!=null)?opts.cooldown:520;
+    g._hbStatusStamp=g._hbStatusStamp||{};
+    if(g._hbStatusStamp[key]&&now-g._hbStatusStamp[key]<cooldown) return;
+    g._hbStatusStamp[key]=now;
+    const elite=!!(g.elite||g.endlessAffix), base=Number(g.r)||30;
+    const size=(opts&&opts.size)||Math.round(elite?54:47);
+    const jitter=(opts&&opts.jitterX!=null)?opts.jitterX:22;
+    const x=(Number(g.x)||BW/2)+(Math.random()*2-1)*jitter;
+    const y=(Number(g.y)||BH/2)-Math.max(base*1.28,52)-((opts&&opts.lift)||0);
+    this._hbStatusFloaters=this._hbStatusFloaters||[];
+    this._hbStatusFloaters.push({
+      x,y,
+      text:meta.text,
+      color:meta.color,
+      size,
+      t:(opts&&opts.t)||1.08,
+      t0:(opts&&opts.t)||1.08,
+      vx:(Math.random()*2-1)*18,
+      vy:(opts&&opts.vy)||-62,
+      wob:Math.random()*TAU,
+      big:true
+    });
+    if(this._hbStatusFloaters.length>48) this._hbStatusFloaters.splice(0,this._hbStatusFloaters.length-48);
+  };
+
+  Game.prototype._hbStatusDiffPop=function(g,before,ctxType){
+    if(!g||!before) return;
+    const after=statusSnap(g);
+    if(before.shield&&!after.shield) this._hbMonsterStatusText(g,'breakShield',{size:52,cooldown:120});
+    else if(before.shield&&after.shield&&after.hp>=before.hp) this._hbMonsterStatusText(g,'block',{size:46,cooldown:260});
+    if(after.burn>before.burn+0.05) this._hbMonsterStatusText(g,'burn',{size:50,cooldown:320});
+    if((after.frozen&&!before.frozen)||(after.freeze>before.freeze+0.05)) this._hbMonsterStatusText(g,'freeze',{size:52,cooldown:260});
+    if(after.poison&&!before.poison) this._hbMonsterStatusText(g,'poison',{size:50,cooldown:260});
+    if(after.bleed&&!before.bleed) this._hbMonsterStatusText(g,'bleed',{size:48,cooldown:260});
+    if(ctxType==='fire') this._hbMonsterStatusText(g,'burn',{size:50,cooldown:420});
+    else if(ctxType==='ice') this._hbMonsterStatusText(g,'freeze',{size:52,cooldown:420});
+    else if(ctxType==='lightning') this._hbMonsterStatusText(g,'lightning',{size:52,cooldown:320});
+  };
+
+  const wrapElement=(name,type)=>{
+    const old=Game.prototype[name];
+    if(!old||old._hbStatusWrappedLast) return;
+    const wrapped=function(c){
+      const prev=this._hbElementTextContext;
+      this._hbElementTextContext=type;
+      try{ return old.apply(this,arguments); }
+      finally{ this._hbElementTextContext=prev; }
+    };
+    wrapped._hbStatusWrappedLast=true;
+    Game.prototype[name]=wrapped;
+  };
+  wrapElement('formFire','fire');
+  wrapElement('formIce','ice');
+  wrapElement('formLightning','lightning');
+
+  const oldHurt=Game.prototype.hurtGuard;
+  if(oldHurt&&!oldHurt._hbStatusWrappedLast){
+    const wrappedHurt=function(g,dmg,c,primary){
+      const before=statusSnap(g), run=this.run;
+      const mirrorBefore=!!(run&&run.endless&&g&&Number(g.endlessMirror)>0);
+      const ctxType=this._hbElementTextContext||null;
+      const r=oldHurt.apply(this,arguments);
+      if(g){
+        this._hbStatusDiffPop(g,before,ctxType);
+        if(mirrorBefore&&Number(g.endlessMirror||0)<=0) this._hbMonsterStatusText(g,'mirror',{size:54,cooldown:120});
+        if(run&&run.endless&&g.endlessFreezeHoop) this._hbMonsterStatusText(g,'coldrim',{size:47,cooldown:850});
+        if(run&&run.endless&&g.endlessLocksHoop) this._hbMonsterStatusText(g,'lockrim',{size:47,cooldown:850});
+        if((before.burn>0)&&!(c&&c.hx!=null)) this._hbMonsterStatusText(g,'burn',{size:42,cooldown:850});
+      }
+      return r;
+    };
+    wrappedHurt._hbStatusWrappedLast=true;
+    Game.prototype.hurtGuard=wrappedHurt;
+  }
+
+  const oldShared=Game.prototype._applySharedSkillEffects;
+  if(oldShared&&!oldShared._hbStatusWrappedLast){
+    const wrappedShared=function(ctx){
+      const run=this.run, before=new Map();
+      if(run&&Array.isArray(run.guards)) for(const g of run.guards) before.set(g,statusSnap(g));
+      const r=oldShared.apply(this,arguments);
+      if(run&&Array.isArray(run.guards)) for(const g of run.guards){ const b=before.get(g); if(b) this._hbStatusDiffPop(g,b,null); }
+      return r;
+    };
+    wrappedShared._hbStatusWrappedLast=true;
+    Game.prototype._applySharedSkillEffects=wrappedShared;
+  }
+
+  const oldRelic=Game.prototype.relicOnBasket;
+  if(oldRelic&&!oldRelic._hbStatusWrappedLast){
+    const wrappedRelic=function(swish,bank,ctx){
+      const run=this.run, before=new Map();
+      if(run&&Array.isArray(run.guards)) for(const g of run.guards) before.set(g,statusSnap(g));
+      const r=oldRelic.apply(this,arguments);
+      if(run&&Array.isArray(run.guards)) for(const g of run.guards){ const b=before.get(g); if(b) this._hbStatusDiffPop(g,b,null); }
+      return r;
+    };
+    wrappedRelic._hbStatusWrappedLast=true;
+    Game.prototype.relicOnBasket=wrappedRelic;
+  }
+
+  const oldKill=Game.prototype.killGuard;
+  if(oldKill&&!oldKill._hbStatusWrappedLast){
+    const wrappedKill=function(g){
+      const aff=g&&g.endlessAffix, greed=!!(g&&g.endlessGreed), debt=!!(g&&g.endlessDebt);
+      const r=oldKill.apply(this,arguments);
+      if(g&&g.dead){
+        if(aff==='crown') this._hbMonsterStatusText(g,'crown',{size:50,allowDead:true,cooldown:120});
+        if(greed) this._hbMonsterStatusText(g,'greed',{size:48,allowDead:true,cooldown:120});
+        if(debt) this._hbMonsterStatusText(g,'debt',{size:48,allowDead:true,cooldown:120});
+      }
+      return r;
+    };
+    wrappedKill._hbStatusWrappedLast=true;
+    Game.prototype.killGuard=wrappedKill;
+  }
 })();
