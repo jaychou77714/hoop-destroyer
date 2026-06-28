@@ -9635,3 +9635,277 @@ Object.assign(Game.prototype,{
     return changed;
   };
 })();
+
+// === final activation v17: optional endless socket affixes ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const MAX_SOCKET_AFFIXES=5;
+  const RARITY_META={
+    common:{name:'普通',col:'#d8d1bd',glow:'rgba(216,209,189,0.32)'},
+    magic:{name:'魔法',col:'#7fd8ff',glow:'rgba(127,216,255,0.42)'},
+    rare:{name:'稀有',col:'#e6b94a',glow:'rgba(230,185,74,0.44)'},
+    epic:{name:'史詩',col:'#c88cff',glow:'rgba(200,140,255,0.48)'},
+    legendary:{name:'傳說',col:'#ff9f43',glow:'rgba(255,159,67,0.52)'},
+    abyss:{name:'深淵',col:'#d8ff44',glow:'rgba(216,255,68,0.58)'}
+  };
+  const KEY_LABEL={
+    fireMul:'火球傷害',iceMul:'冰球傷害',lightningMul:'閃電傷害',
+    swishMul:'空心球傷害',bankMul:'擦板球傷害',luckyMul:'幸運球傷害',
+    nearMul:'近框傷害',farMul:'遠框傷害',allDmgMul:'通用傷害',
+    xpMul:'經驗獲得',goldMul:'金幣獲得',killGoldBonus:'擊殺金幣',
+    damageReduce:'受傷減免',maxhp:'最大生命',startShield:'立即護盾',
+    stageStartShield:'每層護盾',stageStartHeal:'每層回血',
+    comboDmgPerStack:'連進傷害',minPreviewBonus:'預覽軌跡'
+  };
+  const SOCKET_AFFIXES=[
+    {id:'c_steady_wrist',rarity:'common',name:'穩腕刻痕',key:'minPreviewBonus',pct:1,val:0.03,desc:'投籃預覽保留更多尾段。'},
+    {id:'c_low_arc',rarity:'common',name:'低弧修正',key:'nearMul',pct:1,val:0.04,desc:'近框與貼框命中更有殺傷。'},
+    {id:'c_high_arc',rarity:'common',name:'高弧修正',key:'farMul',pct:1,val:0.04,desc:'遠框投射傷害小幅提高。'},
+    {id:'c_soft_net',rarity:'common',name:'柔網粉塵',key:'swishMul',pct:1,val:0.04,desc:'空心球額外造成傷害。'},
+    {id:'c_board_tick',rarity:'common',name:'板角感應',key:'bankMul',pct:1,val:0.04,desc:'擦板球額外造成傷害。'},
+    {id:'c_lucky_knuckle',rarity:'common',name:'幸運指節',key:'luckyMul',pct:1,val:0.04,desc:'幸運球額外造成傷害。'},
+    {id:'c_ember_lace',rarity:'common',name:'火紋鞋帶',key:'fireMul',pct:1,val:0.04,desc:'火球傷害小幅提高。'},
+    {id:'c_frost_lace',rarity:'common',name:'霜紋鞋帶',key:'iceMul',pct:1,val:0.04,desc:'冰球傷害小幅提高。'},
+    {id:'c_spark_lace',rarity:'common',name:'電紋鞋帶',key:'lightningMul',pct:1,val:0.04,desc:'閃電球傷害小幅提高。'},
+    {id:'c_hide_patch',rarity:'common',name:'硬皮補丁',key:'damageReduce',pct:1,val:0.02,desc:'受到的傷害略微降低。'},
+    {id:'c_bone_padding',rarity:'common',name:'骨棉內襯',key:'maxhp',pct:0,val:6,desc:'提高最大生命值。'},
+    {id:'c_pocket_charm',rarity:'common',name:'零錢護符',key:'goldMul',pct:1,val:0.04,desc:'本局金幣收益略微提高。'},
+    {id:'m_silver_sight',rarity:'magic',name:'銀線瞄準',key:'minPreviewBonus',pct:1,val:0.05,desc:'預覽軌跡更穩定。'},
+    {id:'m_rim_press',rarity:'magic',name:'籃下壓迫',key:'nearMul',pct:1,val:0.07,desc:'靠近籃框時傷害提高。'},
+    {id:'m_deep_release',rarity:'magic',name:'深域出手',key:'farMul',pct:1,val:0.07,desc:'遠距離命中更痛。'},
+    {id:'m_net_needle',rarity:'magic',name:'破網銀針',key:'swishMul',pct:1,val:0.07,desc:'空心球傷害提高。'},
+    {id:'m_glass_ritual',rarity:'magic',name:'板魂儀式',key:'bankMul',pct:1,val:0.07,desc:'擦板球傷害提高。'},
+    {id:'m_loaded_luck',rarity:'magic',name:'灌鉛骰骨',key:'luckyMul',pct:1,val:0.07,desc:'幸運球傷害提高。'},
+    {id:'m_fire_sigil',rarity:'magic',name:'赤焰槽印',key:'fireMul',pct:1,val:0.08,desc:'火球傷害提高。'},
+    {id:'m_ice_sigil',rarity:'magic',name:'冷霜槽印',key:'iceMul',pct:1,val:0.08,desc:'冰球傷害提高。'},
+    {id:'m_storm_sigil',rarity:'magic',name:'雷鳴槽印',key:'lightningMul',pct:1,val:0.08,desc:'閃電球傷害提高。'},
+    {id:'m_marrow_guard',rarity:'magic',name:'髓甲縫線',key:'damageReduce',pct:1,val:0.04,desc:'受到的傷害降低。'},
+    {id:'m_vault_breath',rarity:'magic',name:'墓窖呼吸',key:'maxhp',pct:0,val:10,desc:'提高最大生命值。'},
+    {id:'m_shrine_shield',rarity:'magic',name:'聖壇護膜',key:'startShield',pct:0,val:8,desc:'立即獲得護盾。'},
+    {id:'m_soul_interest',rarity:'magic',name:'魂息利錢',key:'goldMul',pct:1,val:0.08,desc:'本局金幣收益提高。'},
+    {id:'m_coach_notes',rarity:'magic',name:'戰術殘頁',key:'xpMul',pct:1,val:0.08,desc:'本局經驗收益提高。'},
+    {id:'r_flawless_crease',rarity:'rare',name:'無瑕折線',key:'allDmgMul',pct:1,val:0.06,desc:'所有進球傷害提高。'},
+    {id:'r_close_execution',rarity:'rare',name:'籃下處刑',key:'nearMul',pct:1,val:0.10,desc:'近框與貼框傷害大幅提高。'},
+    {id:'r_outer_orbit',rarity:'rare',name:'外圈軌道',key:'farMul',pct:1,val:0.10,desc:'遠框傷害大幅提高。'},
+    {id:'r_white_net_oath',rarity:'rare',name:'白網誓約',key:'swishMul',pct:1,val:0.10,desc:'空心球傷害大幅提高。'},
+    {id:'r_backboard_contract',rarity:'rare',name:'籃板契書',key:'bankMul',pct:1,val:0.10,desc:'擦板球傷害大幅提高。'},
+    {id:'r_loaded_coin',rarity:'rare',name:'偏心金幣',key:'luckyMul',pct:1,val:0.10,desc:'幸運球傷害大幅提高。'},
+    {id:'r_cinder_core',rarity:'rare',name:'燼核鑲片',key:'fireMul',pct:1,val:0.12,desc:'火球傷害大幅提高。'},
+    {id:'r_rime_core',rarity:'rare',name:'霧凇鑲片',key:'iceMul',pct:1,val:0.12,desc:'冰球傷害大幅提高。'},
+    {id:'r_thunder_core',rarity:'rare',name:'雷核鑲片',key:'lightningMul',pct:1,val:0.12,desc:'閃電球傷害大幅提高。'},
+    {id:'r_abyss_hide',rarity:'rare',name:'深淵硬皮',key:'damageReduce',pct:1,val:0.06,desc:'受到的傷害明顯降低。'},
+    {id:'r_iron_lungs',rarity:'rare',name:'鐵肺氣囊',key:'maxhp',pct:0,val:16,desc:'提高最大生命值。'},
+    {id:'r_green_room',rarity:'rare',name:'綠火休息室',key:'stageStartHeal',pct:1,val:0.03,desc:'每層開始時回復生命。'},
+    {id:'r_entry_totem',rarity:'rare',name:'入場圖騰',key:'stageStartShield',pct:0,val:10,desc:'每層開始時獲得護盾。'},
+    {id:'r_grave_tithe',rarity:'rare',name:'墓稅袋',key:'goldMul',pct:1,val:0.12,desc:'本局金幣收益大幅提高。'},
+    {id:'r_kill_toll',rarity:'rare',name:'收債鈴',key:'killGoldBonus',pct:0,val:3,desc:'擊殺怪物時額外獲得金幣。'},
+    {id:'r_muscle_memory',rarity:'rare',name:'肌肉記憶',key:'comboDmgPerStack',pct:1,val:0.03,desc:'連進層數提供更多傷害。'},
+    {id:'e_net_execution',rarity:'epic',name:'網心處刑',key:'allDmgMul',pct:1,val:0.10,desc:'所有進球傷害大幅提高。'},
+    {id:'e_first_gap',rarity:'epic',name:'第一縫隙',key:'minPreviewBonus',pct:1,val:0.08,desc:'預覽軌跡顯著延長。'},
+    {id:'e_slaughter_layup',rarity:'epic',name:'屠籃切入',key:'nearMul',pct:1,val:0.14,desc:'近框與貼框傷害顯著提高。'},
+    {id:'e_eclipse_range',rarity:'epic',name:'月蝕遠射',key:'farMul',pct:1,val:0.14,desc:'遠框傷害顯著提高。'},
+    {id:'e_pure_silence',rarity:'epic',name:'靜默空心',key:'swishMul',pct:1,val:0.14,desc:'空心球傷害顯著提高。'},
+    {id:'e_skull_bank',rarity:'epic',name:'骷髏擦板',key:'bankMul',pct:1,val:0.14,desc:'擦板球傷害顯著提高。'},
+    {id:'e_rigged_miracle',rarity:'epic',name:'作弊奇蹟',key:'luckyMul',pct:1,val:0.14,desc:'幸運球傷害顯著提高。'},
+    {id:'e_saint_ember',rarity:'epic',name:'聖焰環槽',key:'fireMul',pct:1,val:0.16,desc:'火球傷害顯著提高。'},
+    {id:'e_cold_altar',rarity:'epic',name:'冷壇環槽',key:'iceMul',pct:1,val:0.16,desc:'冰球傷害顯著提高。'},
+    {id:'e_chain_thunder',rarity:'epic',name:'鏈雷環槽',key:'lightningMul',pct:1,val:0.16,desc:'閃電球傷害顯著提高。'},
+    {id:'e_black_parry',rarity:'epic',name:'黑鐵格擋',key:'damageReduce',pct:1,val:0.08,desc:'受到的傷害大幅降低。'},
+    {id:'e_giant_heart',rarity:'epic',name:'巨人心瓣',key:'maxhp',pct:0,val:24,desc:'大幅提高最大生命值。'},
+    {id:'e_blood_interest',rarity:'epic',name:'血息學費',key:'xpMul',pct:1,val:0.16,desc:'本局經驗收益顯著提高。'},
+    {id:'e_soul_mint',rarity:'epic',name:'魂幣鑄模',key:'goldMul',pct:1,val:0.16,desc:'本局金幣收益顯著提高。'},
+    {id:'l_hoopbreaker_seal',rarity:'legendary',name:'破框者聖印',key:'allDmgMul',pct:1,val:0.14,desc:'所有進球傷害極大提高。'},
+    {id:'l_linebreaker',rarity:'legendary',name:'禁區破線',key:'nearMul',pct:1,val:0.18,desc:'近框與貼框傷害極大提高。'},
+    {id:'l_moonshot',rarity:'legendary',name:'月面遠投',key:'farMul',pct:1,val:0.18,desc:'遠框傷害極大提高。'},
+    {id:'l_no_sound',rarity:'legendary',name:'無聲破網',key:'swishMul',pct:1,val:0.18,desc:'空心球傷害極大提高。'},
+    {id:'l_shattered_glass',rarity:'legendary',name:'碎界擦板',key:'bankMul',pct:1,val:0.18,desc:'擦板球傷害極大提高。'},
+    {id:'l_loaded_prophecy',rarity:'legendary',name:'命定幸運',key:'luckyMul',pct:1,val:0.18,desc:'幸運球傷害極大提高。'},
+    {id:'l_furnace_orbit',rarity:'legendary',name:'熔爐軌道',key:'fireMul',pct:1,val:0.20,desc:'火球傷害極大提高。'},
+    {id:'l_frozen_comet',rarity:'legendary',name:'凍星彗尾',key:'iceMul',pct:1,val:0.20,desc:'冰球傷害極大提高。'},
+    {id:'l_thunder_court',rarity:'legendary',name:'雷骨全場',key:'lightningMul',pct:1,val:0.20,desc:'閃電球傷害極大提高。'},
+    {id:'l_black_gold',rarity:'legendary',name:'黑金契約',key:'goldMul',pct:1,val:0.22,desc:'本局金幣收益極大提高。'},
+    {id:'l_deathless_wrap',rarity:'legendary',name:'不死繃帶',key:'damageReduce',pct:1,val:0.10,desc:'受到的傷害極大降低。'},
+    {id:'l_giant_wall',rarity:'legendary',name:'巨牆骨板',key:'maxhp',pct:0,val:32,desc:'極大提高最大生命值。'},
+    {id:'a_abyss_king',rarity:'abyss',name:'深籃君王印',key:'allDmgMul',pct:1,val:0.18,desc:'深淵規則承認你的破壞力。'},
+    {id:'a_void_swish',rarity:'abyss',name:'虛無空心',key:'swishMul',pct:1,val:0.22,desc:'空心球像裂縫一樣撕開敵人。'},
+    {id:'a_debt_bank',rarity:'abyss',name:'收債擦板',key:'bankMul',pct:1,val:0.22,desc:'每次擦板都像在討回欠款。'},
+    {id:'a_crooked_fate',rarity:'abyss',name:'歪斜命運',key:'luckyMul',pct:1,val:0.22,desc:'幸運球受到深淵偏袒。'},
+    {id:'a_black_flame',rarity:'abyss',name:'黑焰球心',key:'fireMul',pct:1,val:0.24,desc:'火球帶著深淵燃燒。'},
+    {id:'a_null_frost',rarity:'abyss',name:'零度裂冰',key:'iceMul',pct:1,val:0.24,desc:'冰球把籃框周圍凍成刑場。'},
+    {id:'a_bone_lightning',rarity:'abyss',name:'骨雷天幕',key:'lightningMul',pct:1,val:0.24,desc:'閃電球引來骨穹雷鳴。'},
+    {id:'a_blind_spot',rarity:'abyss',name:'盲點視界',key:'minPreviewBonus',pct:1,val:0.12,desc:'即使深淵遮眼，球路仍留下痕跡。'},
+    {id:'a_shielded_void',rarity:'abyss',name:'虛空硬殼',key:'damageReduce',pct:1,val:0.12,desc:'深淵替你吞掉一部分傷害。'},
+    {id:'a_endless_chest',rarity:'abyss',name:'無盡胸骨',key:'maxhp',pct:0,val:44,desc:'最大生命值獲得深層增幅。'}
+  ];
+
+  const clone=o=>{ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} };
+  const cleanLabel=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴').replace(/^鑲嵌·/,'').replace(/^鑄造·/,'').replace(/^精煉·/,'');
+  const roundAffix=(a,v)=>a&&a.pct?Math.round(v*100)/100:Math.round(v);
+  const refineInc=a=>a&&a.pct?0.03:(a&&a.key==='maxhp'?5:4);
+  const valueText=a=>{
+    const v=Number(a&&a.val)||0;
+    return (v>=0?'+':'')+(a&&a.pct?Math.round(v*100)+'%':Math.round(v));
+  };
+  const effectText=a=>(KEY_LABEL[a&&a.key]||cleanLabel(a))+' '+valueText(a);
+  const rollRarity=depth=>{
+    const d=Math.max(0,(Number(depth)||35)-30);
+    const table=[
+      ['common',Math.max(4,22-d*0.65)],
+      ['magic',Math.max(12,36-d*0.35)],
+      ['rare',28+d*0.15],
+      ['epic',10+d*0.28],
+      ['legendary',3+d*0.16],
+      ['abyss',Math.max(0.5,d*0.05)]
+    ];
+    const total=table.reduce((s,x)=>s+x[1],0);
+    let r=Math.random()*total;
+    for(const row of table){ r-=row[1]; if(r<=0) return row[0]; }
+    return 'rare';
+  };
+  const pickSocketAffix=(depth,usedIds,usedKeys)=>{
+    for(let tries=0;tries<18;tries++){
+      const rarity=rollRarity(depth);
+      const pool=SOCKET_AFFIXES.filter(a=>a.rarity===rarity&&!usedIds[a.id]&&!usedKeys[a.key]);
+      if(pool.length) return clone(pool[Math.floor(Math.random()*pool.length)]);
+    }
+    const fallback=SOCKET_AFFIXES.filter(a=>!usedIds[a.id]&&!usedKeys[a.key]);
+    return fallback.length?clone(fallback[Math.floor(Math.random()*fallback.length)]):clone(SOCKET_AFFIXES[Math.floor(Math.random()*SOCKET_AFFIXES.length)]);
+  };
+
+  Game.prototype._hbSocketAffixPool=function(){ return SOCKET_AFFIXES.slice(); };
+
+  Game.prototype._hbSocketAffixChoices=function(depth,rid){
+    const meta=this._relicMeta(rid);
+    if(!meta.affixes) meta.affixes=[];
+    if(meta.affixes.length>=MAX_SOCKET_AFFIXES){
+      return meta.affixes.map((a,i)=>Object.assign({},a,{
+        id:'refine_'+i,mode:'refine',refIndex:i,name:'精煉·'+cleanLabel(a),
+        rarity:a.rarity||(a.forged?'rare':'magic'),val:refineInc(a),
+        desc:'詞綴槽已滿，改為精煉這條現有詞綴。'
+      })).slice(0,3);
+    }
+    const usedIds={}, usedKeys={};
+    for(const a of meta.affixes){ if(a&&a.sourceId) usedIds[a.sourceId]=1; if(a&&a.key) usedKeys[a.key]=1; }
+    const out=[];
+    while(out.length<3&&out.length<SOCKET_AFFIXES.length){
+      const a=pickSocketAffix(depth,usedIds,usedKeys);
+      if(!a) break;
+      usedIds[a.id]=1; usedKeys[a.key]=1;
+      out.push(a);
+    }
+    return out;
+  };
+
+  Game.prototype._hbApplySocketAffixChoice=function(rid,choice){
+    const meta=this._relicMeta(rid);
+    if(!meta.affixes) meta.affixes=[];
+    let made=null;
+    if(choice&&choice.mode==='refine'){
+      const idx=Math.max(0,Math.min(meta.affixes.length-1,Number(choice.refIndex)||0));
+      const target=meta.affixes[idx];
+      if(target){
+        const inc=refineInc(target), old=Number(target.val)||0;
+        target.val=roundAffix(target,old+inc);
+        made=Object.assign({},target,{label:'精煉·'+cleanLabel(target),val:target.val-old,refined:true});
+        this._hbApplyRelicAffixDelta&&this._hbApplyRelicAffixDelta(this.run,made,made.val);
+      }
+    }else if(choice){
+      made={key:choice.key,label:'鑲嵌·'+choice.name,pct:!!choice.pct,val:roundAffix(choice,choice.val),rarity:choice.rarity,sourceId:choice.id,socketed:true};
+      if(meta.affixes.length<MAX_SOCKET_AFFIXES){
+        meta.affixes.push(made);
+        meta.socketCount=Math.max(0,Number(meta.socketCount)||0)+1;
+        this._hbApplyRelicAffixDelta&&this._hbApplyRelicAffixDelta(this.run,made,made.val);
+      }else{
+        const idx=Math.floor(Math.random()*meta.affixes.length), target=meta.affixes[idx];
+        const inc=refineInc(target), old=Number(target.val)||0;
+        target.val=roundAffix(target,old+inc);
+        made=Object.assign({},target,{label:'精煉·'+cleanLabel(target),val:target.val-old,refined:true});
+        this._hbApplyRelicAffixDelta&&this._hbApplyRelicAffixDelta(this.run,made,made.val);
+      }
+    }
+    this._saveProfile&&this._saveProfile();
+    return made;
+  };
+
+  const prevChooseGear=Game.prototype._hbChooseEndlessGearReward;
+  Game.prototype._hbChooseEndlessGearReward=function(rid){
+    const run=this.run, m=run&&run.modal;
+    if(!run||!m||m.kind!=='endlessGearReward'||!Array.isArray(m.choices)||!m.choices.includes(rid)) return;
+    run._endlessGearRewards=run._endlessGearRewards||{};
+    run._endlessGearRewards[m.depth]=true;
+    const up=this._hbUpgradeEquippedRelic?this._hbUpgradeEquippedRelic(rid):{lvl:0};
+    const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):this._relicDisplay(rid,true);
+    const name=item?item.name:'聖物';
+    if(run.rewardLog) run.rewardLog.push('深淵鍛造：'+name+' Lv '+up.lvl);
+    if(m.forge){
+      const choices=this._hbSocketAffixChoices(m.depth,rid);
+      run.modal={kind:'endlessSocketAffixReward',depth:m.depth,rid,itemName:name,upLevel:up.lvl,choices};
+      this.toast&&this.toast('裝備升級完成','選擇鑲嵌詞綴，或放棄這次鑲嵌');
+      this.floater&&this.floater(BW/2,BH*0.30,'裝備升級','#d8ff44',38,{crit:true,t:1.2});
+      this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+      this.render&&this.render();
+      return;
+    }
+    run.modal=null;
+    this.toast&&this.toast('深淵鍛造完成',name+' Lv '+up.lvl);
+    this.floater&&this.floater(BW/2,BH*0.30,'裝備升級','#d8ff44',38,{crit:true,t:1.2});
+    this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+    return this._endlessAdvanceDepth&&this._endlessAdvanceDepth();
+  };
+
+  Game.prototype._hbChooseSocketAffix=function(idx){
+    const run=this.run, m=run&&run.modal;
+    if(!run||!m||m.kind!=='endlessSocketAffixReward') return;
+    const choice=m.choices&&m.choices[idx];
+    if(!choice) return;
+    const made=this._hbApplySocketAffixChoice(m.rid,choice);
+    if(run.rewardLog) run.rewardLog.push((made&&made.refined?'深淵精煉：':'深淵鑲嵌：')+m.itemName+' · '+(made?cleanLabel(made):cleanLabel(choice)));
+    run.modal=null;
+    this.toast&&this.toast(made&&made.refined?'深淵精煉完成':'深淵鑲嵌完成',(made?cleanLabel(made):cleanLabel(choice))+' '+(made?valueText(made):valueText(choice)));
+    this.floater&&this.floater(BW/2,BH*0.30,made&&made.refined?'詞綴精煉':'詞綴鑲嵌',made&&made.rarity&&RARITY_META[made.rarity]?RARITY_META[made.rarity].col:'#d8ff44',34,{crit:true,t:1.2});
+    this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+    return this._endlessAdvanceDepth&&this._endlessAdvanceDepth();
+  };
+
+  Game.prototype._hbSkipSocketAffix=function(){
+    const run=this.run, m=run&&run.modal;
+    if(!run||!m||m.kind!=='endlessSocketAffixReward') return;
+    if(run.rewardLog) run.rewardLog.push('放棄鑲嵌：'+(m.itemName||'聖物'));
+    run.modal=null;
+    this.toast&&this.toast('已放棄鑲嵌','裝備升級保留，未新增詞綴');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    return this._endlessAdvanceDepth&&this._endlessAdvanceDepth();
+  };
+
+  const prevDrawModal=Game.prototype.drawModal;
+  Game.prototype.drawModal=function(){
+    const run=this.run, m=run&&run.modal;
+    if(!m||m.kind!=='endlessSocketAffixReward') return prevDrawModal.apply(this,arguments);
+    const ctx=this.ctx;
+    ctx.save(); ctx.fillStyle='rgba(2,1,5,0.86)'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    this.btn(0,0,BW,BH,'endless_socket_scrim',()=>{});
+    this.text('深淵鑲嵌',BW/2,104,58,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:16});
+    this.text('第 '+m.depth+' 層 · '+(m.itemName||'聖物')+' Lv '+(m.upLevel||'')+' · 可選擇一個詞綴，也可以放棄',BW/2,154,24,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    const choices=Array.isArray(m.choices)?m.choices:[], n=Math.max(1,choices.length);
+    const cw=Math.min(420,(BW-240-(n-1)*34)/n), ch=510, gap=34, total=n*cw+(n-1)*gap, x0=BW/2-total/2, y=226;
+    for(let i=0;i<choices.length;i++){
+      const a=choices[i], rm=RARITY_META[a.rarity]||RARITY_META.magic, x=x0+i*(cw+gap);
+      this.rr(x,y,cw,ch,18);
+      const bg=ctx.createLinearGradient(0,y,0,y+ch);
+      bg.addColorStop(0,'rgba(28,20,18,0.98)');
+      bg.addColorStop(1,'rgba(6,5,9,0.99)');
+      ctx.fillStyle=bg; ctx.fill();
+      ctx.lineWidth=3; ctx.strokeStyle=rm.col; ctx.shadowBlur=18; ctx.shadowColor=rm.col; this.rr(x,y,cw,ch,18); ctx.stroke(); ctx.shadowBlur=0;
+      ctx.save(); ctx.fillStyle=rm.glow; ctx.beginPath(); ctx.arc(x+cw/2,y+94,78,0,TAU); ctx.fill(); ctx.restore();
+      this.text(rm.name,x+cw/2,y+42,21,rm.col,{align:'center',baseline:'middle',weight:'900'});
+      this.text(a.mode==='refine'?'精煉現有詞綴':'鑲嵌詞綴',x+cw/2,y+76,18,'#a2926e',{align:'center',baseline:'middle',weight:'800'});
+      this.text(this._clip(cleanLabel(a),cw-50,34,'900'),x+cw/2,y+136,34,'#fff4dc',{align:'center',baseline:'middle',weight:'900'});
+      this.text(effectText(a),x+cw/2,y+196,28,rm.col,{align:'center',baseline:'middle',weight:'900',glow:8});
+      this.wrap(a.desc||'深淵詞綴會永久寫入這件裝備。',x+cw/2,y+260,cw-58,30,'#c8b894',22,'center');
+      this.text(a.mode==='refine'?'提高既有數值':'占用 1 個詞綴槽，最多 '+MAX_SOCKET_AFFIXES+' 條',x+cw/2,y+378,20,'#8f846e',{align:'center',baseline:'middle',weight:'800'});
+      this.button(x+34,y+ch-86,cw-68,58,a.mode==='refine'?'精煉':'鑲嵌','endless_socket_'+i,()=>this._hbChooseSocketAffix(i),{primary:true,size:25,weight:'900'});
+    }
+    const bw=360,bh=64,by=y+ch+34;
+    this.button(BW/2-bw/2,by,bw,bh,'放棄鑲嵌','endless_socket_skip',()=>this._hbSkipSocketAffix(),{size:25,color:'#f0c0b0',weight:'900'});
+  };
+})();
