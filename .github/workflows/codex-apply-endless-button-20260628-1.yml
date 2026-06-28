@@ -1,0 +1,73 @@
+name: Codex Apply Endless Button
+
+on:
+  push:
+    paths:
+      - '.github/workflows/codex-apply-endless-button-20260628-1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Patch final bench endless button
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'engine.js';
+          let s = fs.readFileSync(path, 'utf8');
+
+          if (s.includes('final activation v5') || s.includes('endlessAbyss')) {
+            throw new Error('Unexpected endless battle prototype marker found; refusing to deploy broader changes.');
+          }
+
+          const oldLayout = "    let endless=this.save.endless?J({x:552,y:376,w:282,h:30}):null;";
+          const newLayout = "    let endless=null;";
+          if (s.includes(oldLayout)) {
+            s = s.replace(oldLayout, newLayout);
+          } else if (!s.includes(newLayout)) {
+            throw new Error('Could not find final bench endless layout line.');
+          }
+
+          const oldButton = "    const a=LO.bL; this._fbBtn(a,'無盡模式',false,'inf',true); this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_locked',()=>this.toast('無盡模式','即將開放'));";
+          const newButton = `    const a=LO.bL, endlessReady=!!(this.save&&this.save.endless);
+    this._fbBtn(a,'無盡模式',this._press(a),'inf',!endlessReady);
+    this.btn(a.x,a.y,a.w,Math.max(44*U,a.h),'fb_endless_entry',()=>{
+      if(!this.save.endless){ this.toast('無盡模式','標準或腐化第 5 幕通關後解鎖'); return; }
+      this.toast('無盡模式','入口已放在板凳席，下一階段接正式玩法');
+    });`;
+          if (s.includes(oldButton)) {
+            s = s.replace(oldButton, newButton);
+          } else if (!s.includes("fb_endless_entry")) {
+            throw new Error('Could not find final bench endless button line.');
+          }
+
+          fs.writeFileSync(path, s, 'utf8');
+          NODE
+      - name: Verify patched engine
+        shell: bash
+        run: |
+          node --check engine.js
+          grep -q "fb_endless_entry" engine.js
+          ! grep -q "endlessAbyss" engine.js
+          ! grep -q "final activation v5" engine.js
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "codex"
+          git config user.email "codex@openai.com"
+          rm -f .github/workflows/codex-apply-endless-button-20260628-1.yml
+          git add engine.js .github/workflows/codex-apply-endless-button-20260628-1.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add final bench endless mode button"
+            git push
+          fi
