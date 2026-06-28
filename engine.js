@@ -9909,3 +9909,97 @@ Object.assign(Game.prototype,{
     this.button(BW/2-bw/2,by,bw,bh,'放棄鑲嵌','endless_socket_skip',()=>this._hbSkipSocketAffix(),{size:25,color:'#f0c0b0',weight:'900'});
   };
 })();
+
+// === final activation v18: commit normal-mode shot stats only on run finish ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const cloneEvent=e=>({id:e&&e.id,made:!!(e&&e.made),type:(e&&e.type)||null});
+  const shouldDefer=(g,run)=>!!(g&&run&&run._hbDeferRunStats&&!run.endless&&!(g.save&&g.save.admin));
+  const countEvents=events=>{
+    const out={shots:0,makes:0,swishes:0,banks:0};
+    for(const e of events||[]){
+      out.shots++;
+      if(e&&e.made){
+        out.makes++;
+        if(e.type==='swish') out.swishes++;
+        else if(e.type==='bank') out.banks++;
+      }
+    }
+    return out;
+  };
+
+  const prevStartRun=Game.prototype.startRun;
+  Game.prototype.startRun=function(){
+    const ret=prevStartRun.apply(this,arguments);
+    if(this.run){
+      this.run._hbDeferRunStats=true;
+      this.run._hbDeferredStatEvents=[];
+      this.run._hbStatsCommitted=false;
+    }
+    return ret;
+  };
+
+  const liveRecordShot=Game.prototype._recordShot;
+  Game.prototype._recordShot=function(id,made,type){
+    const run=this.run;
+    if(shouldDefer(this,run)){
+      run._hbDeferredStatEvents=run._hbDeferredStatEvents||[];
+      run._hbDeferredStatEvents.push({id,made:!!made,type:type||null});
+      return;
+    }
+    return liveRecordShot?liveRecordShot.apply(this,arguments):undefined;
+  };
+
+  const prevBattleUp=Game.prototype.battleUp;
+  Game.prototype.battleUp=function(){
+    const run=this.run, stats=this.save&&this.save.stats;
+    const defer=shouldDefer(this,run), before=stats?Math.max(0,Number(stats.totalShots)||0):0;
+    const ret=prevBattleUp.apply(this,arguments);
+    if(defer&&stats) stats.totalShots=before;
+    return ret;
+  };
+
+  const prevMakeBasket=Game.prototype.makeBasket;
+  Game.prototype.makeBasket=function(){
+    const run=this.run, stats=this.save&&this.save.stats;
+    const defer=shouldDefer(this,run), before=stats?{swishes:Math.max(0,Number(stats.swishes)||0),banks:Math.max(0,Number(stats.banks)||0)}:null;
+    const ret=prevMakeBasket.apply(this,arguments);
+    if(defer&&stats&&before){ stats.swishes=before.swishes; stats.banks=before.banks; }
+    return ret;
+  };
+
+  Game.prototype._hbCommitRunShotStats=function(run){
+    if(!shouldDefer(this,run)||run._hbStatsCommitted) return false;
+    run._hbStatsCommitted=true;
+    const s=this.save;
+    if(s&&s.stats){
+      s.stats.totalShots=Math.max(0,Number(s.stats.totalShots)||0)+Math.max(0,Number(run.shots)||0);
+      s.stats.swishes=Math.max(0,Number(s.stats.swishes)||0)+Math.max(0,Number(run.swishes)||0);
+      s.stats.banks=Math.max(0,Number(s.stats.banks)||0)+Math.max(0,Number(run.banks)||0);
+    }
+    const events=(run._hbDeferredStatEvents||[]).map(cloneEvent);
+    const c=countEvents(events);
+    const heroId=run.heroId;
+    let miss=Math.max(0,(Number(run.shots)||0)-c.shots);
+    let swish=Math.max(0,(Number(run.swishes)||0)-c.swishes);
+    let bank=Math.max(0,(Number(run.banks)||0)-c.banks);
+    let made=Math.max(0,(Number(run.makes)||0)-c.makes);
+    while(swish>0){ events.push({id:heroId,made:true,type:'swish'}); swish--; made--; miss--; }
+    while(bank>0){ events.push({id:heroId,made:true,type:'bank'}); bank--; made--; miss--; }
+    while(made>0){ events.push({id:heroId,made:true,type:'normal'}); made--; miss--; }
+    while(miss>0){ events.push({id:heroId,made:false,type:null}); miss--; }
+    if(liveRecordShot){
+      for(const e of events) liveRecordShot.call(this,e.id||heroId,e.made,e.type);
+    }
+    run._hbDeferredStatEvents=[];
+    this._syncLeaderboardStats&&this._syncLeaderboardStats(true);
+    return true;
+  };
+
+  const prevFinishRun=Game.prototype.finishRun;
+  Game.prototype.finishRun=function(won){
+    const run=this.run;
+    if(run&&!run.endless) this._hbCommitRunShotStats&&this._hbCommitRunShotStats(run);
+    return prevFinishRun.apply(this,arguments);
+  };
+})();
