@@ -9261,3 +9261,154 @@ Object.assign(Game.prototype,{
   const oldFinishEndless=Game.prototype.finishEndlessRun;
   Game.prototype.finishEndlessRun=function(won){ if(this.run&&this.run.endless) this._recordEndlessCheckpoint(this.run); return oldFinishEndless.apply(this,arguments); };
 })();
+
+// === final activation v15: endless gear milestone rewards ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const MAX_FORGED_AFFIXES=5;
+  const affixPool=()=> (typeof RELIC_AFFIXES!=='undefined'&&Array.isArray(RELIC_AFFIXES))?RELIC_AFFIXES:[];
+  const affixText=a=>'◆ '+(a.forged?'鑄造·':'')+String(a.label||a.key).replace(/^鑄造·/,'')+' +'+(a.pct?Math.round((a.val||0)*100)+'%':Math.round(a.val||0));
+  const affixInc=a=> a.pct?0.02:(a.key==='maxhp'?3:2);
+  const roundAffix=(a,v)=> a.pct?Math.round(v*100)/100:Math.round(v);
+
+  const prevRelicDisplay=Game.prototype._relicDisplay;
+  Game.prototype._relicDisplay=function(rid,owned){
+    const it=prevRelicDisplay?prevRelicDisplay.call(this,rid,owned):null;
+    if(it&&owned&&this._relicMeta){
+      const meta=this._relicMeta(rid);
+      it.lvl=Math.max(0,Number(meta&&meta.lvl)||0);
+      it.forgeCount=Math.max(0,Number(meta&&meta.forgeCount)||0);
+      if(Array.isArray(it.affixes)) it.affixes=it.affixes.map(a=>a&&a.forged?Object.assign({},a,{label:'鑄造·'+a.label}):a);
+    }
+    return it;
+  };
+
+  const prevRelicSummary=Game.prototype._hbRelicSummary;
+  Game.prototype._hbRelicSummary=function(it){
+    const base=prevRelicSummary?prevRelicSummary.call(this,it):((it&&it.core)||'聖物');
+    return it&&it.lvl?base+' · Lv '+it.lvl:base;
+  };
+
+  Game.prototype._hbEndlessEquippedRelics=function(){
+    const load=(this.save&&this.save.loadout)||[];
+    const seen={}, out=[];
+    for(const id of load){ if(id&&RELICS[id]&&!seen[id]){ seen[id]=1; out.push(id); } }
+    return out;
+  };
+
+  Game.prototype._hbApplyRelicAffixDelta=function(run,a,delta){
+    if(!run||!run.mods||!a||!delta) return;
+    if(a.key==='maxhp'){ run.maxhp+=delta; run.hp=Math.min(run.maxhp,(run.hp||0)+delta); }
+    else if(a.key==='startShield') run.shield=(run.shield||0)+delta;
+    else if(a.key==='goldMul') run.mods.bonusGoldMul=(run.mods.bonusGoldMul||0)+delta;
+    else if(a.key==='damageReduce') run.mods.damageReduce=Math.min(0.6,(run.mods.damageReduce||0)+delta);
+    else if(run.mods[a.key]!=null) run.mods[a.key]+=delta;
+  };
+
+  Game.prototype._hbUpgradeEquippedRelic=function(rid){
+    const meta=this._relicMeta(rid);
+    if(!meta.affixes) meta.affixes=[];
+    meta.lvl=Math.max(0,Number(meta.lvl)||0)+1;
+    meta.q=Math.min(50,Math.max(1,Number(meta.q)||5)+2);
+    meta.tier=(typeof _qualTier==='function')?_qualTier(meta.q):(meta.tier||0);
+    const deltas=[];
+    for(const a of meta.affixes){
+      const old=Number(a.val)||0, inc=affixInc(a);
+      a.val=roundAffix(a,old+inc);
+      deltas.push(Object.assign({},a,{val:a.val-old,label:String(a.label||'').replace(/^鑄造·/,'')}));
+    }
+    this._saveProfile&&this._saveProfile();
+    const run=this.run;
+    for(const d of deltas) this._hbApplyRelicAffixDelta(run,d,d.val);
+    return {lvl:meta.lvl,deltas};
+  };
+
+  Game.prototype._hbForgeRelicAffix=function(rid,depth){
+    const meta=this._relicMeta(rid);
+    if(!meta.affixes) meta.affixes=[];
+    const used=new Set(meta.affixes.map(a=>a&&a.key).filter(Boolean));
+    const pool=affixPool().filter(a=>a&&!used.has(a.key));
+    let made=null;
+    if(pool.length&&meta.affixes.length<MAX_FORGED_AFFIXES){
+      const src=pool[Math.floor(Math.random()*pool.length)];
+      const power=clamp(0.58+Math.random()*0.28+Math.max(0,(depth||31)-30)*0.012,0,1.15);
+      const val=roundAffix(src,src.min+(src.max-src.min)*power);
+      made={key:src.key,label:src.label,pct:src.pct,val,forged:true};
+      meta.affixes.push(made);
+      meta.forgeCount=Math.max(0,Number(meta.forgeCount)||0)+1;
+      this._hbApplyRelicAffixDelta(this.run,made,made.val);
+    }else if(meta.affixes.length){
+      const a=meta.affixes[Math.floor(Math.random()*meta.affixes.length)];
+      const old=Number(a.val)||0, inc=affixInc(a)*1.5;
+      a.val=roundAffix(a,old+inc);
+      made=Object.assign({},a,{label:'鍛升·'+(a.label||a.key),val:a.val-old,forged:true});
+      this._hbApplyRelicAffixDelta(this.run,made,made.val);
+    }
+    this._saveProfile&&this._saveProfile();
+    return made;
+  };
+
+  const prevAdvanceDepth=Game.prototype._endlessAdvanceDepth;
+  Game.prototype._endlessAdvanceDepth=function(){
+    const run=this.run;
+    if(run&&run.endless&&!run.modal){
+      const depth=Math.max(1,Number(run.endlessDepth)||1);
+      run._endlessGearRewards=run._endlessGearRewards||{};
+      if(depth%5===0&&!run._endlessGearRewards[depth]){
+        const choices=this._hbEndlessEquippedRelics();
+        if(choices.length){
+          run.modal={kind:'endlessGearReward',depth,choices,forge:depth>30};
+          run.banner={text:'深淵鍛造',sub:'第 '+depth+' 層 · 選擇一件已裝備聖物升級',t:1.8};
+          this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+          this.render&&this.render();
+          return;
+        }
+        run._endlessGearRewards[depth]=true;
+      }
+    }
+    return prevAdvanceDepth.apply(this,arguments);
+  };
+
+  Game.prototype._hbChooseEndlessGearReward=function(rid){
+    const run=this.run, m=run&&run.modal;
+    if(!run||!m||m.kind!=='endlessGearReward'||!m.choices.includes(rid)) return;
+    run._endlessGearRewards=run._endlessGearRewards||{};
+    run._endlessGearRewards[m.depth]=true;
+    const up=this._hbUpgradeEquippedRelic(rid);
+    const forge=m.forge?this._hbForgeRelicAffix(rid,m.depth):null;
+    const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):this._relicDisplay(rid,true);
+    const name=item?item.name:'聖物';
+    if(run.rewardLog) run.rewardLog.push('深淵鍛造：'+name+' Lv '+up.lvl+(forge?(' · '+(forge.label||'鑄造詞綴')):''));
+    run.modal=null;
+    this.toast&&this.toast('深淵鍛造完成',name+' Lv '+up.lvl+(forge?(' · '+(forge.label||'鑄造詞綴')):''));
+    this.floater&&this.floater(BW/2,BH*0.30,'裝備升級','#d8ff44',38,{crit:true,t:1.2});
+    this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+    return prevAdvanceDepth.call(this);
+  };
+
+  const prevDrawModal=Game.prototype.drawModal;
+  Game.prototype.drawModal=function(){
+    const run=this.run, m=run&&run.modal;
+    if(!m||m.kind!=='endlessGearReward') return prevDrawModal.apply(this,arguments);
+    const ctx=this.ctx;
+    ctx.save(); ctx.fillStyle='rgba(2,1,5,0.84)'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    this.btn(0,0,BW,BH,'endless_gear_scrim',()=>{});
+    this.text('深淵鍛造',BW/2,118,58,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:16});
+    this.text('第 '+m.depth+' 層獎勵 · 選擇身上一件裝備升級 1 等'+(m.forge?' · 追加隨機鑄造詞綴':''),BW/2,168,25,m.forge?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    const items=m.choices.map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):this._relicDisplay(id,true)).filter(Boolean);
+    const n=items.length, cw=Math.min(320,(BW-220-(n-1)*24)/Math.max(1,n)), ch=500, gap=24, total=n*cw+(n-1)*gap, x0=BW/2-total/2, y=230;
+    for(let i=0;i<n;i++){
+      const it=items[i], x=x0+i*(cw+gap), col=(typeof QUAL_COL!=='undefined'?QUAL_COL[it.tier]:'#e6c068')||'#e6c068';
+      this.rr(x,y,cw,ch,18); const bg=ctx.createLinearGradient(0,y,0,y+ch); bg.addColorStop(0,'rgba(30,23,18,0.97)'); bg.addColorStop(1,'rgba(6,5,9,0.98)'); ctx.fillStyle=bg; ctx.fill();
+      ctx.lineWidth=3; ctx.strokeStyle=col; ctx.shadowBlur=14; ctx.shadowColor=col; this.rr(x,y,cw,ch,18); ctx.stroke(); ctx.shadowBlur=0;
+      this._drawRelicSheetIcon(it.type,it.idx,x+cw/2-78,y+36,156,156,1);
+      this.text(this._clip(it.name,cw-42,29,'900'),x+cw/2,y+224,29,col,{align:'center',baseline:'middle',weight:'900'});
+      this.text((it.core||'聖物')+' · Lv '+((it.lvl||0)+1),x+cw/2,y+260,21,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      const lines=(it.affixes||[]).slice(0,3).map(affixText);
+      if(!lines.length&&it.desc) lines.push(this._clip(it.desc,cw-58,18,'800'));
+      for(let k=0;k<Math.min(3,lines.length);k++) this.text(this._clip(lines[k],cw-44,19,'800'),x+24,y+310+k*34,19,'#efe3ca',{baseline:'middle',weight:'800'});
+      const by=y+ch-82;
+      this.button(x+28,by,cw-56,58,m.forge?'升級並鑄造':'升級','endless_gear_'+it.id,()=>this._hbChooseEndlessGearReward(it.id),{primary:true,size:25,weight:'900'});
+    }
+  };
+})();
