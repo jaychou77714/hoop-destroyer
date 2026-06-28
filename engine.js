@@ -788,14 +788,14 @@ class Game{
 
   const MIN_DAILY_SHOTS=10;
   const ENDLESS_ENEMIES={
-    crack_runner:{name:'裂縫跑位者',src:'/assets/endless/enemies/crack_runner.svg',color:'#9fe024',scale:1.18},
-    screen_idol:{name:'擋拆石像',src:'/assets/endless/enemies/screen_idol.svg',color:'#d7a945',scale:1.34},
-    iron_whistle:{name:'鐵哨裁判',src:'/assets/endless/enemies/iron_whistle.svg',color:'#ffe14d',scale:1.12},
-    oil_monk:{name:'黏油球僧',src:'/assets/endless/enemies/oil_monk.svg',color:'#6fbe30',scale:1.24},
-    mist_librarian:{name:'霧線司書',src:'/assets/endless/enemies/mist_librarian.svg',color:'#b980ff',scale:1.18},
-    cold_rim_guard:{name:'寒框守衛',src:'/assets/endless/enemies/cold_rim_guard.svg',color:'#6fd8ff',scale:1.25},
-    war_drum_leader:{name:'戰鼓看台長',src:'/assets/endless/enemies/war_drum_leader.svg',color:'#ffb34d',scale:1.25},
-    shattered_board_collector:{name:'碎板收債人',src:'/assets/endless/enemies/shattered_board_collector.svg',color:'#d8ff44',scale:1.20}
+    crack_runner:{name:'裂縫跑位者',src:'/assets/endless/enemies/crack_runner.png',color:'#9fe024',scale:1.18},
+    screen_idol:{name:'擋拆石像',src:'/assets/endless/enemies/screen_idol.png',color:'#d7a945',scale:1.34},
+    iron_whistle:{name:'鐵哨裁判',src:'/assets/endless/enemies/iron_whistle.png',color:'#ffe14d',scale:1.12},
+    oil_monk:{name:'黏油球僧',src:'/assets/endless/enemies/oil_monk.png',color:'#6fbe30',scale:1.24},
+    mist_librarian:{name:'霧線司書',src:'/assets/endless/enemies/mist_librarian.png',color:'#b980ff',scale:1.18},
+    cold_rim_guard:{name:'寒框守衛',src:'/assets/endless/enemies/cold_rim_guard.png',color:'#6fd8ff',scale:1.25},
+    war_drum_leader:{name:'戰鼓看台長',src:'/assets/endless/enemies/war_drum_leader.png',color:'#ffb34d',scale:1.25},
+    shattered_board_collector:{name:'碎板收債人',src:'/assets/endless/enemies/shattered_board_collector.png',color:'#d8ff44',scale:1.20}
   };
   const ENEMY_BY_BIOME={
     rift:{chain:'crack_runner',bat:'mist_librarian',zombie:'oil_monk',drummer:'war_drum_leader',shield:'screen_idol',eye:'iron_whistle',frost:'cold_rim_guard'},
@@ -812,11 +812,11 @@ class Game{
     {id:'greed',name:'貪分',short:'貪',color:'#c89bff'}
   ];
   const BOSS_SPRITES=[
-    {max:5,key:'free_throw_executioner',src:'/assets/endless/bosses/free_throw_executioner.svg'},
-    {max:10,key:'broken_rim_stitcher',src:'/assets/endless/bosses/broken_rim_stitcher.svg'},
-    {max:15,key:'coldflame_scorekeeper',src:'/assets/endless/bosses/coldflame_scorekeeper.svg'},
-    {max:20,key:'thunderbone_announcer',src:'/assets/endless/bosses/thunderbone_announcer.svg'},
-    {max:9999,key:'abyss_hoop_lord',src:'/assets/endless/bosses/abyss_hoop_lord.svg'}
+    {max:5,key:'free_throw_executioner',src:'/assets/endless/bosses/free_throw_executioner.png'},
+    {max:10,key:'broken_rim_stitcher',src:'/assets/endless/bosses/broken_rim_stitcher.png'},
+    {max:15,key:'coldflame_scorekeeper',src:'/assets/endless/bosses/coldflame_scorekeeper.png'},
+    {max:20,key:'thunderbone_announcer',src:'/assets/endless/bosses/thunderbone_announcer.png'},
+    {max:9999,key:'abyss_hoop_lord',src:'/assets/endless/bosses/abyss_hoop_lord.png'}
   ];
 
   const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
@@ -1552,11 +1552,11 @@ class Game{
   if(typeof Game==='undefined') return;
 
   const ENDLESS_BIOMES=[
-    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.svg',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
-    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.svg',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
-    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.svg',guards:['frost','eye','bat','zombie'],count:17,waves:4},
-    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.svg',guards:['drummer','chain','eye','frost'],count:19,waves:4},
-    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.svg',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
+    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.png',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
+    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.png',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
+    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.png',guards:['frost','eye','bat','zombie'],count:17,waves:4},
+    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.png',guards:['drummer','chain','eye','frost'],count:19,waves:4},
+    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.png',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
   ];
   const ENDLESS_BOSSES=[
     {depth:5,name:'罰球線執刑官',guards:['chain','bat','zombie'],count:20,waves:3,tag:'節奏門檻'},
@@ -2499,25 +2499,25 @@ Object.assign(Game.prototype,{
     '/assets/battle/act3_bg.webp',
     '/assets/battle/act4_bg.webp',
     '/assets/battle/act5_bg.webp',
-    '/assets/endless/endless_cracked_court.svg',
-    '/assets/endless/bg_iron_cage_stands.svg',
-    '/assets/endless/bg_coldflame_zone.svg',
-    '/assets/endless/bg_thunderbone_dome.svg',
-    '/assets/endless/bg_final_abyss_cathedral.svg',
-    '/assets/endless/boss_hoop_guardian.svg',
-    '/assets/endless/enemies/crack_runner.svg',
-    '/assets/endless/enemies/screen_idol.svg',
-    '/assets/endless/enemies/iron_whistle.svg',
-    '/assets/endless/enemies/oil_monk.svg',
-    '/assets/endless/enemies/mist_librarian.svg',
-    '/assets/endless/enemies/cold_rim_guard.svg',
-    '/assets/endless/enemies/war_drum_leader.svg',
-    '/assets/endless/enemies/shattered_board_collector.svg',
-    '/assets/endless/bosses/free_throw_executioner.svg',
-    '/assets/endless/bosses/broken_rim_stitcher.svg',
-    '/assets/endless/bosses/coldflame_scorekeeper.svg',
-    '/assets/endless/bosses/thunderbone_announcer.svg',
-    '/assets/endless/bosses/abyss_hoop_lord.svg',
+    '/assets/endless/endless_cracked_court.png',
+    '/assets/endless/bg_iron_cage_stands.png',
+    '/assets/endless/bg_coldflame_zone.png',
+    '/assets/endless/bg_thunderbone_dome.png',
+    '/assets/endless/bg_final_abyss_cathedral.png',
+    '/assets/endless/boss_hoop_guardian.png',
+    '/assets/endless/enemies/crack_runner.png',
+    '/assets/endless/enemies/screen_idol.png',
+    '/assets/endless/enemies/iron_whistle.png',
+    '/assets/endless/enemies/oil_monk.png',
+    '/assets/endless/enemies/mist_librarian.png',
+    '/assets/endless/enemies/cold_rim_guard.png',
+    '/assets/endless/enemies/war_drum_leader.png',
+    '/assets/endless/enemies/shattered_board_collector.png',
+    '/assets/endless/bosses/free_throw_executioner.png',
+    '/assets/endless/bosses/broken_rim_stitcher.png',
+    '/assets/endless/bosses/coldflame_scorekeeper.png',
+    '/assets/endless/bosses/thunderbone_announcer.png',
+    '/assets/endless/bosses/abyss_hoop_lord.png',
     '/assets/mob/stage1/group.webp',
     '/assets/mob/act2/stage1/group.webp',
     '/assets/mob/act3/stage1/group.webp',
@@ -7809,25 +7809,25 @@ Object.assign(Game.prototype,{
     '/assets/battle/act3_bg.webp',
     '/assets/battle/act4_bg.webp',
     '/assets/battle/act5_bg.webp',
-    '/assets/endless/endless_cracked_court.svg',
-    '/assets/endless/bg_iron_cage_stands.svg',
-    '/assets/endless/bg_coldflame_zone.svg',
-    '/assets/endless/bg_thunderbone_dome.svg',
-    '/assets/endless/bg_final_abyss_cathedral.svg',
-    '/assets/endless/boss_hoop_guardian.svg',
-    '/assets/endless/enemies/crack_runner.svg',
-    '/assets/endless/enemies/screen_idol.svg',
-    '/assets/endless/enemies/iron_whistle.svg',
-    '/assets/endless/enemies/oil_monk.svg',
-    '/assets/endless/enemies/mist_librarian.svg',
-    '/assets/endless/enemies/cold_rim_guard.svg',
-    '/assets/endless/enemies/war_drum_leader.svg',
-    '/assets/endless/enemies/shattered_board_collector.svg',
-    '/assets/endless/bosses/free_throw_executioner.svg',
-    '/assets/endless/bosses/broken_rim_stitcher.svg',
-    '/assets/endless/bosses/coldflame_scorekeeper.svg',
-    '/assets/endless/bosses/thunderbone_announcer.svg',
-    '/assets/endless/bosses/abyss_hoop_lord.svg',
+    '/assets/endless/endless_cracked_court.png',
+    '/assets/endless/bg_iron_cage_stands.png',
+    '/assets/endless/bg_coldflame_zone.png',
+    '/assets/endless/bg_thunderbone_dome.png',
+    '/assets/endless/bg_final_abyss_cathedral.png',
+    '/assets/endless/boss_hoop_guardian.png',
+    '/assets/endless/enemies/crack_runner.png',
+    '/assets/endless/enemies/screen_idol.png',
+    '/assets/endless/enemies/iron_whistle.png',
+    '/assets/endless/enemies/oil_monk.png',
+    '/assets/endless/enemies/mist_librarian.png',
+    '/assets/endless/enemies/cold_rim_guard.png',
+    '/assets/endless/enemies/war_drum_leader.png',
+    '/assets/endless/enemies/shattered_board_collector.png',
+    '/assets/endless/bosses/free_throw_executioner.png',
+    '/assets/endless/bosses/broken_rim_stitcher.png',
+    '/assets/endless/bosses/coldflame_scorekeeper.png',
+    '/assets/endless/bosses/thunderbone_announcer.png',
+    '/assets/endless/bosses/abyss_hoop_lord.png',
     '/assets/mob/stage1/group.webp',
     '/assets/mob/act2/stage1/group.webp',
     '/assets/mob/act3/stage1/group.webp',
@@ -8188,8 +8188,8 @@ Object.assign(Game.prototype,{
 (function(){
   if(typeof Game==='undefined') return;
 
-  const ENDLESS_BG='/assets/endless/endless_cracked_court.svg';
-  const ENDLESS_BOSS='/assets/endless/boss_hoop_guardian.svg';
+  const ENDLESS_BG='/assets/endless/endless_cracked_court.png';
+  const ENDLESS_BOSS='/assets/endless/boss_hoop_guardian.png';
   const cloneStage=(stage,extra)=>{
     const src=stage||{};
     const out=Object.assign({},src,extra||{});
@@ -8595,11 +8595,11 @@ Object.assign(Game.prototype,{
   if(typeof Game==='undefined') return;
 
   const ENDLESS_BIOMES=[
-    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.svg',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
-    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.svg',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
-    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.svg',guards:['frost','eye','bat','zombie'],count:17,waves:4},
-    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.svg',guards:['drummer','chain','eye','frost'],count:19,waves:4},
-    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.svg',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
+    {id:'rift',min:1,max:5,name:'裂縫球場',bg:'/assets/endless/endless_cracked_court.png',guards:['chain','bat','zombie','drummer'],count:12,waves:3},
+    {id:'iron',min:6,max:10,name:'腐鐵看台',bg:'/assets/endless/bg_iron_cage_stands.png',guards:['shield','chain','drummer','zombie'],count:15,waves:3},
+    {id:'cold',min:11,max:15,name:'冷焰禁區',bg:'/assets/endless/bg_coldflame_zone.png',guards:['frost','eye','bat','zombie'],count:17,waves:4},
+    {id:'thunder',min:16,max:20,name:'雷骨穹頂',bg:'/assets/endless/bg_thunderbone_dome.png',guards:['drummer','chain','eye','frost'],count:19,waves:4},
+    {id:'finale',min:21,max:9999,name:'終焉深籃堂',bg:'/assets/endless/bg_final_abyss_cathedral.png',guards:['shield','chain','drummer','frost','eye','zombie'],count:22,waves:4}
   ];
   const ENDLESS_BOSSES=[
     {depth:5,name:'罰球線執刑官',guards:['chain','bat','zombie'],count:20,waves:3,tag:'節奏門檻'},
@@ -8760,14 +8760,14 @@ Object.assign(Game.prototype,{
 
   const MIN_DAILY_SHOTS=10;
   const E={
-    crack_runner:{n:'裂縫跑位者',s:'/assets/endless/enemies/crack_runner.svg',c:'#9fe024',z:1.18},
-    screen_idol:{n:'擋拆石像',s:'/assets/endless/enemies/screen_idol.svg',c:'#d7a945',z:1.34},
-    iron_whistle:{n:'鐵哨裁判',s:'/assets/endless/enemies/iron_whistle.svg',c:'#ffe14d',z:1.12},
-    oil_monk:{n:'黏油球僧',s:'/assets/endless/enemies/oil_monk.svg',c:'#6fbe30',z:1.24},
-    mist_librarian:{n:'霧線司書',s:'/assets/endless/enemies/mist_librarian.svg',c:'#b980ff',z:1.18},
-    cold_rim_guard:{n:'寒框守衛',s:'/assets/endless/enemies/cold_rim_guard.svg',c:'#6fd8ff',z:1.25},
-    war_drum_leader:{n:'戰鼓看台長',s:'/assets/endless/enemies/war_drum_leader.svg',c:'#ffb34d',z:1.25},
-    shattered_board_collector:{n:'碎板收債人',s:'/assets/endless/enemies/shattered_board_collector.svg',c:'#d8ff44',z:1.20}
+    crack_runner:{n:'裂縫跑位者',s:'/assets/endless/enemies/crack_runner.png',c:'#9fe024',z:1.18},
+    screen_idol:{n:'擋拆石像',s:'/assets/endless/enemies/screen_idol.png',c:'#d7a945',z:1.34},
+    iron_whistle:{n:'鐵哨裁判',s:'/assets/endless/enemies/iron_whistle.png',c:'#ffe14d',z:1.12},
+    oil_monk:{n:'黏油球僧',s:'/assets/endless/enemies/oil_monk.png',c:'#6fbe30',z:1.24},
+    mist_librarian:{n:'霧線司書',s:'/assets/endless/enemies/mist_librarian.png',c:'#b980ff',z:1.18},
+    cold_rim_guard:{n:'寒框守衛',s:'/assets/endless/enemies/cold_rim_guard.png',c:'#6fd8ff',z:1.25},
+    war_drum_leader:{n:'戰鼓看台長',s:'/assets/endless/enemies/war_drum_leader.png',c:'#ffb34d',z:1.25},
+    shattered_board_collector:{n:'碎板收債人',s:'/assets/endless/enemies/shattered_board_collector.png',c:'#d8ff44',z:1.20}
   };
   const EM={
     rift:{chain:'crack_runner',bat:'mist_librarian',zombie:'oil_monk',drummer:'war_drum_leader',shield:'screen_idol',eye:'iron_whistle',frost:'cold_rim_guard'},
@@ -8784,11 +8784,11 @@ Object.assign(Game.prototype,{
     ['greed','貪分','貪','#c89bff']
   ];
   const BS=[
-    [5,'free_throw_executioner','/assets/endless/bosses/free_throw_executioner.svg'],
-    [10,'broken_rim_stitcher','/assets/endless/bosses/broken_rim_stitcher.svg'],
-    [15,'coldflame_scorekeeper','/assets/endless/bosses/coldflame_scorekeeper.svg'],
-    [20,'thunderbone_announcer','/assets/endless/bosses/thunderbone_announcer.svg'],
-    [9999,'abyss_hoop_lord','/assets/endless/bosses/abyss_hoop_lord.svg']
+    [5,'free_throw_executioner','/assets/endless/bosses/free_throw_executioner.png'],
+    [10,'broken_rim_stitcher','/assets/endless/bosses/broken_rim_stitcher.png'],
+    [15,'coldflame_scorekeeper','/assets/endless/bosses/coldflame_scorekeeper.png'],
+    [20,'thunderbone_announcer','/assets/endless/bosses/thunderbone_announcer.png'],
+    [9999,'abyss_hoop_lord','/assets/endless/bosses/abyss_hoop_lord.png']
   ];
   const pad2=n=>String(Math.max(0,Math.floor(n))).padStart(2,'0');
   const copy=v=>{ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} };
