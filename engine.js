@@ -15565,3 +15565,129 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_BACKPACK_CAPACITY_FINAL__='v40-capacity-safe'; }catch(e){}
 })();
+
+// === final activation v41: shared campaign defeat cutscene ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const DEFEAT_ASSET='/assets/ui/campaign_defeat.png?v=20260629_v1';
+  const uniq=a=>{ const seen=new Set(), out=[]; for(const x of a||[]){ if(x&&!seen.has(x)){ seen.add(x); out.push(x); } } return out; };
+  const smooth=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); };
+  const label={
+    defeat:'DEFEATED',
+    zh:'\u9060\u5f81\u5931\u6557',
+    score:'\u5f97\u5206',
+    acc:'\u547d\u4e2d\u7387',
+    swish:'\u7a7a\u5fc3\u7403',
+    lucky:'\u5e78\u904b\u7403',
+    combo:'\u6700\u5927\u9023\u64ca',
+    kills:'\u64ca\u6bba',
+    route:'\u8fd4\u56de\u8def\u7dda',
+    atlas:'\u8fd4\u56de\u5716\u8b5c',
+    hub:'\u8fd4\u56de\u677f\u51f3\u5e2d'
+  };
+
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=prevFullPreload?prevFullPreload.call(this):[];
+    return uniq(base.concat([DEFEAT_ASSET]));
+  };
+
+  Game.prototype._hbCampaignDefeatImage=function(){
+    this._hbCampaignDefeatImgs=this._hbCampaignDefeatImgs||{};
+    if(this._hbCampaignDefeatImgs[DEFEAT_ASSET]===undefined){
+      try{
+        const im=new Image();
+        im.onerror=()=>{ im._err=true; };
+        im.onload=()=>{ try{ if(this.screen==='lose') this.render(); }catch(e){} };
+        im.src=DEFEAT_ASSET;
+        this._hbCampaignDefeatImgs[DEFEAT_ASSET]=im;
+      }catch(e){ this._hbCampaignDefeatImgs[DEFEAT_ASSET]=null; }
+    }
+    return this._hbCampaignDefeatImgs[DEFEAT_ASSET];
+  };
+
+  function cover(g,img,x,y,w,h){
+    if(g._hbDrawCoverImage&&g._hbDrawCoverImage(img,x,y,w,h)) return true;
+    if(!img||!img.complete||!img.naturalWidth||img._err) return false;
+    const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+    const sc=Math.max(w/iw,h/ih), dw=iw*sc, dh=ih*sc;
+    g.ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    return true;
+  }
+
+  Game.prototype._hbDrawCampaignDefeat=function(){
+    const ctx=this.ctx, s=this._endStats;
+    if(!s){ this.go('hub'); return; }
+    this.btn(0,0,BW,BH,'campaign_defeat_block',()=>{});
+    ctx.save();
+    ctx.fillStyle='#050207';
+    ctx.fillRect(0,0,BW,BH);
+    const img=this._hbCampaignDefeatImage();
+    if(!cover(this,img,0,0,BW,BH)){
+      const bg=ctx.createLinearGradient(0,0,0,BH);
+      bg.addColorStop(0,'#14091c'); bg.addColorStop(0.52,'#07050a'); bg.addColorStop(1,'#160d06');
+      ctx.fillStyle=bg; ctx.fillRect(0,0,BW,BH);
+    }
+    ctx.restore();
+
+    ctx.save();
+    const topShade=ctx.createLinearGradient(0,0,0,BH);
+    topShade.addColorStop(0,'rgba(0,0,0,0.74)');
+    topShade.addColorStop(0.30,'rgba(0,0,0,0.28)');
+    topShade.addColorStop(0.62,'rgba(0,0,0,0.04)');
+    topShade.addColorStop(1,'rgba(0,0,0,0.54)');
+    ctx.fillStyle=topShade; ctx.fillRect(0,0,BW,BH);
+    const vign=ctx.createRadialGradient(BW/2,BH*0.48,BH*0.18,BW/2,BH*0.48,BW*0.66);
+    vign.addColorStop(0,'rgba(0,0,0,0)');
+    vign.addColorStop(1,'rgba(0,0,0,0.50)');
+    ctx.fillStyle=vign; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+
+    const safeT=this.insT||0, safeB=this.insB||0;
+    const titleY=Math.max(82,safeT+74);
+    this.text(label.defeat,BW/2,titleY,78,'#ff5d50',{align:'center',baseline:'middle',weight:'900',glow:26,font:'Georgia,serif'});
+    this.text(label.zh,BW/2,titleY+56,28,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+    const act=s.act?('ACT '+s.act):'CAMPAIGN';
+    const stage=s.stageName?(' · '+s.stageName):'';
+    this.text(act+stage,BW/2,titleY+92,20,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+
+    const stats=[
+      [label.score, s.score||0],
+      [label.acc, Math.round((s.acc||0)*100)+'%'],
+      [label.swish, s.swishes||0],
+      [label.lucky, s.banks||0],
+      [label.combo, s.bestCombo||0],
+      [label.kills, s.kills||0]
+    ];
+    const sw=Math.min(BW*0.84,1160), gap=12, cw=(sw-gap*(stats.length-1))/stats.length;
+    const sx=BW/2-sw/2, sy=titleY+126, ch=70;
+    for(let i=0;i<stats.length;i++){
+      const x=sx+i*(cw+gap);
+      this.rr(x,sy,cw,ch,12);
+      const cg=ctx.createLinearGradient(x,sy,x,sy+ch);
+      cg.addColorStop(0,'rgba(30,18,15,0.78)');
+      cg.addColorStop(1,'rgba(7,5,8,0.82)');
+      ctx.fillStyle=cg; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle='rgba(255,93,80,0.42)'; this.rr(x,sy,cw,ch,12); ctx.stroke();
+      this.text(stats[i][0],x+cw/2,sy+24,15,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      this.text(String(stats[i][1]),x+cw/2,sy+52,25,'#fff4dc',{align:'center',baseline:'middle',weight:'900',glow:5});
+    }
+
+    const bw=300, bh=58, by=BH-safeB-82, total=bw*2+26, bx=BW/2-total/2;
+    if(s.nodeMode){
+      this.button(bx,by,bw,bh,label.route,'campaign_defeat_route',()=>{ this._endStats=null; this.go('route'); },{primary:true,size:25,weight:'900',r:12});
+    }else{
+      this.button(bx,by,bw,bh,label.atlas,'campaign_defeat_atlas',()=>{ this._endStats=null; this.go('atlas'); },{primary:true,size:25,weight:'900',r:12});
+    }
+    this.button(bx+bw+26,by,bw,bh,label.hub,'campaign_defeat_hub',()=>{ this._endStats=null; this.go('hub'); },{size:25,color:'#fff0d0',weight:'900',r:12});
+  };
+
+  const prevDrawEnd=Game.prototype.drawEnd;
+  Game.prototype.drawEnd=function(){
+    const s=this._endStats;
+    if(s&&!s.won&&!s.speed&&!s.endless) return this._hbDrawCampaignDefeat();
+    return prevDrawEnd?prevDrawEnd.apply(this,arguments):undefined;
+  };
+
+  try{ window.__HB_CAMPAIGN_DEFEAT_FINAL__='v41-shared-defeat'; }catch(e){}
+})();
