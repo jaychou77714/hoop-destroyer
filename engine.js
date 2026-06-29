@@ -15644,12 +15644,12 @@ Object.assign(Game.prototype,{
     ctx.restore();
 
     const safeT=this.insT||0, safeB=this.insB||0;
-    const titleY=Math.max(82,safeT+74);
-    this.text(label.defeat,BW/2,titleY,78,'#ff5d50',{align:'center',baseline:'middle',weight:'900',glow:26,font:'Georgia,serif'});
-    this.text(label.zh,BW/2,titleY+56,28,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+    const titleY=Math.max(112,safeT+96);
+    this.text(label.defeat,BW/2,titleY,112,'#ff5d50',{align:'center',baseline:'middle',weight:'900',glow:32,font:'Georgia,serif'});
+    this.text(label.zh,BW/2,titleY+82,40,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:14});
     const act=s.act?('ACT '+s.act):'CAMPAIGN';
     const stage=s.stageName?(' · '+s.stageName):'';
-    this.text(act+stage,BW/2,titleY+92,20,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    this.text(act+stage,BW/2,titleY+130,28,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
 
     const stats=[
       [label.score, s.score||0],
@@ -15659,8 +15659,8 @@ Object.assign(Game.prototype,{
       [label.combo, s.bestCombo||0],
       [label.kills, s.kills||0]
     ];
-    const sw=Math.min(BW*0.84,1160), gap=12, cw=(sw-gap*(stats.length-1))/stats.length;
-    const sx=BW/2-sw/2, sy=titleY+126, ch=70;
+    const sw=Math.min(BW*0.91,1440), gap=18, cw=(sw-gap*(stats.length-1))/stats.length;
+    const sx=BW/2-sw/2, sy=titleY+176, ch=104;
     for(let i=0;i<stats.length;i++){
       const x=sx+i*(cw+gap);
       this.rr(x,sy,cw,ch,12);
@@ -15669,17 +15669,17 @@ Object.assign(Game.prototype,{
       cg.addColorStop(1,'rgba(7,5,8,0.82)');
       ctx.fillStyle=cg; ctx.fill();
       ctx.lineWidth=2; ctx.strokeStyle='rgba(255,93,80,0.42)'; this.rr(x,sy,cw,ch,12); ctx.stroke();
-      this.text(stats[i][0],x+cw/2,sy+24,15,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
-      this.text(String(stats[i][1]),x+cw/2,sy+52,25,'#fff4dc',{align:'center',baseline:'middle',weight:'900',glow:5});
+      this.text(stats[i][0],x+cw/2,sy+34,22,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      this.text(String(stats[i][1]),x+cw/2,sy+78,42,'#fff4dc',{align:'center',baseline:'middle',weight:'900',glow:7});
     }
 
-    const bw=300, bh=58, by=BH-safeB-82, total=bw*2+26, bx=BW/2-total/2;
+    const bw=410, bh=78, by=BH-safeB-118, total=bw*2+34, bx=BW/2-total/2;
     if(s.nodeMode){
-      this.button(bx,by,bw,bh,label.route,'campaign_defeat_route',()=>{ this._endStats=null; this.go('route'); },{primary:true,size:25,weight:'900',r:12});
+      this.button(bx,by,bw,bh,label.route,'campaign_defeat_route',()=>{ this._endStats=null; this.go('route'); },{primary:true,size:32,weight:'900',r:14});
     }else{
-      this.button(bx,by,bw,bh,label.atlas,'campaign_defeat_atlas',()=>{ this._endStats=null; this.go('atlas'); },{primary:true,size:25,weight:'900',r:12});
+      this.button(bx,by,bw,bh,label.atlas,'campaign_defeat_atlas',()=>{ this._endStats=null; this.go('atlas'); },{primary:true,size:32,weight:'900',r:14});
     }
-    this.button(bx+bw+26,by,bw,bh,label.hub,'campaign_defeat_hub',()=>{ this._endStats=null; this.go('hub'); },{size:25,color:'#fff0d0',weight:'900',r:12});
+    this.button(bx+bw+34,by,bw,bh,label.hub,'campaign_defeat_hub',()=>{ this._endStats=null; this.go('hub'); },{size:32,color:'#fff0d0',weight:'900',r:14});
   };
 
   const prevDrawEnd=Game.prototype.drawEnd;
@@ -16091,10 +16091,10 @@ Object.assign(Game.prototype,{
     ctx.fillStyle=shade; ctx.fillRect(0,0,BW,BH);
 
     const IT=this.insT||0, IB=this.insB||0;
-    const titleY=Math.max(92,IT+82);
-    this.text(label.title,BW/2,titleY,90,'#ff3b2f',{align:'center',baseline:'middle',weight:'900',glow:26,font:'Georgia,serif'});
-    this.text(label.sub,BW/2,titleY+72,30,'#ffe0a8',{align:'center',baseline:'middle',weight:'900',glow:8});
-    this.text((ACTS[s.act-1]?ACTS[s.act-1].name:'')+' \u00b7 '+label.speed+' \u00b7 '+(s.speedScore||0)+' \u7403',BW/2,titleY+112,24,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    const titleY=Math.max(116,IT+98);
+    this.text(label.title,BW/2,titleY,126,'#ff3b2f',{align:'center',baseline:'middle',weight:'900',glow:34,font:'Georgia,serif'});
+    this.text(label.sub,BW/2,titleY+96,42,'#ffe0a8',{align:'center',baseline:'middle',weight:'900',glow:10});
+    this.text((ACTS[s.act-1]?ACTS[s.act-1].name:'')+' \u00b7 '+label.speed+' \u00b7 '+(s.speedScore||0)+' \u7403',BW/2,titleY+146,32,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
 
     const stats=[
       [label.score,s.speedScore||0,'#fff4dc'],
@@ -16104,8 +16104,8 @@ Object.assign(Game.prototype,{
       [label.lucky,s.banks||0,'#c89bff'],
       [label.combo,s.bestCombo||0,'#fff4dc']
     ];
-    const sw=Math.min(BW*0.88,1240), gap=14, cw=(sw-gap*(stats.length-1))/stats.length;
-    const sx=BW/2-sw/2, sy=Math.min(titleY+158,BH-IB-258), ch=86;
+    const sw=Math.min(BW*0.92,1500), gap=18, cw=(sw-gap*(stats.length-1))/stats.length;
+    const sx=BW/2-sw/2, sy=Math.min(titleY+204,BH-IB-328), ch=118;
     for(let i=0;i<stats.length;i++){
       const x=sx+i*(cw+gap);
       this.rr(x,sy,cw,ch,12);
@@ -16115,16 +16115,16 @@ Object.assign(Game.prototype,{
       ctx.fillStyle=cg; ctx.fill();
       ctx.lineWidth=2.5; ctx.strokeStyle=i===1?'rgba(255,86,58,0.82)':'rgba(230,192,104,0.48)';
       this.rr(x,sy,cw,ch,12); ctx.stroke();
-      this.text(stats[i][0],x+cw/2,sy+28,16,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
-      this.text(String(stats[i][1]),x+cw/2,sy+62,28,stats[i][2],{align:'center',baseline:'middle',weight:'900',glow:i===1?9:4});
+      this.text(stats[i][0],x+cw/2,sy+38,23,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      this.text(String(stats[i][1]),x+cw/2,sy+86,44,stats[i][2],{align:'center',baseline:'middle',weight:'900',glow:i===1?12:6});
     }
 
-    const noteY=sy+ch+40;
-    this.text(label.noReward,BW/2,noteY,24,'#ffcf9a',{align:'center',baseline:'middle',weight:'900',glow:5});
+    const noteY=sy+ch+50;
+    this.text(label.noReward,BW/2,noteY,32,'#ffcf9a',{align:'center',baseline:'middle',weight:'900',glow:6});
 
-    const bw=310,bh=62,by=BH-IB-96,total=bw*2+28,bx=BW/2-total/2;
-    this.button(bx,by,bw,bh,label.atlas,'speed_foul_atlas',()=>{ this._endStats=null; this.go('atlas'); },{primary:true,size:26,weight:'900',r:12});
-    this.button(bx+bw+28,by,bw,bh,label.hub,'speed_foul_hub',()=>{ this._endStats=null; this.go('hub'); },{size:26,color:'#fff0d0',weight:'900',r:12});
+    const bw=410,bh=78,by=BH-IB-118,total=bw*2+34,bx=BW/2-total/2;
+    this.button(bx,by,bw,bh,label.atlas,'speed_foul_atlas',()=>{ this._endStats=null; this.go('atlas'); },{primary:true,size:32,weight:'900',r:14});
+    this.button(bx+bw+34,by,bw,bh,label.hub,'speed_foul_hub',()=>{ this._endStats=null; this.go('hub'); },{size:32,color:'#fff0d0',weight:'900',r:14});
   };
 
   const prevDrawEnd=Game.prototype.drawEnd;
@@ -16207,5 +16207,5 @@ Object.assign(Game.prototype,{
     this.rr(bx,by,bw,bh,8); ctx.stroke();
   };
 
-  try{ window.__HB_SPEED_FOUL_FINAL__='v43-speed-five-foul'; }catch(e){}
+  try{ window.__HB_SPEED_FOUL_FINAL__='v43-speed-five-foul'; window.__HB_DEFEAT_SCALE_FINAL__='v44-bigger-defeat-results'; }catch(e){}
 })();
