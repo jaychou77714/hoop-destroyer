@@ -12808,3 +12808,171 @@ Object.assign(Game.prototype,{
     this.button(BW/2-220,y+ch+34,440,64,'放棄詞綴，繼續深入','endless_socket_skip',()=>this._hbSkipSocketAffix(),{size:25,color:'#f0c0b0',weight:'900'});
   };
 })();
+
+// === final activation v31: boss victory cutscene with fade transitions ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const BOSS_DEFEAT_ASSETS={
+    1:'/assets/boss_defeat/act1.png?v=20260629_v1',
+    2:'/assets/boss_defeat/act2.png?v=20260629_v1',
+    3:'/assets/boss_defeat/act3.png?v=20260629_v1',
+    4:'/assets/boss_defeat/act4.png?v=20260629_v1',
+    5:'/assets/boss_defeat/act5.png?v=20260629_v1'
+  };
+  const clamp01=v=>clamp(v,0,1);
+  const smooth=v=>{ v=clamp01(v); return v*v*(3-2*v); };
+  const uniq=a=>{ const s=new Set(), out=[]; for(const x of a||[]){ if(x&&!s.has(x)){ s.add(x); out.push(x); } } return out; };
+
+  const oldFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=oldFullPreload?oldFullPreload.call(this):[];
+    return uniq(base.concat(Object.keys(BOSS_DEFEAT_ASSETS).map(k=>BOSS_DEFEAT_ASSETS[k])));
+  };
+
+  Game.prototype._hbBossDefeatImage=function(act){
+    this._hbBossDefeatImgs=this._hbBossDefeatImgs||{};
+    const src=BOSS_DEFEAT_ASSETS[act]||BOSS_DEFEAT_ASSETS[1];
+    if(this._hbBossDefeatImgs[src]===undefined){
+      try{ const im=new Image(); im.onerror=()=>{ im._err=true; }; im.onload=()=>{ try{ if(this.screen==='bossVictory') this.render(); }catch(e){} }; im.src=src; this._hbBossDefeatImgs[src]=im; }
+      catch(e){ this._hbBossDefeatImgs[src]=null; }
+    }
+    return this._hbBossDefeatImgs[src];
+  };
+
+  Game.prototype._hbDrawCoverImage=function(img,x,y,w,h){
+    const ctx=this.ctx;
+    if(!img||!img.complete||!img.naturalWidth||img._err) return false;
+    const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+    const s=Math.max(w/iw,h/ih), dw=iw*s, dh=ih*s;
+    ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    return true;
+  };
+
+  const oldFinishRun=Game.prototype.finishRun;
+  Game.prototype.finishRun=function(won){
+    const run=this.run;
+    const shouldCut=!!(won&&run&&run.stage&&run.stage.boss&&!run.endless&&!run.speed&&!run._hbBossVictorySeen&&!this._hbVictoryContinuing);
+    if(shouldCut){
+      run._hbBossVictorySeen=true;
+      this._hbBossVictory={
+        run,won:true,act:run.act||1,
+        actName:(ACTS[(run.act||1)-1]&&ACTS[(run.act||1)-1].name)||('ACT '+(run.act||1)),
+        bossName:(run.stage&&run.stage.name)||(run.stage&&run.stage.host)||'BOSS',
+        route:run.route||'std',
+        start:this.t||0,
+        closing:false,
+        closeStart:0
+      };
+      this.screen='bossVictory';
+      this._paused=false; this._detailOpen=false; this._confirm=null; this._toast=null;
+      this.particles.length=0; this.floaters.length=0;
+      this.audio&&this.audio.sfx&&this.audio.sfx('win');
+      this.audio&&this.audio.sfx&&this.audio.sfx('whistle');
+      this.render&&this.render();
+      return;
+    }
+    return oldFinishRun?oldFinishRun.apply(this,arguments):undefined;
+  };
+
+  Game.prototype._hbCompleteBossVictory=function(){
+    const cut=this._hbBossVictory;
+    if(!cut||cut.closing) return;
+    cut.closing=true;
+    cut.closeStart=this.t||0;
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    setTimeout(()=>{
+      if(this._hbBossVictory!==cut) return;
+      this.run=cut.run;
+      this._hbBossVictory=null;
+      this._hbPostVictoryFade={start:this.t||0,dur:0.55};
+      this._hbVictoryContinuing=true;
+      try{ oldFinishRun&&oldFinishRun.call(this,cut.won); }
+      finally{ this._hbVictoryContinuing=false; }
+      this.render&&this.render();
+    },540);
+  };
+
+  Game.prototype.drawBossVictory=function(){
+    const ctx=this.ctx, cut=this._hbBossVictory;
+    if(!cut){ this.go('hub'); return; }
+    const t=this.t||0, elapsed=Math.max(0,t-cut.start);
+    const imgAlpha=smooth((elapsed-0.08)/0.72);
+    const textAlpha=smooth((elapsed-0.62)/0.55);
+    const btnAlpha=smooth((elapsed-1.05)/0.42);
+    const closeAlpha=cut.closing?smooth((t-cut.closeStart)/0.48):0;
+    const alphaMul=1-closeAlpha;
+    const img=this._hbBossDefeatImage(cut.act);
+
+    ctx.save();
+    ctx.fillStyle='#030205';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.globalAlpha=imgAlpha*alphaMul;
+    if(!this._hbDrawCoverImage(img,0,0,BW,BH)){
+      const bg=ctx.createLinearGradient(0,0,0,BH);
+      bg.addColorStop(0,'#160b18'); bg.addColorStop(0.52,'#08060b'); bg.addColorStop(1,'#1c1007');
+      ctx.fillStyle=bg; ctx.fillRect(0,0,BW,BH);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha=(0.26+0.34*textAlpha)*alphaMul;
+    const shade=ctx.createLinearGradient(0,0,0,BH);
+    shade.addColorStop(0,'rgba(0,0,0,0.54)');
+    shade.addColorStop(0.30,'rgba(0,0,0,0.14)');
+    shade.addColorStop(0.76,'rgba(0,0,0,0.08)');
+    shade.addColorStop(1,'rgba(0,0,0,0.52)');
+    ctx.fillStyle=shade; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+
+    const titleY=Math.max(110,(this.insT||0)+96);
+    ctx.save();
+    ctx.globalAlpha=textAlpha*alphaMul;
+    this.text('VICTORY',BW/2,titleY,86,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:24,font:'Georgia,serif'});
+    this.text('BOSS DEFEATED',BW/2,titleY+70,30,'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:10});
+    this.text('ACT '+cut.act+' CLEARED · '+cut.actName,BW/2,titleY+112,25,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+    this.text(cut.bossName,BW/2,titleY+148,25,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    ctx.restore();
+
+    const bw=420,bh=72,bx=BW/2-bw/2,by=BH-(this.insB||0)-128;
+    if(btnAlpha>0.02&&!cut.closing){
+      ctx.save(); ctx.globalAlpha=btnAlpha;
+      this.button(bx,by,bw,bh,'下一步','boss_victory_next',()=>this._hbCompleteBossVictory(),{primary:true,size:30,weight:'900'});
+      ctx.restore();
+    }
+
+    if(closeAlpha>0){
+      ctx.save(); ctx.globalAlpha=closeAlpha; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    }else if(imgAlpha<1){
+      ctx.save(); ctx.globalAlpha=1-imgAlpha; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    }
+  };
+
+  const oldRender=Game.prototype.render;
+  Game.prototype.render=function(){
+    if(this.screen!=='bossVictory') return oldRender.apply(this,arguments);
+    const ctx=this.ctx,dpr=this.dpr;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.fillStyle='#030205'; ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    if(this.portrait){ this._hideLoginInputs&&this._hideLoginInputs(); this.drawRotate(); return; }
+    ctx.setTransform(this.scale*dpr,0,0,this.scale*dpr,this.ox*dpr,this.oy*dpr);
+    this.buttons=[]; this._scrollable=false; this._layIds=[];
+    this.drawBossVictory();
+    if(this._confirm) this.drawConfirm();
+    if(this._loginOpen) this.drawLoginModal(); else this._hideLoginInputs&&this._hideLoginInputs();
+    ctx.setTransform(1,0,0,1,0,0);
+  };
+
+  const oldDrawEnd=Game.prototype.drawEnd;
+  Game.prototype.drawEnd=function(){
+    const r=oldDrawEnd?oldDrawEnd.apply(this,arguments):undefined;
+    const f=this._hbPostVictoryFade;
+    if(f){
+      const p=smooth(((this.t||0)-f.start)/(f.dur||0.55));
+      if(p>=1) this._hbPostVictoryFade=null;
+      else{ const ctx=this.ctx; ctx.save(); ctx.globalAlpha=1-p; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore(); }
+    }
+    return r;
+  };
+})();
