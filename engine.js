@@ -374,7 +374,7 @@ const ROUTE_STONES = [
 
 // ---- ACTS / STAGES (5 acts × 4 stages) ----
 const ACTS = [
-  {id:1, key:'abbey', name:'灰哨修院', sub:'Ashen Whistle Abbey', sky:['#1b1726','#120d18'], floor:'#15110d', rune:'#e08a32', relic:'abbey_ember', boss:'院長 痛苦院長'},
+  {id:1, key:'abbey', name:'灰哨修院', sub:'Ashen Whistle Abbey', sky:['#1b1726','#120d18'], floor:'#15110d', rune:'#e08a32', relic:'abbey_ember', boss:'痛苦院長'},
   {id:2, key:'sand', name:'鐵籃貧民窟', sub:'Iron Rim Slums', sky:['#1a0d0a','#241410'], floor:'#1c1210', rune:'#ffb070', relic:'sand_bow', boss:'鐵籃收租王'},
   {id:3, key:'city', name:'冷焰球具塔', sub:'Coldflame Tower', sky:['#0e1a12','#101f16'], floor:'#0e1310', rune:'#9ac63f', relic:'citadel_battery', boss:'冷焰記分員'},
   {id:4, key:'inferno', name:'雷骨看台', sub:'Thunderbone Stands', sky:['#1f0c08','#2a120a'], floor:'#1c0f08', rune:'#ff6a2a', relic:'red_axe', boss:'雷骨裁判長'},
@@ -16447,4 +16447,694 @@ Object.assign(Game.prototype,{
   };
 
   try{ window.__HB_LEADERBOARD_FINAL__='v45-large-50-leaderboard'; }catch(e){}
+})();
+
+(()=>{
+  if(typeof Game==='undefined') return;
+  const ATLAS_V2_PATH='./assets/atlas_v2/';
+  const ATLAS_V2_SRC={
+    'hoopbreaker-ui-card-frame.png':ATLAS_V2_PATH+'card_frame.png',
+    'hoopbreaker-ui-small-button.png':ATLAS_V2_PATH+'small_button.png',
+    'hoopbreaker-ui-boss-panel.png':ATLAS_V2_PATH+'boss_panel.png',
+    'hoopbreaker-ui-node-token.png':ATLAS_V2_PATH+'node_token.png',
+    'hoopbreaker-ui-boss-node.png':ATLAS_V2_PATH+'boss_node.png',
+    'hoopbreaker-ui-enter-ball.png':ATLAS_V2_PATH+'enter_ball.png'
+  };
+  const ATLAS_V2_CARDS=[
+    {id:1,x:61,y:118,w:293,h:484,cx:207.5,cy:410},
+    {id:2,x:350,y:128,w:235,h:474,cx:467.5,cy:410},
+    {id:3,x:586,y:128,w:244,h:474,cx:708,cy:410},
+    {id:4,x:835,y:128,w:252,h:474,cx:961,cy:410},
+    {id:5,x:1088,y:128,w:250,h:474,cx:1213,cy:410}
+  ];
+  const ATLAS_V2_META=[
+    {threat:'鎖鏈哨音',relic:'修院餘燼',core:'封框核心',lore:'院長會把籃框鎖進鐘聲裡，先破四座門印再打核心。'},
+    {threat:'鐵租壓迫',relic:'沙陵弓弦',core:'日蝕核心',lore:'收租王把每次失手都記成債，擊破五點後才能清帳。'},
+    {threat:'腐潮增殖',relic:'城邦電池',core:'腐潮核心',lore:'冷焰記分員會竄改比分，先把門印逐一校正。'},
+    {threat:'犯規熱浪',relic:'煉獄紅斧',core:'違規核心',lore:'雷骨裁判長吹響黑哨，越接近核心哨音越密。'},
+    {threat:'終局加時',relic:'終焉寒晶',core:'宿主核心',lore:'籃框宿主藏在終焉堂頂，五枚節點全破才會現身。'}
+  ];
+
+  function atlasV2Kind(it){ return it&&(it.kind||it.type); }
+  function atlasV2ActFromKey(key){
+    const s=String(key||'');
+    let m=s.match(/^act([1-5])\./); if(m) return Number(m[1]);
+    m=s.match(/^route\.act([1-5])$/); if(m) return Number(m[1]);
+    m=s.match(/^asset\.goBall([1-5])$/); if(m) return Number(m[1]);
+    return 0;
+  }
+  function atlasV2FileName(src){
+    return String(src||'').split(/[\\/]/).pop();
+  }
+  function atlasV2MapSrc(src,selAct){
+    const raw=String(src||'');
+    if(!raw) return '';
+    if(/assets[\\/]+mob[\\/]+bosses[\\/]+act\d+\.png/i.test(raw)||/assets\/mob\/bosses\/act\d+\.png/i.test(raw)){
+      return './assets/mob/bosses/act'+selAct+'.png';
+    }
+    const name=atlasV2FileName(raw.replace(/^file:\/\/\/?/,''));
+    if(ATLAS_V2_SRC[name]) return ATLAS_V2_SRC[name];
+    if(raw.indexOf('file:///')===0){
+      const m=raw.match(/assets\/(.+)$/i);
+      if(m) return './assets/'+m[1];
+    }
+    return raw;
+  }
+  function atlasV2Text(layout,key,fb){
+    const it=(layout||[]).find(x=>x&&x.key===key);
+    return it&&typeof it.text==='string'?it.text:fb;
+  }
+  function atlasV2Info(layout,actId){
+    const A=ACTS[actId-1]||ACTS[0]||{};
+    const boss=String(atlasV2Text(layout,'act'+actId+'.boss','Boss：'+(A.boss||''))).replace(/^Boss[:：]\s*/,'');
+    return {
+      name:atlasV2Text(layout,'act'+actId+'.name',A.name||('第 '+actId+' 幕')),
+      sub:atlasV2Text(layout,'act'+actId+'.sub',A.sub||''),
+      boss:boss||A.boss||'Boss',
+      meta:ATLAS_V2_META[actId-1]||ATLAS_V2_META[0]
+    };
+  }
+  function atlasV2SideText(g,it,layout,selAct){
+    const info=atlasV2Info(layout,selAct), meta=info.meta;
+    const unlocked=(g._unlockedActs?g._unlockedActs():1);
+    const prog=Math.max(0,Math.min(5,Number(g._nodeProg?g._nodeProg(selAct):0)||0));
+    switch(it.key){
+      case 'side.bossName': return info.boss;
+      case 'side.stage': return '第 '+selAct+' 幕 · '+info.name;
+      case 'side.coreValue': return selAct<=unlocked?meta.core:'未解鎖';
+      case 'side.progressValue': return prog+' / 5';
+      case 'side.threatValue': return meta.threat;
+      case 'side.relicValue': return meta.relic;
+      case 'side.lore': return meta.lore;
+      case 'side.tag1': return selAct<=unlocked?'可選幕':'鎖定';
+      case 'side.tag2': return 'Boss 節點';
+      case 'side.tag3': return selAct<=unlocked?'可進攻':'待解鎖';
+      default: return it.text;
+    }
+  }
+  function atlasV2Wrap(ctx,text,maxW){
+    const raw=String(text==null?'':text).split('\n');
+    const out=[];
+    for(const line of raw){
+      let buf='';
+      for(const ch of Array.from(line)){
+        const next=buf+ch;
+        if(buf&&ctx.measureText(next).width>maxW){ out.push(buf); buf=ch; }
+        else buf=next;
+      }
+      out.push(buf);
+    }
+    return out;
+  }
+  function atlasV2DrawCover(ctx,img,x,y,w,h){
+    const sw=img.naturalWidth||img.width, sh=img.naturalHeight||img.height;
+    if(!sw||!sh) return;
+    const s=Math.max(w/sw,h/sh), cw=w/s, ch=h/s;
+    const sx=(sw-cw)*0.5, sy=(sh-ch)*0.48;
+    ctx.drawImage(img,sx,sy,cw,ch,x,y,w,h);
+  }
+
+  Game.prototype._hbAtlasV2EnsureLayout=function(){
+    if(this._hbAtlasV2Layout!==undefined) return Array.isArray(this._hbAtlasV2Layout)?this._hbAtlasV2Layout:null;
+    this._hbAtlasV2Layout=null;
+    try{
+      fetch(ATLAS_V2_PATH+'layout.json').then(r=>r.ok?r.json():null).then(data=>{
+        const items=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:null);
+        this._hbAtlasV2Layout=items||[];
+        if(this.screen==='atlas'&&this.render) this.render();
+      }).catch(()=>{ this._hbAtlasV2Layout=[]; if(this.screen==='atlas'&&this.render)this.render(); });
+    }catch(e){ this._hbAtlasV2Layout=[]; }
+    return null;
+  };
+  Game.prototype._hbAtlasV2Img=function(src){
+    this._hbAtlasV2Imgs=this._hbAtlasV2Imgs||{};
+    if(this._hbAtlasV2Imgs[src]) return this._hbAtlasV2Imgs[src];
+    let im=null;
+    try{
+      im=new Image();
+      im.onload=()=>{ try{ if(this.screen==='atlas'&&this.render)this.render(); }catch(e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=src;
+    }catch(e){ im={complete:true,naturalWidth:0,_err:true}; }
+    this._hbAtlasV2Imgs[src]=im;
+    return im;
+  };
+  Game.prototype._hbAtlasV2DrawAsset=function(it,D,selAct){
+    const ctx=this.ctx, src=atlasV2MapSrc(it.src,selAct), im=this._hbAtlasV2Img(src);
+    if(!im||!im.complete||!im.naturalWidth||im._err) return;
+    const x=D(Number(it.x)||0), y=D(Number(it.y)||0), w=D(Number(it.w)||0), h=D(Number(it.h)||0);
+    const sc=Number(it.scale)==null?1:(Number(it.scale)||1), rot=(Number(it.rotate)||0)*Math.PI/180;
+    ctx.save();
+    ctx.globalAlpha*=Number(it.opacity==null?1:it.opacity);
+    ctx.translate(x+w/2,y+h/2);
+    ctx.rotate(rot);
+    ctx.scale(sc,sc);
+    ctx.drawImage(im,-w/2,-h/2,w,h);
+    ctx.restore();
+  };
+  Game.prototype._hbAtlasV2DrawText=function(it,D,layout,selAct){
+    const ctx=this.ctx;
+    const text=String(String(it.key||'').indexOf('side.')===0?atlasV2SideText(this,it,layout,selAct):it.text);
+    if(!text) return;
+    const x=D(Number(it.x)||0), y=D(Number(it.y)||0), w=D(Number(it.w)||0);
+    const fs=D(Number(it.fs)||20), lh=Number(it.lineHeight)||1.15, maxW=w>0?w:D(260);
+    const align=it.align||'left';
+    const family=it.family||'Microsoft JhengHei, Noto Sans TC, system-ui, sans-serif';
+    const weight=it.weight||800;
+    ctx.save();
+    ctx.globalAlpha*=Number(it.opacity==null?1:it.opacity);
+    ctx.font=weight+' '+fs+'px '+family;
+    ctx.fillStyle=it.color||'#f2e4c6';
+    ctx.textAlign=align;
+    ctx.textBaseline='top';
+    try{ ctx.letterSpacing=D(Number(it.letterSpacing)||0)+'px'; }catch(e){}
+    if((Number(it.shadowBlur)||0)>0||it.shadowColor){
+      ctx.shadowColor=it.shadowColor||'rgba(0,0,0,0.72)';
+      ctx.shadowBlur=D(Number(it.shadowBlur)||0);
+      ctx.shadowOffsetX=D(Number(it.shadowX)||0);
+      ctx.shadowOffsetY=D(Number(it.shadowY)||0);
+    }
+    const lines=atlasV2Wrap(ctx,text,maxW);
+    const tx=align==='center'?x+maxW/2:(align==='right'?x+maxW:x);
+    for(let i=0;i<lines.length;i++) ctx.fillText(lines[i],tx,y+i*fs*lh);
+    try{ ctx.letterSpacing='0px'; }catch(e){}
+    ctx.restore();
+  };
+  Game.prototype._hbAtlasV2DrawRoute=function(it,D,selAct){
+    const ctx=this.ctx, pts=Array.isArray(it.points)?it.points:[];
+    if(pts.length<2) return;
+    const x=D(Number(it.x)||0), y=D(Number(it.y)||0), w=D(Number(it.w)||0), h=D(Number(it.h)||0);
+    const abs=pts.map(p=>({x:x+D((Number(p[0])||0)/100*(Number(it.w)||0)),y:y+D((Number(p[1])||0)/100*(Number(it.h)||0))}));
+    ctx.save();
+    ctx.globalAlpha*=Number(it.opacity==null?1:it.opacity);
+    ctx.strokeStyle=it.lineColor||'rgba(236,199,106,0.92)';
+    ctx.lineWidth=D(Number(it.lineWidth)||4);
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.shadowColor='rgba(255,205,90,0.42)';
+    ctx.shadowBlur=D(8);
+    ctx.beginPath();
+    abs.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.stroke();
+    ctx.restore();
+    const node=this._hbAtlasV2Img(ATLAS_V2_PATH+'node_token.png');
+    const boss=this._hbAtlasV2Img(ATLAS_V2_PATH+'boss_node.png');
+    for(let i=0;i<abs.length;i++){
+      const last=i===abs.length-1, size=D(last?(Number(it.bossSize)||48):(Number(it.nodeSize)||36)), im=last?boss:node, p=abs[i];
+      ctx.save();
+      ctx.globalAlpha*=last?1:0.96;
+      if(im&&im.complete&&im.naturalWidth&&!im._err) ctx.drawImage(im,p.x-size/2,p.y-size/2,size,size);
+      else {
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,size/2,0,TAU);
+        ctx.fillStyle=last?'#c9352d':'#d9ba66';
+        ctx.fill();
+        ctx.lineWidth=D(2);
+        ctx.strokeStyle='rgba(24,12,6,0.8)';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  };
+  Game.prototype._hbAtlasV2DrawSelectedFrame=function(it,D,selAct){
+    const base=ATLAS_V2_CARDS[0], card=ATLAS_V2_CARDS[selAct-1]||base;
+    const dx=(Number(it.x)||28)-base.x, dw=(Number(it.w)||366)-base.w;
+    let fx=card.x+dx, fy=Number(it.y)||74, fw=card.w+dw, fh=Number(it.h)||676;
+    if(fx+fw>1330) fw=1330-fx;
+    const frame=Object.assign({},it,{x:fx,y:fy,w:fw,h:fh,opacity:0.96+0.04*Math.sin((this.t||0)*3)});
+    this._hbAtlasV2DrawAsset(frame,D,selAct);
+  };
+  Game.prototype.drawAtlas=function(){
+    const ctx=this.ctx, U=BW/1704, D=v=>v*U;
+    const bg=this._hbAtlasV2Img(ATLAS_V2_PATH+'bg_war_gates.png');
+    ctx.save();
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) atlasV2DrawCover(ctx,bg,0,0,BW,BH);
+    else {
+      const g=ctx.createLinearGradient(0,0,0,BH);
+      g.addColorStop(0,'#19111d'); g.addColorStop(1,'#060408');
+      ctx.fillStyle=g; ctx.fillRect(0,0,BW,BH);
+    }
+    const shade=ctx.createLinearGradient(0,0,0,BH);
+    shade.addColorStop(0,'rgba(0,0,0,0.22)');
+    shade.addColorStop(0.55,'rgba(0,0,0,0.06)');
+    shade.addColorStop(1,'rgba(0,0,0,0.42)');
+    ctx.fillStyle=shade; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+
+    const layout=this._hbAtlasV2EnsureLayout();
+    const maxAct=ACTS.length||5, unlocked=this._unlockedActs?this._unlockedActs():1;
+    this._selAct=Math.max(1,Math.min(maxAct,Number(this._selAct)||1));
+    if(!layout){
+      this.text('籃獄圖譜',BW/2,D(62),D(42),'#f4d47a',{align:'center',baseline:'middle',weight:'900',font:'Microsoft JhengHei, sans-serif',glow:D(8)});
+      this.text('載入戰幕素材中',BW/2,D(112),D(22),'#e5c36f',{align:'center',baseline:'middle',weight:'900',font:'Microsoft JhengHei, sans-serif'});
+      this.btn(D(78),D(40),D(198),D(66),'back',()=>this.go('hub'));
+      return;
+    }
+    const items=layout.slice().filter(it=>it&&it.visible!==false).sort((a,b)=>(Number(a.z)||0)-(Number(b.z)||0));
+    for(const it of items){
+      const kind=atlasV2Kind(it), key=String(it.key||''), actId=atlasV2ActFromKey(key);
+      ctx.save();
+      if(actId){
+        const c=ATLAS_V2_CARDS[actId-1], focus=actId===this._selAct;
+        const sc=focus?1.045:0.955;
+        ctx.translate(D(c.cx),D(c.cy));
+        ctx.scale(sc,sc);
+        ctx.translate(-D(c.cx),-D(c.cy));
+        ctx.globalAlpha*=focus?1:(actId>unlocked?0.5:0.82);
+      }
+      if(key==='asset.selectedFrame') this._hbAtlasV2DrawSelectedFrame(it,D,this._selAct);
+      else if(key==='asset.bossArt') this._hbAtlasV2DrawAsset(Object.assign({},it,{src:'./assets/mob/bosses/act'+this._selAct+'.png'}),D,this._selAct);
+      else if(kind==='asset') this._hbAtlasV2DrawAsset(it,D,this._selAct);
+      else if(kind==='text') this._hbAtlasV2DrawText(it,D,layout,this._selAct);
+      else if(kind==='route') this._hbAtlasV2DrawRoute(it,D,this._selAct);
+      ctx.restore();
+    }
+
+    this.btn(D(78),D(40),D(198),D(66),'back',()=>this.go('hub'));
+    for(const c of ATLAS_V2_CARDS){
+      const aid=c.id;
+      this.btn(D(c.x),D(c.y),D(c.w),D(c.h),'atlas_v2_card_'+aid,()=>{
+        this._selAct=aid;
+        if(this.audio&&this.audio.sfx)this.audio.sfx('ui');
+        this.render&&this.render();
+      });
+    }
+    for(const it of layout){
+      const m=String(it&&it.key||'').match(/^asset\.goBall([1-5])$/);
+      if(!m||it.visible===false) continue;
+      const aid=Number(m[1]);
+      this.btn(D(Number(it.x)||0),D(Number(it.y)||0),D(Number(it.w)||0),D(Number(it.h)||0),'atlas_v2_ball_'+aid,()=>{
+        this._selAct=aid;
+        if(aid>unlocked){
+          if(this.audio&&this.audio.sfx)this.audio.sfx('hurt');
+          this.toast&&this.toast('此幕尚未解鎖','先擊破前一幕核心');
+          this.render&&this.render();
+          return;
+        }
+        if(this.audio&&this.audio.sfx)this.audio.sfx('ui');
+        this.go('route');
+      });
+    }
+  };
+  try{ window.__HB_ATLAS_V2__='gpt-war-gates-layout-json-v1'; }catch(e){}
+})();
+
+// ---- Final Atlas Scene Gates UI (clean Chinese copy, five-node cards) ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const FONT='Noto Sans TC, Microsoft JhengHei, PingFang TC, sans-serif';
+  const META=[
+    {id:1,name:'灰哨修院',sub:'Ashen Whistle Abbey',boss:'痛苦院長',scene:'修院餘燼',relic:'修院餘燼',core:'哨音裂核',tone:'#b8ff39',deep:'#151b0b',hot:'#ffe066'},
+    {id:2,name:'鐵籃貧民窟',sub:'Iron Rim Slums',boss:'鐵籃收租王',scene:'腐鐵巷籃',relic:'貫穿球核',core:'鐵籃債印',tone:'#71b7ff',deep:'#101621',hot:'#ffb866'},
+    {id:3,name:'冷焰球具塔',sub:'Coldflame Tower',boss:'冷焰記分員',scene:'冷焰高塔',relic:'城邦電瓶',core:'冷焰記分',tone:'#89f6ff',deep:'#081b23',hot:'#b7f5ff'},
+    {id:4,name:'雷骨看台',sub:'Thunderbone Stands',boss:'雷骨裁判長',scene:'雷骨穹席',relic:'迴旋球核',core:'雷骨哨令',tone:'#bd8cff',deep:'#1b1128',hot:'#ffe36d'},
+    {id:5,name:'終焉籃堂',sub:'Final Court',boss:'籃框宿主本尊',scene:'終焉籃心',relic:'終場寒核',core:'終焉深籃',tone:'#e071ff',deep:'#16071d',hot:'#ff75e8'}
+  ];
+  function clamp01(v){ return Math.max(0,Math.min(1,v)); }
+  function pickMeta(id){ return META[Math.max(0,Math.min(META.length-1,(Number(id)||1)-1))]; }
+  function img(g,src){
+    if(g._hbAtlasV2Img) return g._hbAtlasV2Img(src);
+    g._hbGateImgs=g._hbGateImgs||{};
+    if(g._hbGateImgs[src]) return g._hbGateImgs[src];
+    let im=null;
+    try{
+      im=new Image();
+      im.onload=()=>{ try{ if(g.screen==='atlas'&&g.render)g.render(); }catch(e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=src;
+    }catch(e){ im={complete:true,naturalWidth:0,_err:true}; }
+    g._hbGateImgs[src]=im;
+    return im;
+  }
+  function drawCover(ctx,im,x,y,w,h){
+    const sw=im.naturalWidth||im.width, sh=im.naturalHeight||im.height;
+    if(!sw||!sh) return;
+    const s=Math.max(w/sw,h/sh), cw=w/s, ch=h/s;
+    ctx.drawImage(im,(sw-cw)/2,(sh-ch)*0.48,cw,ch,x,y,w,h);
+  }
+  function drawContain(ctx,im,x,y,w,h,pad){
+    const sw=im.naturalWidth||im.width, sh=im.naturalHeight||im.height;
+    if(!sw||!sh) return;
+    pad=pad||0;
+    const s=Math.min((w-pad*2)/sw,(h-pad*2)/sh);
+    const dw=sw*s, dh=sh*s;
+    ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+  }
+  function label(g,s,x,y,size,color,o){
+    g.text(s,x,y,size,color,Object.assign({font:FONT,weight:'900'},o||{}));
+  }
+  function panel(g,x,y,w,h,r,fill,stroke,glow){
+    const ctx=g.ctx;
+    ctx.save();
+    g.rr(x,y,w,h,r);
+    ctx.fillStyle=fill||'rgba(13,10,9,0.90)';
+    if(glow){ ctx.shadowColor=glow; ctx.shadowBlur=18; }
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.lineWidth=Math.max(2,Math.min(w,h)*0.012);
+    ctx.strokeStyle=stroke||'rgba(217,169,69,0.60)';
+    ctx.stroke();
+    ctx.restore();
+  }
+  function isPressed(g,r){
+    const p=g.pointer||{};
+    return !!(p.down&&p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h);
+  }
+  function progressFor(g,act){
+    const mp=g._mp?g._mp('std'):{};
+    const bossId=act+'-boss';
+    let n=0;
+    if(mp&&mp.nodeProg) n=Number(mp.nodeProg[act])||0;
+    if(mp&&mp.bossClears&&mp.bossClears[bossId]>0) n=5;
+    return Math.max(0,Math.min(5,n|0));
+  }
+  function recordFor(g,act){
+    const mp=g._mp?g._mp('std'):{};
+    const bossId=act+'-boss';
+    return {
+      marks:(mp.marks&&mp.marks[bossId])||0,
+      clears:(mp.bossClears&&mp.bossClears[bossId])||0,
+      heat:(mp.heat&&mp.heat[bossId])||0,
+      progress:progressFor(g,act)
+    };
+  }
+  function drawBackground(g){
+    const ctx=g.ctx, bg=img(g,'./assets/atlas_v2/bg_war_gates.png');
+    ctx.save();
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) drawCover(ctx,bg,0,0,BW,BH);
+    else {
+      const sky=ctx.createLinearGradient(0,0,0,BH);
+      sky.addColorStop(0,'#16091f');
+      sky.addColorStop(0.55,'#08040d');
+      sky.addColorStop(1,'#040307');
+      ctx.fillStyle=sky;
+      ctx.fillRect(0,0,BW,BH);
+      ctx.globalAlpha=0.22;
+      ctx.strokeStyle='#7d42ff';
+      ctx.lineWidth=2;
+      for(let i=0;i<11;i++){
+        const x=BW*(0.05+i*0.09);
+        ctx.beginPath();
+        ctx.moveTo(x,BH*0.18);
+        ctx.lineTo(x-70,BH*0.72);
+        ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    }
+    const shade=ctx.createLinearGradient(0,0,0,BH);
+    shade.addColorStop(0,'rgba(0,0,0,0.18)');
+    shade.addColorStop(0.48,'rgba(0,0,0,0.04)');
+    shade.addColorStop(1,'rgba(0,0,0,0.50)');
+    ctx.fillStyle=shade;
+    ctx.fillRect(0,0,BW,BH);
+    ctx.strokeStyle='rgba(164,255,48,0.18)';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.ellipse(BW*0.45,BH*0.92,BW*0.34,BH*0.075,0,Math.PI,TAU);
+    ctx.stroke();
+    ctx.globalAlpha=0.7;
+    for(let i=0;i<5;i++){
+      const x=BW*(0.12+i*0.16);
+      const flame=22+8*Math.sin((g.t||0)*3+i);
+      const gr=ctx.createRadialGradient(x,BH*0.84,3,x,BH*0.84,flame);
+      gr.addColorStop(0,'rgba(192,255,54,0.95)');
+      gr.addColorStop(1,'rgba(80,255,0,0)');
+      ctx.fillStyle=gr;
+      ctx.beginPath();
+      ctx.arc(x,BH*0.84,flame,0,TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawMiniScene(g,r,m,locked){
+    const ctx=g.ctx, x=r.x, y=r.y, w=r.w, h=r.h;
+    ctx.save();
+    g.rr(x,y,w,h,14);
+    ctx.clip();
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,m.deep);
+    bg.addColorStop(0.62,'#080608');
+    bg.addColorStop(1,'#030203');
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,y,w,h);
+    ctx.globalAlpha=locked?0.28:0.55;
+    ctx.fillStyle=m.tone;
+    for(let i=0;i<5;i++){
+      const bx=x+w*(0.18+i*0.16), bh=h*(0.24+0.08*((i+m.id)%3));
+      ctx.fillRect(bx,y+h*0.34-bh*0.25,w*0.035,bh);
+      ctx.beginPath();
+      ctx.moveTo(bx-w*0.04,y+h*0.34-bh*0.25);
+      ctx.lineTo(bx+w*0.018,y+h*0.18-bh*0.08);
+      ctx.lineTo(bx+w*0.07,y+h*0.34-bh*0.25);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha=locked?0.18:0.34;
+    ctx.strokeStyle=m.hot;
+    ctx.lineWidth=Math.max(2,w*0.012);
+    for(let i=0;i<4;i++){
+      ctx.beginPath();
+      ctx.moveTo(x+w*(0.08+i*0.24),y+h*(0.80-0.08*i));
+      ctx.lineTo(x+w*(0.18+i*0.22),y+h*(0.48+0.06*i));
+      ctx.stroke();
+    }
+    ctx.globalAlpha=locked?0.22:0.9;
+    ctx.strokeStyle=m.tone;
+    ctx.lineWidth=Math.max(3,w*0.018);
+    ctx.beginPath();
+    ctx.arc(x+w*0.72,y+h*0.38,w*0.13,Math.PI*0.1,Math.PI*1.9);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,226,128,0.75)';
+    ctx.beginPath();
+    ctx.moveTo(x+w*0.62,y+h*0.25);
+    ctx.lineTo(x+w*0.84,y+h*0.23);
+    ctx.lineTo(x+w*0.83,y+h*0.53);
+    ctx.lineTo(x+w*0.61,y+h*0.52);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.globalAlpha=locked?0.18:0.95;
+    const beanX=x+w*0.18, beanY=y+h*0.71, beanS=Math.max(12,w*0.08);
+    ctx.fillStyle='#f0bf77';
+    ctx.strokeStyle='#090707';
+    ctx.lineWidth=Math.max(2,beanS*0.14);
+    ctx.beginPath();
+    ctx.ellipse(beanX,beanY,beanS*0.72,beanS,0,0,TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle='#080606';
+    ctx.beginPath(); ctx.arc(beanX+beanS*0.16,beanY-beanS*0.18,beanS*0.08,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(beanX+beanS*0.42,beanY-beanS*0.15,beanS*0.08,0,TAU); ctx.fill();
+    ctx.restore();
+  }
+  function drawNodes(g,r,m,progress,locked,selected){
+    const ctx=g.ctx, count=5, y=r.y+r.h-88, gap=r.w/(count+1);
+    ctx.save();
+    ctx.lineCap='round';
+    ctx.strokeStyle=locked?'rgba(155,126,70,0.28)':'rgba(219,178,72,0.56)';
+    ctx.lineWidth=Math.max(3,r.w*0.014);
+    ctx.beginPath();
+    ctx.moveTo(r.x+gap,y);
+    ctx.lineTo(r.x+gap*count,y);
+    ctx.stroke();
+    for(let i=1;i<=count;i++){
+      const cx=r.x+gap*i, boss=i===count, done=progress>=i;
+      const rr=boss?(selected?18:14):(selected?15:12);
+      ctx.save();
+      ctx.shadowColor=done?(boss?'#ff593f':m.hot):'transparent';
+      ctx.shadowBlur=done?18:0;
+      ctx.fillStyle=done?(boss?'#e63d34':m.hot):(locked?'#211d19':'#252016');
+      ctx.strokeStyle=boss?'#ff5c42':(done?'#fff19a':'rgba(196,158,70,0.8)');
+      ctx.lineWidth=selected?4:3;
+      ctx.beginPath();
+      ctx.arc(cx,y,rr,0,TAU);
+      ctx.fill();
+      ctx.stroke();
+      if(!boss){
+        ctx.fillStyle=done?'#1d1405':'rgba(255,220,112,0.35)';
+        ctx.beginPath();
+        ctx.arc(cx,y,rr*0.35,0,TAU);
+        ctx.fill();
+      } else {
+        ctx.fillStyle=done?'#fff5ce':'rgba(255,214,150,0.35)';
+        ctx.font='900 '+Math.max(13,rr*0.9)+'px '+FONT;
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('王',cx,y+1);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function drawGate(g,m,r,selected,locked,unlocked){
+    const ctx=g.ctx, press=isPressed(g,r), lift=selected?0:10;
+    const x=r.x, y=r.y+(press?6:lift), w=r.w, h=r.h-(selected?0:lift);
+    const glow=selected?'rgba(255,220,92,0.50)':(locked?'rgba(120,80,80,0.08)':'rgba(154,255,52,0.18)');
+    panel(g,x,y,w,h,20,locked?'rgba(8,7,8,0.72)':'rgba(12,10,10,0.90)',selected?'#ffd866':'rgba(166,124,51,0.64)',glow);
+    ctx.save();
+    ctx.strokeStyle=selected?'rgba(255,238,153,0.90)':'rgba(70,52,38,0.82)';
+    ctx.lineWidth=selected?6:4;
+    g.rr(x+8,y+8,w-16,h-16,16);
+    ctx.stroke();
+    ctx.restore();
+    label(g,'第 '+m.id+' 幕',x+w/2,y+44,selected?35:25,locked?'rgba(230,211,165,0.46)':'#ffe66f',{align:'center',baseline:'middle',glow:selected?10:0});
+    label(g,m.name,x+w/2,y+(selected?96:86),selected?48:33,locked?'rgba(240,228,204,0.44)':'#fff1d5',{align:'center',baseline:'middle',glow:selected?8:0});
+    label(g,m.sub,x+w/2,y+(selected?142:125),selected?23:18,locked?'rgba(207,188,148,0.36)':'#e6c783',{align:'center',baseline:'middle',weight:'800'});
+    const scene={x:x+30,y:y+(selected?170:150),w:w-60,h:selected?205:148};
+    drawMiniScene(g,scene,m,locked);
+    ctx.save();
+    g.rr(scene.x,scene.y,scene.w,scene.h,14);
+    ctx.strokeStyle=selected?'rgba(255,231,109,0.86)':'rgba(215,169,69,0.55)';
+    ctx.lineWidth=selected?4:3;
+    ctx.stroke();
+    ctx.restore();
+    label(g,m.scene,scene.x+scene.w/2,scene.y+scene.h-16,selected?22:17,locked?'rgba(238,226,196,0.42)':'#f6d47b',{align:'center',baseline:'middle',weight:'900'});
+    label(g,'Boss：'+m.boss,x+w/2,y+(selected?418:338),selected?24:18,locked?'rgba(237,218,185,0.38)':'#f4dfbc',{align:'center',baseline:'middle',weight:'900'});
+    const rec=recordFor(g,m.id);
+    drawNodes(g,{x,y,w,h},m,rec.progress,locked,selected);
+    const infoY=y+h-48;
+    label(g,'印記 '+rec.marks,x+w*0.23,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#d6a8ff',{align:'center',baseline:'middle',weight:'900'});
+    label(g,'擊敗 '+rec.clears,x+w*0.50,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ff897b',{align:'center',baseline:'middle',weight:'900'});
+    label(g,'熟度 '+rec.heat,x+w*0.77,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ffd36b',{align:'center',baseline:'middle',weight:'900'});
+    if(locked){
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,0.36)';
+      g.rr(x+8,y+8,w-16,h-16,16);
+      ctx.fill();
+      label(g,'未解鎖',x+w/2,y+h/2,selected?36:28,'rgba(255,230,180,0.72)',{align:'center',baseline:'middle',glow:9});
+      ctx.restore();
+    }
+    g.btn(r.x,r.y,r.w,r.h,'atlas_gate_card_'+m.id,()=>{
+      g._selAct=m.id;
+      if(g.audio&&g.audio.sfx)g.audio.sfx('ui');
+      if(g.render)g.render();
+    });
+  }
+  function drawBallButton(g,r,m,locked){
+    const ctx=g.ctx, press=isPressed(g,r), cx=r.x+r.w/2, cy=r.y+r.h/2+(press?5:0), radius=Math.min(r.w,r.h)*0.48;
+    ctx.save();
+    const pulse=0.6+0.4*Math.sin((g.t||0)*4.2);
+    ctx.shadowColor=locked?'rgba(120,90,60,0.18)':'rgba(255,217,74,'+(0.45+0.25*pulse)+')';
+    ctx.shadowBlur=locked?10:30+18*pulse;
+    const grd=ctx.createRadialGradient(cx-radius*0.25,cy-radius*0.35,radius*0.12,cx,cy,radius);
+    grd.addColorStop(0,locked?'#6b5640':'#fff09a');
+    grd.addColorStop(0.45,locked?'#5d432b':'#d88925');
+    grd.addColorStop(1,locked?'#2f241b':'#7b3610');
+    ctx.fillStyle=grd;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius,0,TAU);
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=locked?'rgba(194,150,72,0.38)':'#ffe476';
+    ctx.lineWidth=6;
+    ctx.stroke();
+    ctx.strokeStyle='rgba(65,27,8,0.86)';
+    ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(cx-radius*0.8,cy); ctx.lineTo(cx+radius*0.8,cy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,radius*0.72,-Math.PI/2,Math.PI/2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,radius*0.72,Math.PI/2,Math.PI*1.5); ctx.stroke();
+    ctx.fillStyle=locked?'rgba(250,220,160,0.40)':'#fff8d5';
+    ctx.beginPath();
+    ctx.moveTo(cx-radius*0.18,cy-radius*0.30);
+    ctx.lineTo(cx+radius*0.34,cy);
+    ctx.lineTo(cx-radius*0.18,cy+radius*0.30);
+    ctx.closePath();
+    ctx.fill();
+    label(g,locked?'尚未解鎖':'進入第 '+m.id+' 幕',cx,cy+radius+34,28,locked?'rgba(226,204,160,0.52)':'#ffe58a',{align:'center',baseline:'middle',glow:locked?0:8});
+    ctx.restore();
+    g.btn(r.x,r.y,r.w,r.h,'atlas_gate_ball_'+m.id,()=>{
+      g._selAct=m.id;
+      if(locked){
+        if(g.audio&&g.audio.sfx)g.audio.sfx('hurt');
+        if(g.toast)g.toast('戰幕尚未解鎖','先擊破前一幕 Boss');
+        if(g.render)g.render();
+        return;
+      }
+      if(g.audio&&g.audio.sfx)g.audio.sfx('ui');
+      g.go('route');
+    });
+  }
+  function drawRightPanel(g,sel,unlocked){
+    const ctx=g.ctx, m=pickMeta(sel), locked=sel>unlocked, safeR=g.insR||0;
+    const w=Math.min(430,Math.max(360,BW*0.18)), x=BW-safeR-w-54, y=165, h=BH-225;
+    panel(g,x,y,w,h,22,'rgba(10,8,8,0.91)',locked?'rgba(110,88,60,0.45)':'rgba(226,176,74,0.72)',locked?null:'rgba(255,221,96,0.18)');
+    label(g,'第 '+m.id+' 幕',x+38,y+58,24,locked?'rgba(237,221,184,0.44)':'#ffe66f',{baseline:'middle'});
+    label(g,m.name,x+38,y+106,45,locked?'rgba(252,239,210,0.50)':'#fff1d6',{baseline:'middle',glow:locked?0:8});
+    label(g,'Boss　'+m.boss,x+38,y+162,25,locked?'rgba(226,204,166,0.42)':'#e8c88a',{baseline:'middle'});
+    const art={x:x+36,y:y+192,w:w-72,h:Math.min(230,h*0.30)};
+    panel(g,art.x,art.y,art.w,art.h,12,'rgba(6,5,6,0.74)',locked?'rgba(110,88,60,0.42)':m.tone);
+    const boss=img(g,'./assets/mob/bosses/act'+m.id+'.png');
+    if(boss&&boss.complete&&boss.naturalWidth&&!boss._err){
+      ctx.save();
+      ctx.globalAlpha=locked?0.38:1;
+      ctx.shadowColor=m.tone;
+      ctx.shadowBlur=locked?0:20;
+      drawContain(ctx,boss,art.x+8,art.y+8,art.w-16,art.h-16,2);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.fillStyle='#f1c17f';
+      ctx.strokeStyle='#070506';
+      ctx.lineWidth=6;
+      ctx.beginPath();
+      ctx.ellipse(art.x+art.w/2,art.y+art.h*0.55,art.w*0.20,art.h*0.30,0,0,TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle='#070506';
+      ctx.beginPath(); ctx.arc(art.x+art.w/2+18,art.y+art.h*0.48,5,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(art.x+art.w/2+42,art.y+art.h*0.48,5,0,TAU); ctx.fill();
+      ctx.restore();
+    }
+    const rec=recordFor(g,m.id), rowY=art.y+art.h+42;
+    label(g,'進度',x+40,rowY,23,'#cbb88e',{baseline:'middle'});
+    label(g,rec.progress+' / 5',x+w-54,rowY,30,locked?'rgba(237,221,184,0.42)':'#fff0b6',{align:'right',baseline:'middle'});
+    ctx.save();
+    ctx.strokeStyle='rgba(226,176,74,0.32)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x+38,rowY+38); ctx.lineTo(x+w-38,rowY+38); ctx.stroke();
+    ctx.restore();
+    const rows=[
+      ['籃獄印記',rec.marks,'#d5a6ff'],
+      ['Boss 擊敗',rec.clears,'#ff8a76'],
+      ['熟度',rec.heat,'#ffe070'],
+      ['核心',m.core,m.tone],
+      ['精魄聖物',m.relic,'#d8ff44']
+    ];
+    for(let i=0;i<rows.length;i++){
+      const yy=rowY+70+i*47;
+      label(g,rows[i][0],x+42,yy,20,'#b9aa87',{baseline:'middle',weight:'800'});
+      label(g,String(rows[i][1]),x+w-42,yy,i<3?27:21,locked?'rgba(235,220,184,0.42)':rows[i][2],{align:'right',baseline:'middle',weight:'900',glow:i<3&&!locked?5:0});
+    }
+    if(locked){
+      label(g,'擊破前一幕 Boss 後開放',x+w/2,y+h-44,22,'rgba(255,224,160,0.58)',{align:'center',baseline:'middle',weight:'900'});
+    } else {
+      label(g,'點卡片選幕，按發光籃球出戰',x+w/2,y+h-44,22,'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:8});
+    }
+  }
+  Game.prototype.drawAtlas=function(){
+    const ctx=this.ctx, maxAct=5, unlocked=Math.max(1,Math.min(maxAct,this._unlockedActs?this._unlockedActs():1));
+    this._selAct=Math.max(1,Math.min(maxAct,Number(this._selAct)||1));
+    drawBackground(this);
+    const safeL=this.insL||0, safeT=this.insT||0, safeR=this.insR||0;
+    panel(this,safeL+54,safeT+42,210,76,16,'rgba(12,9,7,0.82)','rgba(215,169,69,0.66)');
+    label(this,'← 返回',safeL+159,safeT+81,30,'#fff0c8',{align:'center',baseline:'middle',glow:4});
+    this.btn(safeL+54,safeT+42,210,76,'atlas_gate_back',()=>this.go('hub'));
+    label(this,'籃獄圖譜',BW/2,82,72,'#f8d978',{align:'center',baseline:'middle',glow:14});
+    label(this,'點選戰幕，擊破籃獄核心',BW/2,142,28,'#f5d989',{align:'center',baseline:'middle',weight:'900',glow:6});
+    const rightW=Math.min(430,Math.max(360,BW*0.18)), rightX=BW-safeR-rightW-54;
+    const areaX=safeL+128, areaRight=rightX-56, areaW=Math.max(980,areaRight-areaX);
+    const centers=[];
+    for(let i=0;i<maxAct;i++) centers.push(areaX+areaW*(0.06+i*0.218));
+    const selectedRects={};
+    for(let i=0;i<maxAct;i++){
+      const m=pickMeta(i+1), selected=m.id===this._selAct, locked=m.id>unlocked;
+      const w=selected?350:244, h=selected?585:446;
+      const r={x:centers[i]-w/2,y:selected?236:326,w,h};
+      selectedRects[m.id]=r;
+      drawGate(this,m,r,selected,locked,unlocked);
+    }
+    const m=pickMeta(this._selAct), sr=selectedRects[this._selAct], locked=this._selAct>unlocked;
+    drawBallButton(this,{x:sr.x+sr.w/2-88,y:sr.y+sr.h+28,w:176,h:176},m,locked);
+    drawRightPanel(this,this._selAct,unlocked);
+    try{ window.__HB_ATLAS_SCENE_GATES__='v1-five-node-bean-side-panel'; }catch(e){}
+  };
 })();
