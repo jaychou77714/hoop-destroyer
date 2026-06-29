@@ -14948,3 +14948,209 @@ Object.assign(Game.prototype,{
   Game.prototype.drawRelicCompare=function(){ const c=this._relicCompare, selected=c&&this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null; if(!selected) return; const ctx=this.ctx, {U}=stageOf(this); ctx.save(); ctx.fillStyle='rgba(2,1,5,0.76)'; ctx.fillRect(0,0,BW,BH); ctx.restore(); this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v37_info_scrim',()=>{}); const w=Math.min(330*U,BW-70*U), h=Math.min(272*U,BH-44*U), x=BW/2-w/2, y=BH/2-h/2; drawDetail(this,selected,{x,y,w,h},(this.save&&this.save.loadout)||[],U); this.button(x+w/2-48*U,y+h+8*U,96*U,24*U,'\u95dc\u9589','bean_v37_info_close',()=>{ this._relicCompare=null; this.render(); },{size:10.5*U,weight:'900',r:5*U}); };
   try{ window.__HB_BEAN_BACKPACK_FINAL__='v37-clean-layout'; }catch(e){}
 })();
+
+// === final activation v38: backpack background-coordinate calibration ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const BALL_SLOT=2;
+  const TABS=[['全部',''],['籃球','ball'],['護腕','wrist'],['球鞋','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+  const SORTS=[['稀有度','rarity'],['部位','type'],['已裝備','equipped'],['可升級','upgrade']];
+  const SLOT_LABELS=['副裝','護具','唯一籃球','飾品','籃框'];
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const TIER_COL=['#d8d1bd','#7fd8ff','#c88cff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳奇','神話'];
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||'普通';
+  const affixValue=a=>{ const v=Number(a&&a.val)||0; return (v>=0?'+':'')+(a&&a.pct?Math.round(v*100)+'%':Math.round(v)); };
+  const affixLine=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴')+' '+affixValue(a);
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  function scale(){
+    const sx=BW/1920, sy=BH/1080, S=Math.min(sx,sy);
+    return {sx,sy,S,X:v=>v*sx,Y:v=>v*sy,W:v=>v*sx,H:v=>v*sy,F:v=>v*S};
+  }
+  function panel(g,x,y,w,h,r,fill,stroke){
+    const ctx=g.ctx;
+    g.rr(x,y,w,h,r||18);
+    const gr=ctx.createLinearGradient(0,y,0,y+h);
+    gr.addColorStop(0,fill||'rgba(24,17,11,0.94)');
+    gr.addColorStop(1,'rgba(5,4,7,0.97)');
+    ctx.fillStyle=gr;
+    ctx.fill();
+    ctx.lineWidth=2.4;
+    ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)';
+    ctx.stroke();
+  }
+  function card(g,it,x,y,w,h,o){
+    o=o||{};
+    const ctx=g.ctx, col=it?tierCol(it):'rgba(215,169,69,0.42)';
+    panel(g,x,y,w,h,Math.max(8,Math.min(w,h)*0.12),'rgba(20,15,11,0.92)',o.selected?'#fff0b0':col);
+    if(o.selected||o.equipped){
+      ctx.save();
+      ctx.shadowColor=o.selected?'#fff0b0':col;
+      ctx.shadowBlur=o.selected?18:11;
+      g.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.12));
+      ctx.strokeStyle=o.selected?'#fff0b0':col;
+      ctx.lineWidth=o.selected?4:2.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(!it) return;
+    const pad=Math.max(6,Math.min(w,h)*0.1);
+    g._drawRelicSheetIcon(it.type,it.idx,x+pad,y+pad,w-pad*2,h-pad*2,1);
+    if(o.equipped){
+      ctx.save();
+      ctx.fillStyle='#b8ff2f';
+      ctx.shadowColor='#b8ff2f';
+      ctx.shadowBlur=10;
+      ctx.beginPath();
+      ctx.arc(x+w-15,y+15,13,0,TAU);
+      ctx.fill();
+      ctx.restore();
+      g.text('✓',x+w-15,y+16,21,'#142008',{align:'center',baseline:'middle',weight:'900'});
+    }
+  }
+  function slot(g,i,r,rid,S){
+    const ctx=g.ctx, target=g._relicSlotTarget===i, item=rid&&(g._hbRelicDisplay?g._hbRelicDisplay(rid):null);
+    const col=item?tierCol(item):(i===BALL_SLOT?'rgba(185,128,255,0.82)':'rgba(215,169,69,0.48)');
+    g.text(SLOT_LABELS[i]||'裝備',r.x+r.w/2,r.y-10*S,18*S,i===BALL_SLOT?'#f5bcff':'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:i===BALL_SLOT?8*S:0});
+    panel(g,r.x,r.y,r.w,r.h,12*S,'rgba(12,9,8,0.94)',target?'#d8ff44':col);
+    if(i===BALL_SLOT){
+      ctx.save();
+      ctx.shadowColor='#b980ff';
+      ctx.shadowBlur=target?22*S:12*S;
+      g.rr(r.x+6*S,r.y+6*S,r.w-12*S,r.h-12*S,10*S);
+      ctx.strokeStyle=target?'#fff0ff':'#b980ff';
+      ctx.lineWidth=target?3.4:2.6;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(item){
+      const side=Math.min(r.w,r.h)*0.78;
+      g._drawRelicSheetIcon(item.type,item.idx,r.x+r.w/2-side/2,r.y+r.h/2-side/2+2*S,side,side,1);
+    }else{
+      g.text('+',r.x+r.w/2,r.y+r.h/2-8*S,36*S,target?'#d8ff44':'rgba(215,169,69,0.68)',{align:'center',baseline:'middle',weight:'900'});
+      g.text(i===BALL_SLOT?'空籃球':'空欄',r.x+r.w/2,r.y+r.h/2+19*S,13*S,target?'#d8ff44':'rgba(226,210,174,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+  }
+  function detail(g,sel,p,load,S){
+    const ctx=g.ctx;
+    panel(g,p.x,p.y,p.w,p.h,15*S,'rgba(16,13,10,0.96)','rgba(215,169,69,0.76)');
+    if(!sel){
+      g.text('選擇一件裝備',p.x+p.w/2,p.y+p.h/2-18*S,28*S,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:10*S});
+      g.text('點擊庫存或上方欄位查看資訊',p.x+p.w/2,p.y+p.h/2+24*S,18*S,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      return;
+    }
+    const col=tierCol(sel), equipped=load.includes(sel.id), inLibrary=(g.save.library||[]).includes(sel.id);
+    const iconBox={x:p.x+25*S,y:p.y+75*S,w:p.w*0.39,h:p.h-150*S};
+    panel(g,iconBox.x,iconBox.y,iconBox.w,iconBox.h,13*S,'rgba(8,7,7,0.88)',col);
+    const side=Math.min(iconBox.w-28*S,iconBox.h-28*S);
+    g._drawRelicSheetIcon(sel.type,sel.idx,iconBox.x+iconBox.w/2-side/2,iconBox.y+iconBox.h/2-side/2,side,side,1);
+    const tx=p.x+p.w*0.46, tw=p.w*0.50;
+    g.text(equipped?'已裝備聖物':'庫存裝備',tx,p.y+46*S,18*S,equipped?'#d8ff44':'#9fe6ff',{weight:'900'});
+    g.text(clip(g,sel.name,tw,29*S,'900'),tx,p.y+80*S,29*S,col,{weight:'900',glow:8*S});
+    g.rr(tx,p.y+97*S,130*S,28*S,7*S);
+    ctx.fillStyle=col; ctx.globalAlpha=0.26; ctx.fill(); ctx.globalAlpha=1;
+    g.text(tierName(sel)+' · '+(TYPE_LABEL[sel.type]||sel.core||'裝備'),tx+65*S,p.y+111*S,15*S,'#fff4dc',{align:'center',baseline:'middle',weight:'900'});
+    g.text('Lv. '+(Number(sel.lvl)||0)+' / 50',tx,p.y+151*S,22*S,'#ffe7a6',{weight:'900'});
+    g.text('強度 '+(Number(sel.q)||0)+'/50',tx+145*S,p.y+151*S,18*S,'#c8b894',{weight:'900'});
+    let y=p.y+200*S;
+    ctx.save(); ctx.strokeStyle='rgba(215,169,69,0.28)'; ctx.beginPath(); ctx.moveTo(tx,y-22*S); ctx.lineTo(tx+tw,y-22*S); ctx.stroke(); ctx.restore();
+    g.text('基礎素質',tx,y,19*S,'#ffce5c',{weight:'900'});
+    g.text(sel.desc?clip(g,sel.desc,tw-12*S,18*S,'800'):'裝備後獲得投籃與戰鬥加成',tx,y+34*S,18*S,'#efe3ca',{weight:'800'});
+    y+=90*S;
+    g.text('詞綴',tx,y,19*S,'#ffce5c',{weight:'900'});
+    const lines=(sel.affixes||[]).slice(0,4).map(a=>'◆ '+affixLine(a));
+    if(!lines.length) lines.push('◆ 尚未鑲嵌詞綴');
+    for(let i=0;i<Math.min(4,lines.length);i++) g.text(clip(g,lines[i],tw-8*S,18*S,'900'),tx,y+(34+i*26)*S,18*S,i===0?'#d8ff44':'#fff1d5',{weight:'900'});
+    const by=p.y+p.h-62*S, bh=42*S, gap=10*S, bw=(p.w-50*S-gap*3)/4, bx=p.x+25*S;
+    const equipLabel=equipped?'卸下':'裝備';
+    const equipCb=equipped?(()=>g._hbUnequipRelic(sel.id)):(()=>g._hbEquipRelic(sel.id,{slot:g._hbBeanPreferredSlot(sel)}));
+    g.button(bx,by,bw,bh,equipLabel,'bean_v38_equip_'+sel.id,equipCb,{primary:true,size:20*S,weight:'900',r:7*S});
+    g.button(bx+(bw+gap),by,bw,bh,'升級','bean_v38_upgrade_'+sel.id,()=>g.toast&&g.toast('無盡鍛造','無盡模式每 5 層可升級裝備'),{size:20*S,weight:'900',r:7*S});
+    g.button(bx+(bw+gap)*2,by,bw,bh,'鎖定','bean_v38_lock_'+sel.id,()=>g.toast&&g.toast('鎖定功能','下一版開放，現在不改動資料'),{size:20*S,weight:'900',r:7*S});
+    g.button(bx+(bw+gap)*3,by,bw,bh,'丟棄','bean_v38_discard_'+sel.id,()=>inLibrary&&!equipped?g._hbConfirmDiscardRelic(sel.id):g.toast&&g.toast('無法丟棄','請先卸下並確認在庫存中'),{danger:true,size:20*S,color:'#fff0e8',weight:'900',r:7*S});
+  }
+  Game.prototype.drawRelicBag=function(){
+    const ctx=this.ctx, s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots();
+    this._relicCompare=null;
+    this.btn(0,0,BW,BH,'hero_bag_blocker_v38',()=>{});
+    const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png');
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH);
+    else { ctx.fillStyle='#09060b'; ctx.fillRect(0,0,BW,BH); }
+    const {X,Y,W,H,F,S}=scale(), load=s.loadout||[];
+    this.text('聖物背包',X(66),Y(54),42*S,'#ffe7a6',{weight:'900',glow:14*S});
+    this.text('已裝備 '+load.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',X(310),Y(51),23*S,'#d8c9a8',{baseline:'middle',weight:'900'});
+    this.button(X(1604),Y(27),W(130),H(52),'返回','hero_bag_close_v38',()=>this._closeHeroRelicBag(),{size:24*S,color:'#f0d0b0',weight:'900',r:10*S});
+    const slotY=Y(76), slotW=W(150), slotH=H(122), slotGap=W(115), slotX=X(250);
+    for(let i=0;i<5;i++){
+      const r={x:slotX+i*(slotW+slotGap),y:slotY,w:slotW,h:slotH};
+      slot(this,i,r,load[i],S);
+      ((slotNo,rr,id)=>this.btn(rr.x,rr.y,rr.w,rr.h,'bean_v38_slot_'+slotNo,()=>{
+        this._relicSlotTarget=slotNo;
+        if(id) this._bagSel=id;
+        else {
+          this._bagSel=null;
+          if(slotNo===BALL_SLOT) this._relicTabHero='ball';
+          else if(this._relicTabHero==='ball') this._relicTabHero='';
+        }
+        this._relicPageHero=0;
+        this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+        this.render();
+      }))(i,r,load[i]);
+    }
+    const tabX=X(142), tabY=Y(291), tabW=W(112), tabH=H(41), tabGap=H(14), tab=this._relicTabHero||'';
+    for(let i=0;i<TABS.length;i++){
+      const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type;
+      panel(this,tabX,y,tabW,tabH,9*S,on?'rgba(86,138,12,0.94)':'rgba(15,11,9,0.88)',on?'#b8ff2f':'rgba(215,169,69,0.50)');
+      this.text(label,tabX+tabW/2,y+tabH/2+1*S,18*S,on?'#d8ff44':'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      ((t,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v38_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type,tabX,y,tabW,tabH);
+    }
+    const main={x:X(292),y:Y(292),w:W(1350),h:H(566)};
+    panel(this,main.x,main.y,main.w,main.h,16*S,'rgba(8,7,7,0.90)','rgba(215,169,69,0.72)');
+    const sortMode=this._hbRelicSortMode?this._hbRelicSortMode():(this._relicSortHero||'rarity');
+    const sortX=main.x+W(24), sortY=main.y+H(24), sortH=H(34), sortW=W(90), sortGap=W(12);
+    this.text('排序',sortX,sortY+sortH/2+1*S,16*S,'#c8b894',{baseline:'middle',weight:'900'});
+    for(let i=0;i<SORTS.length;i++){
+      const label=SORTS[i][0], id=SORTS[i][1], bx=sortX+W(62)+i*(sortW+sortGap), on=sortMode===id;
+      panel(this,bx,sortY,sortW,sortH,8*S,on?'rgba(86,138,12,0.85)':'rgba(10,8,8,0.80)',on?'#b8ff2f':'rgba(215,169,69,0.42)');
+      this.text(label,bx+sortW/2,sortY+sortH/2+1*S,15*S,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((mode,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v38_sort_'+mode,()=>{ this._relicSortHero=mode; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(id,bx,sortY,sortW,sortH);
+    }
+    const allItems=this._hbBeanVisibleRelics?this._hbBeanVisibleRelics():[];
+    const grid={x:main.x+W(34),y:main.y+H(92),w:W(435),h:H(340)}, cols=4, rows=3, pageSize=cols*rows, cg=W(16), rg=H(16);
+    const pages=Math.max(1,Math.ceil(allItems.length/pageSize));
+    this._relicPageHero=Math.max(0,Math.min(pages-1,Number(this._relicPageHero)||0));
+    const items=allItems.slice(this._relicPageHero*pageSize,this._relicPageHero*pageSize+pageSize);
+    const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows;
+    const visibleIds=new Set(allItems.map(it=>it.id));
+    if(this._bagSel&&!visibleIds.has(this._bagSel)) this._bagSel=null;
+    if(!this._bagSel&&allItems[0]) this._bagSel=allItems[0].id;
+    for(let i=0;i<items.length;i++){
+      const it=items[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg);
+      card(this,it,x,y,cellW,cellH,{selected:this._bagSel===it.id,equipped:load.includes(it.id)});
+      ((id,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v38_item_'+id,()=>{ this._bagSel=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(it.id,x,y,cellW,cellH);
+    }
+    if(!items.length) this.text(validSlot(this._relicSlotTarget)?'這個欄位沒有可裝備物品':'庫存沒有已取得裝備',grid.x+grid.w/2,grid.y+grid.h/2,22*S,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    const py=main.y+H(486), pw=W(46), ph=H(38);
+    this.button(grid.x+grid.w/2-W(88),py,pw,ph,'◀','bean_v38_page_prev',()=>{ this._relicPageHero=Math.max(0,(this._relicPageHero||0)-1); this.render(); },{size:18*S,weight:'900',r:7*S});
+    this.text((this._relicPageHero+1)+' / '+pages,grid.x+grid.w/2,py+ph/2+1*S,19*S,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+    this.button(grid.x+grid.w/2+W(42),py,pw,ph,'▶','bean_v38_page_next',()=>{ this._relicPageHero=Math.min(pages-1,(this._relicPageHero||0)+1); this.render(); },{size:18*S,weight:'900',r:7*S});
+    const selected=this._bagSel&&(this._hbRelicDisplay?this._hbRelicDisplay(this._bagSel):null);
+    detail(this,selected,{x:main.x+W(520),y:main.y+H(48),w:main.w-W(560),h:main.h-H(82)},load,S);
+  };
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare, selected=c&&this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null;
+    if(!selected) return;
+    const ctx=this.ctx, {W,H,S}=scale();
+    ctx.save(); ctx.fillStyle='rgba(2,1,5,0.76)'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v38_info_scrim',()=>{});
+    const w=Math.min(W(760),BW-W(120)), h=Math.min(H(600),BH-H(80)), x=BW/2-w/2, y=BH/2-h/2;
+    detail(this,selected,{x,y,w,h},(this.save&&this.save.loadout)||[],S);
+    this.button(x+w/2-W(95),y+h+H(16),W(190),H(50),'關閉','bean_v38_info_close',()=>{ this._relicCompare=null; this.render(); },{size:22*S,weight:'900',r:9*S});
+  };
+  try{ window.__HB_BEAN_BACKPACK_FINAL__='v38-bg-calibrated'; }catch(e){}
+})();
