@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Hoopbreaker 背包座標調整器</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#0b0710;color:#f4ead6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+  .wrap{max-width:1380px;margin:0 auto;padding:10px}
+  h1{margin:4px 0 6px;font-size:18px;color:#ffe7a6;text-shadow:0 0 12px rgba(255,231,166,.45)}
+  .hint{margin:0 0 10px;color:#c9b894;font-size:13px;line-height:1.45}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:10px;align-items:start}
+  #stage{position:relative;background:#050307;border:1px solid #6f5426;border-radius:8px;overflow:hidden;touch-action:none;box-shadow:0 0 28px rgba(0,0,0,.5)}
+  canvas{display:block;width:100%;height:auto}
+  .panel{background:#150f14;border:1px solid rgba(215,169,69,.55);border-radius:8px;padding:10px}
+  .targets{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:10px}
+  button{border:1px solid rgba(215,169,69,.6);border-radius:7px;background:#24180f;color:#f0dec0;font-weight:900;font-size:13px;padding:9px 8px}
+  button.on{background:#9add23;color:#162000;border-color:#caff50}
+  button.good{background:#d9a936;color:#1d1004;border-color:#ffe07c}
+  button.danger{background:#622018;color:#ffe6df;border-color:#c44b3f}
+  .row{display:grid;grid-template-columns:72px 1fr 54px;gap:7px;align-items:center;margin:7px 0}
+  .row label{font-size:13px;color:#d8c9a8;font-weight:800}
+  input[type=range]{width:100%}
+  input[type=number]{width:54px;background:#080509;color:#dfffc4;border:1px solid #46351d;border-radius:5px;padding:6px 4px;font-weight:800}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px auto;max-width:210px}
+  .pad button{height:42px;font-size:18px;padding:0}
+  .pad .mid{font-size:12px;color:#ffe7a6;background:#312316}
+  .preset,.actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}
+  .actions{grid-template-columns:1fr}
+  textarea{width:100%;height:190px;background:#07050a;color:#caffd1;border:1px solid #40301a;border-radius:7px;padding:8px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .mini{font-size:12px;color:#a99;margin:8px 0 4px;line-height:1.4}
+  @media (max-width:980px){
+    .layout{grid-template-columns:1fr}
+    .panel{position:static}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>聖物背包座標調整器</h1>
+  <p class="hint">拖曳畫面上的框即可調整位置。調好後按「複製座標」，把內容貼回來，我會直接套進正式遊戲再上傳。</p>
+  <div class="layout">
+    <div id="stage"><canvas id="cv" width="1280" height="590"></canvas></div>
+    <div class="panel">
+      <div class="targets" id="targets"></div>
+      <div class="preset">
+        <button id="presetCurrent">目前線上</button>
+        <button id="presetSuggested" class="good">建議校準</button>
+      </div>
+      <div id="sliders"></div>
+      <div class="pad">
+        <span></span><button data-nudge="0,-1">↑</button><span></span>
+        <button data-nudge="-1,0">←</button><button class="mid" id="stepBtn">步進 1px</button><button data-nudge="1,0">→</button>
+        <span></span><button data-nudge="0,1">↓</button><span></span>
+      </div>
+      <div class="actions">
+        <button id="copy" class="good">複製座標</button>
+        <button id="reset" class="danger">重置本機調整</button>
+      </div>
+      <p class="mini">正式版會用這些 1280x590 座標等比換算到手機、桌機畫布。輔助線只在這個調整器顯示。</p>
+      <textarea id="out" readonly></textarea>
+    </div>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('cv');
+const ctx=canvas.getContext('2d');
+const W=1280,H=590,TAU=Math.PI*2;
+const bg=new Image();
+bg.src='assets/relic_ui/backpack_bg.png';
+const icons=[
+  'assets/relic_ui/clean_42/charm_2.png',
+  'assets/relic_ui/clean_42/mask_1.png',
+  'assets/relic_ui/clean_42/ball_5.png',
+  'assets/relic_ui/clean_42/mask_1.png',
+  'assets/relic_ui/clean_42/hoop_3.png',
+  'assets/relic_ui/clean_42/shoes_5.png',
+  'assets/relic_ui/clean_42/wrist_6.png',
+  'assets/relic_ui/clean_42/charm_2.png',
+  'assets/relic_ui/clean_42/hoop_5.png',
+  'assets/relic_ui/clean_42/ball_4.png'
+].map(src=>{const im=new Image(); im.src=src; return im;});
+
+const current={
+  slots:{x:167,y:42,w:100,h:67,gap:77},
+  main:{x:195,y:160,w:900,h:310},
+  tabs:{x:95,y:160,w:75,h:24,gap:7},
+  grid:{x:216,y:210,w:290,h:185},
+  detail:{x:540,y:187,w:525,h:265}
+};
+const suggested={
+  slots:{x:274,y:54,w:108,h:76,gap:52},
+  main:{x:195,y:160,w:900,h:310},
+  tabs:{x:95,y:160,w:75,h:24,gap:7},
+  grid:{x:216,y:210,w:290,h:185},
+  detail:{x:540,y:187,w:525,h:265}
+};
+let cfg=loadCfg();
+let active='slots';
+let step=1;
+let drag=null;
+const targetDefs=[
+  ['slots','上方裝備欄'],
+  ['main','下方主框'],
+  ['tabs','左側分類'],
+  ['grid','庫存格子'],
+  ['detail','右側資訊']
+];
+const fields={
+  slots:['x','y','w','h','gap'],
+  main:['x','y','w','h'],
+  tabs:['x','y','w','h','gap'],
+  grid:['x','y','w','h'],
+  detail:['x','y','w','h']
+};
+
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function loadCfg(){
+  try{
+    const saved=localStorage.getItem('hb_backpack_tuner_v1');
+    return saved?JSON.parse(saved):clone(suggested);
+  }catch(e){return clone(suggested);}
+}
+function saveCfg(){
+  localStorage.setItem('hb_backpack_tuner_v1',JSON.stringify(cfg));
+}
+function roundedRect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function panel(x,y,w,h,r,stroke,fill){
+  roundedRect(x,y,w,h,r);
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  g.addColorStop(0,fill||'rgba(22,15,10,.94)');
+  g.addColorStop(1,'rgba(5,4,6,.96)');
+  ctx.fillStyle=g; ctx.fill();
+  ctx.lineWidth=2;
+  ctx.strokeStyle=stroke||'rgba(215,169,69,.75)';
+  ctx.stroke();
+}
+function text(t,x,y,size,color,align='center'){
+  ctx.save();
+  ctx.font=`900 ${size}px "Noto Sans TC","PingFang TC",sans-serif`;
+  ctx.textAlign=align;
+  ctx.textBaseline='middle';
+  ctx.fillStyle=color;
+  ctx.shadowColor='rgba(0,0,0,.85)';
+  ctx.shadowBlur=5;
+  ctx.fillText(t,x,y);
+  ctx.restore();
+}
+function drawIcon(im,x,y,w,h){
+  if(!im.complete){return;}
+  const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height;
+  const sc=Math.min(w/iw,h/ih)*.96, dw=iw*sc, dh=ih*sc;
+  ctx.save();
+  ctx.shadowColor='rgba(255,231,166,.35)';
+  ctx.shadowBlur=12;
+  ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+  ctx.restore();
+}
+function drawSlots(){
+  const s=cfg.slots, labels=['副裝','護具','唯一籃球','飾品','籃框'];
+  for(let i=0;i<5;i++){
+    const x=s.x+i*(s.w+s.gap), y=s.y;
+    text(labels[i],x+s.w/2,y-9,i===2?13:11,i===2?'#f4adff':'#ffe7a6');
+    panel(x,y,s.w,s.h,8,i===2?'#b980ff':'#7fd8ff','rgba(10,8,8,.90)');
+    drawIcon(icons[i],x+8,y+7,s.w-16,s.h-14);
+  }
+}
+function drawTabs(){
+  const t=cfg.tabs, names=['全部','籃球','護腕','球鞋','護符','面具','籃框'];
+  names.forEach((n,i)=>{
+    const y=t.y+i*(t.h+t.gap), on=i===0;
+    panel(t.x,y,t.w,t.h,6,on?'#b8ff2f':'rgba(215,169,69,.48)',on?'rgba(86,138,12,.92)':'rgba(15,11,9,.86)');
+    text(n,t.x+t.w/2,y+t.h/2,12,on?'#eaff72':'#d8c9a8');
+  });
+}
+function drawGrid(){
+  const g=cfg.grid, cols=4, rows=3, cg=8, rg=8;
+  const cw=(g.w-cg*(cols-1))/cols, ch=(g.h-rg*(rows-1))/rows;
+  for(let i=0;i<cols*rows;i++){
+    const x=g.x+(i%cols)*(cw+cg), y=g.y+Math.floor(i/cols)*(ch+rg);
+    panel(x,y,cw,ch,7,i===0?'#fff0b0':'#7fd8ff','rgba(14,10,8,.90)');
+    drawIcon(icons[(i+5)%icons.length],x+5,y+5,cw-10,ch-10);
+    if(i===2||i===7||i===10){
+      ctx.fillStyle='#b8ff2f';
+      ctx.beginPath(); ctx.arc(x+cw-9,y+9,8,0,TAU); ctx.fill();
+      text('✓',x+cw-9,y+10,13,'#142008');
+    }
+  }
+}
+function drawDetail(){
+  const d=cfg.detail;
+  panel(d.x,d.y,d.w,d.h,10,'rgba(215,169,69,.8)','rgba(14,10,8,.95)');
+  const ib={x:d.x+18,y:d.y+42,w:Math.min(210,d.w*.42),h:d.h-84};
+  panel(ib.x,ib.y,ib.w,ib.h,8,'#7fd8ff','rgba(7,6,6,.88)');
+  drawIcon(icons[5],ib.x+12,ib.y+12,ib.w-24,ib.h-24);
+  const tx=d.x+d.w*.46;
+  text('庫存裝備',tx,d.y+36,13,'#9fe6ff','left');
+  text('裂隙羽骨',tx,d.y+62,20,'#7fd8ff','left');
+  text('精良 · 球鞋',tx,d.y+88,12,'#fff4dc','left');
+  text('Lv. 0 / 50      強度 28/50',tx,d.y+118,14,'#ffe7a6','left');
+  text('基礎素質',tx,d.y+154,13,'#ffce5c','left');
+  text('每幕一次致命失手剩 1 生命',tx,d.y+180,13,'#efe3ca','left');
+  text('詞綴',tx,d.y+214,13,'#ffce5c','left');
+  text('◆ 減傷 +7%',tx,d.y+236,13,'#d8ff44','left');
+}
+function drawGuides(){
+  const color={slots:'#ffe05d',main:'#39ff88',tabs:'#a6ff3d',grid:'#69d9ff',detail:'#ff8a65'}[active]||'#fff';
+  const r=rectFor(active);
+  ctx.save();
+  ctx.setLineDash([8,5]);
+  ctx.lineWidth=3;
+  ctx.strokeStyle=color;
+  ctx.strokeRect(r.x,r.y,r.w,r.h);
+  ctx.fillStyle=color;
+  ctx.globalAlpha=.12;
+  ctx.fillRect(r.x,r.y,r.w,r.h);
+  ctx.restore();
+}
+function rectFor(k){
+  if(k==='slots'){
+    const s=cfg.slots;
+    return {x:s.x,y:s.y,w:s.w*5+s.gap*4,h:s.h};
+  }
+  if(k==='tabs'){
+    const t=cfg.tabs;
+    return {x:t.x,y:t.y,w:t.w,h:t.h*7+t.gap*6};
+  }
+  return cfg[k];
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(bg.complete) ctx.drawImage(bg,0,0,W,H);
+  else {ctx.fillStyle='#09060b';ctx.fillRect(0,0,W,H);}
+  text('聖物背包',54,28,25,'#ffe7a6','left');
+  text('已裝備 5/5 · 庫存 12/40',208,28,14,'#d8c9a8','left');
+  drawTabs();
+  panel(cfg.main.x,cfg.main.y,cfg.main.w,cfg.main.h,10,'rgba(215,169,69,.72)','rgba(8,7,7,.90)');
+  text('排序',cfg.main.x+36,cfg.main.y+26,12,'#c8b894','left');
+  drawGrid();
+  drawDetail();
+  drawSlots();
+  drawGuides();
+  updateOutput();
+}
+function renderTargets(){
+  const box=document.getElementById('targets');
+  box.innerHTML='';
+  targetDefs.forEach(([k,label])=>{
+    const b=document.createElement('button');
+    b.textContent=label;
+    b.className=k===active?'on':'';
+    b.onclick=()=>{active=k;renderTargets();renderSliders();draw();};
+    box.appendChild(b);
+  });
+}
+function renderSliders(){
+  const holder=document.getElementById('sliders');
+  holder.innerHTML='';
+  fields[active].forEach(f=>{
+    const max=f==='gap'?220:(f==='x'||f==='w'?1280:590);
+    const row=document.createElement('div');
+    row.className='row';
+    row.innerHTML=`<label>${f}</label><input type="range" min="0" max="${max}" step="1"><input type="number" min="0" max="${max}">`;
+    const range=row.children[1], num=row.children[2];
+    range.value=cfg[active][f]; num.value=cfg[active][f];
+    const set=v=>{cfg[active][f]=Math.round(Number(v)||0);range.value=cfg[active][f];num.value=cfg[active][f];saveCfg();draw();};
+    range.oninput=e=>set(e.target.value);
+    num.oninput=e=>set(e.target.value);
+    holder.appendChild(row);
+  });
+}
+function pointerPos(e){
+  const r=canvas.getBoundingClientRect();
+  const p=e.touches?e.touches[0]:e;
+  return {x:(p.clientX-r.left)*W/r.width,y:(p.clientY-r.top)*H/r.height};
+}
+function hitTest(p){
+  for(const [k] of targetDefs){
+    const r=rectFor(k);
+    if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h) return k;
+  }
+  return null;
+}
+function startDrag(e){
+  const p=pointerPos(e);
+  const h=hitTest(p);
+  if(h) active=h;
+  const r=rectFor(active);
+  drag={x:p.x,y:p.y,ox:cfg[active].x,oy:cfg[active].y,inside:p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h};
+  renderTargets();renderSliders();draw();
+  e.preventDefault();
+}
+function moveDrag(e){
+  if(!drag||!drag.inside) return;
+  const p=pointerPos(e);
+  cfg[active].x=Math.round(drag.ox+p.x-drag.x);
+  cfg[active].y=Math.round(drag.oy+p.y-drag.y);
+  saveCfg();renderSliders();draw();
+  e.preventDefault();
+}
+function endDrag(){drag=null;}
+function nudge(dx,dy){
+  cfg[active].x+=dx*step;
+  cfg[active].y+=dy*step;
+  saveCfg();renderSliders();draw();
+}
+function updateOutput(){
+  const out=document.getElementById('out');
+  out.value=
+`// 1280x590 backpack calibration
+const BAG_CALIBRATION = ${JSON.stringify(cfg,null,2)};
+
+// engine scale helper:
+const X = v => v * BW / 1280;
+const Y = v => v * BH / 590;`;
+}
+document.getElementById('presetCurrent').onclick=()=>{cfg=clone(current);saveCfg();renderSliders();draw();};
+document.getElementById('presetSuggested').onclick=()=>{cfg=clone(suggested);saveCfg();renderSliders();draw();};
+document.getElementById('reset').onclick=()=>{localStorage.removeItem('hb_backpack_tuner_v1');cfg=clone(suggested);renderSliders();draw();};
+document.getElementById('copy').onclick=async()=>{
+  updateOutput();
+  const out=document.getElementById('out');
+  out.select();
+  try{await navigator.clipboard.writeText(out.value);document.getElementById('copy').textContent='已複製';}
+  catch(e){document.execCommand('copy');document.getElementById('copy').textContent='已選取，請複製';}
+  setTimeout(()=>document.getElementById('copy').textContent='複製座標',1500);
+};
+document.querySelectorAll('[data-nudge]').forEach(b=>b.onclick=()=>{
+  const [dx,dy]=b.dataset.nudge.split(',').map(Number);
+  nudge(dx,dy);
+});
+document.getElementById('stepBtn').onclick=()=>{
+  step=step===1?5:step===5?10:1;
+  document.getElementById('stepBtn').textContent='步進 '+step+'px';
+};
+canvas.addEventListener('pointerdown',startDrag);
+canvas.addEventListener('pointermove',moveDrag);
+window.addEventListener('pointerup',endDrag);
+canvas.addEventListener('touchstart',startDrag,{passive:false});
+canvas.addEventListener('touchmove',moveDrag,{passive:false});
+window.addEventListener('touchend',endDrag);
+bg.onload=draw;
+icons.forEach(im=>im.onload=draw);
+renderTargets();renderSliders();draw();
+</script>
+</body>
+</html>
