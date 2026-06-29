@@ -55,7 +55,7 @@ function defaultSave(){ return {
   deaths:0, deathsDay:0, deathsDayKey:'',
   login:{ name:'', code:'', remember:true },
   stats:{ bestScore:0, bestAcc:0, bestCombo:0, totalShots:0, swishes:0, banks:0 },
-  settings:{ music:true, sfx:true, vibrate:true, reduceMotion:false, lefty:false, lowPerf:false, musicVol:0.5, sfxVol:0.8 },
+  settings:{ music:true, sfx:true, vibrate:true, reduceMotion:false, lefty:false, lowPerf:false, shotPush:false, musicVol:0.5, sfxVol:0.8 },
 }; }
 function loadSave(){
   let s=null; try{ s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); }catch(e){}
@@ -760,7 +760,6 @@ class Game{
     this.buttons.push({x:okR.x,y:okR.y,w:okR.w,h:okR.h,id:'login_ok',opts:{_login:true},cb:()=>this._submitLogin()});
   };
 })();
-
 
 // === final activation v25: bold monster status text pops ===
 (function(){
@@ -12974,5 +12973,246 @@ Object.assign(Game.prototype,{
       else{ const ctx=this.ctx; ctx.save(); ctx.globalAlpha=1-p; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore(); }
     }
     return r;
+  };
+})();
+
+// === final activation v32b: final selectable pull-shot / push-shot controls ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  function shotSettings(game){
+    if(!game.save) game.save=defaultSave();
+    if(!game.save.settings) game.save.settings=defaultSave().settings;
+    if(typeof game.save.settings.shotPush!=='boolean') game.save.settings.shotPush=false;
+    return game.save.settings;
+  }
+
+  function shotLabel(game){
+    return shotSettings(game).shotPush ? '推投' : '拉弓';
+  }
+
+  Game.prototype._hbShotPushMode=function(){
+    return !!shotSettings(this).shotPush;
+  };
+
+  Game.prototype._hbAimVector=function(run){
+    const b=run&&run.ball;
+    const ax=(run&&run.aimStartX!=null)?run.aimStartX:(b?b.x:0);
+    const ay=(run&&run.aimStartY!=null)?run.aimStartY:(b?b.y:0);
+    const px=(run&&Number.isFinite(run.aimX))?run.aimX:ax;
+    const py=(run&&Number.isFinite(run.aimY))?run.aimY:ay;
+    const push=this._hbShotPushMode();
+    const dx=push ? (px-ax) : (ax-px);
+    const dy=push ? (py-ay) : (ay-py);
+    return {ax,ay,px,py,dx,dy,pull:Math.hypot(dx,dy),push};
+  };
+
+  Game.prototype._hbSetShotMode=function(push){
+    const st=shotSettings(this);
+    if(st.shotPush===!!push) return;
+    st.shotPush=!!push;
+    persist(this.save);
+    this.audio&&this.audio.sfx&&this.audio.sfx('select');
+    this.toast&&this.toast('投籃手感已切換', shotLabel(this)+'模式');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbDrawShotModeSwitch=function(x,y,w,h,opts){
+    opts=opts||{};
+    const ctx=this.ctx, st=shotSettings(this), U=opts.U||1;
+    const activePush=!!st.shotPush;
+    ctx.save();
+    this.rr(x,y,w,h,18*U);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(40,28,14,0.95)');
+    bg.addColorStop(1,'rgba(10,7,6,0.96)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=2.5*U; ctx.strokeStyle='rgba(215,169,69,0.72)'; this.rr(x,y,w,h,18*U); ctx.stroke();
+    ctx.lineWidth=1.2*U; ctx.strokeStyle='rgba(184,255,47,0.28)'; this.rr(x+7*U,y+7*U,w-14*U,h-14*U,14*U); ctx.stroke();
+    this.text('投籃手感',x+28*U,y+28*U,22*U,'#ffe7a6',{baseline:'middle',weight:'900'});
+    this.text(activePush?'手指往前推，球往前飛':'往後拉弓，球反向彈出',x+28*U,y+h-22*U,16*U,'#c8b894',{baseline:'middle',weight:'800'});
+    ctx.restore();
+
+    const gap=12*U, bw=(w-260*U-gap)/2, bh=52*U, by=y+22*U, bx=x+w-28*U-bw*2-gap;
+    this.button(bx,by,bw,bh,'拉弓','shot_mode_pull_'+Math.round(x)+'_'+Math.round(y),()=>this._hbSetShotMode(false),{primary:!activePush,size:20*U,weight:'900'});
+    this.button(bx+bw+gap,by,bw,bh,'推投','shot_mode_push_'+Math.round(x)+'_'+Math.round(y),()=>this._hbSetShotMode(true),{primary:activePush,size:20*U,weight:'900'});
+  };
+
+  const latestDrawSettings=Game.prototype.drawSettings;
+  Game.prototype.drawSettings=function(){
+    const r=latestDrawSettings?latestDrawSettings.apply(this,arguments):undefined;
+    const IT=this.insT||0, IR=this.insR||0;
+    this._hbDrawShotModeSwitch(BW-IR-610,IT+48,540,96,{U:1});
+    return r;
+  };
+
+  const latestDrawPause=Game.prototype.drawPause;
+  Game.prototype.drawPause=function(){
+    const r=latestDrawPause?latestDrawPause.apply(this,arguments):undefined;
+    const IT=this.insT||0, IR=this.insR||0;
+    this._hbDrawShotModeSwitch(BW-IR-610,IT+56,540,96,{U:1});
+    return r;
+  };
+
+  const latestBattleUp=Game.prototype.battleUp;
+  Game.prototype.battleUp=function(x,y){
+    const run=this.run, b=run&&run.ball;
+    if(this._hbShotPushMode()&&run&&run.aiming&&b&&Number.isFinite(x)&&Number.isFinite(y)){
+      const ax=(run.aimStartX!=null?run.aimStartX:b.x);
+      const ay=(run.aimStartY!=null?run.aimStartY:b.y);
+      return latestBattleUp.call(this,2*ax-x,2*ay-y);
+    }
+    return latestBattleUp.apply(this,arguments);
+  };
+
+  Game.prototype.drawAim=function(){
+    const ctx=this.ctx, run=this.run;
+    if(!run||!run.aiming) return;
+    const b=run.ball;
+    if(!b) return;
+    const av=this._hbAimVector(run);
+    const ax=av.ax, ay=av.ay, dx=av.dx, dy=av.dy, pull=av.pull;
+
+    if(run.prevTraj&&run.prevTraj.length>1){
+      ctx.save();
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      ctx.setLineDash([13,9]);
+      ctx.globalAlpha=0.55;
+      ctx.strokeStyle='rgba(0,0,0,0.88)';
+      ctx.lineWidth=8;
+      ctx.beginPath();
+      ctx.moveTo(run.prevTraj[0][0],run.prevTraj[0][1]);
+      for(let i=1;i<run.prevTraj.length;i++) ctx.lineTo(run.prevTraj[i][0],run.prevTraj[i][1]);
+      ctx.stroke();
+      ctx.globalAlpha=0.82;
+      ctx.strokeStyle='#fff0b8';
+      ctx.lineWidth=4;
+      ctx.shadowBlur=10;
+      ctx.shadowColor='#ffe14d';
+      ctx.beginPath();
+      ctx.moveTo(run.prevTraj[0][0],run.prevTraj[0][1]);
+      for(let i=1;i<run.prevTraj.length;i++) ctx.lineTo(run.prevTraj[i][0],run.prevTraj[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    if(pull<60){
+      this.text('放開取消',b.x,b.y-60,26,'#ff6a4a',{align:'center',weight:'900',glow:8});
+      return;
+    }
+
+    let maxPull=520;
+    if(this._intfActive&&this._intfActive('maxPull')) maxPull*=0.85;
+    if(this._intfActive&&this._intfActive('slowCharge')) maxPull*=1.15;
+    const p=clamp(pull,0,maxPull)/maxPull, power=lerp(820,2650,p), ang=Math.atan2(dy,dx);
+    let vx=Math.cos(ang)*power, vy=Math.sin(ang)*power, x=b.x, y=b.y;
+    const G=2600*this._gravMul(), hh=1/60, pts=[];
+    let dots=70+Math.round((run.relicIds&&run.relicIds.includes('deadeye_sigil'))?8:0);
+    if(run.heroId==='shade'&&run._shadeBonus) dots+=6;
+    if(run.relicIds&&run.relicIds.includes('deadeye_sigil')) dots=Math.round(dots*1.2);
+    dots=Math.round(dots*this._getAimPreviewPct());
+    if(this._intfActive&&this._intfActive('shortTraj')) dots=Math.round(dots*0.5);
+    dots=Math.max(8,dots);
+    let lx=x, ly=y;
+    for(let i=0;i<dots;i++){
+      vy+=G*hh; x+=vx*hh; y+=vy*hh; lx=x; ly=y;
+      if(y>BH-92||x<0||x>BW) break;
+      pts.push([x,y,i/dots]);
+    }
+
+    const col=this._ballColor(run.form);
+    if(pts.length>1){
+      ctx.save();
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      ctx.setLineDash([12,10]);
+      ctx.globalAlpha=0.55;
+      ctx.strokeStyle='rgba(0,0,0,0.95)';
+      ctx.lineWidth=10;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.stroke();
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=0.88;
+      ctx.strokeStyle='#fff2b4';
+      ctx.lineWidth=5;
+      ctx.shadowBlur=14;
+      ctx.shadowColor=col;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(const pt of pts){
+      const tt=pt[2], r=lerp(10,3.8,tt), a=(1-tt)*0.96;
+      ctx.globalAlpha=a;
+      ctx.shadowBlur=12;
+      ctx.shadowColor=col;
+      ctx.fillStyle='rgba(0,0,0,0.85)';
+      ctx.beginPath();
+      ctx.arc(pt[0],pt[1],r+3,0,TAU);
+      ctx.fill();
+      ctx.fillStyle=tt<0.5?'#fff2b4':col;
+      ctx.beginPath();
+      ctx.arc(pt[0],pt[1],r,0,TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    if(!(this._intfActive&&this._intfActive('hideLanding'))){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.beginPath();
+      ctx.arc(lx,ly,16,0,TAU);
+      ctx.globalAlpha=0.28;
+      ctx.fillStyle=col;
+      ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.lineWidth=4;
+      ctx.strokeStyle='#fff2b4';
+      ctx.shadowBlur=14;
+      ctx.shadowColor=col;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,0.78)';
+    ctx.lineWidth=8;
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.lineTo(av.px,av.py);
+    ctx.stroke();
+    ctx.strokeStyle=av.push?'rgba(184,255,47,0.95)':'rgba(255,242,180,0.90)';
+    ctx.lineWidth=4;
+    ctx.shadowBlur=10;
+    ctx.shadowColor=av.push?'#b8ff2f':'#ffe14d';
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.lineTo(av.px,av.py);
+    ctx.stroke();
+    const a2=Math.atan2(av.py-ay,av.px-ax);
+    const ar=18;
+    ctx.beginPath();
+    ctx.moveTo(av.px,av.py);
+    ctx.lineTo(av.px-Math.cos(a2-0.55)*ar,av.py-Math.sin(a2-0.55)*ar);
+    ctx.moveTo(av.px,av.py);
+    ctx.lineTo(av.px-Math.cos(a2+0.55)*ar,av.py-Math.sin(a2+0.55)*ar);
+    ctx.stroke();
+    ctx.restore();
+
+    const pp=Math.round(p*100);
+    const elev=Math.atan2(-Math.sin(ang),Math.abs(Math.cos(ang)))*180/Math.PI;
+    const arc=elev<30?'低弧':(elev<55?'中弧':'高弧');
+    const ap=Math.round(this._getAimPreviewPct()*100);
+    this.text(shotLabel(this)+' · 力量 '+pp+'% · '+arc+' · 預覽 '+ap+'%',BW/2,BH-70,27,'#fff2b4',{align:'center',weight:'900',glow:true});
   };
 })();
