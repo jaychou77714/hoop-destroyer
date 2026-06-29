@@ -761,6 +761,7 @@ class Game{
   };
 })();
 
+
 // === final activation v25: bold monster status text pops ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -12459,5 +12460,351 @@ Object.assign(Game.prototype,{
       ctx.restore();
     }
     ctx.restore();
+  };
+})();
+
+// === final activation v30: boss drama, relic sorting, formal abyss forge ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const RELIC_TYPE_ORDER={ball:0,wrist:1,shoes:2,charm:3,mask:4,hoop:5};
+  const RELIC_TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const RELIC_SORTS=[
+    {id:'rarity',label:'稀有度'},
+    {id:'type',label:'部位'},
+    {id:'equipped',label:'已裝備'},
+    {id:'upgrade',label:'可升級'}
+  ];
+  const TIER_COL=['#6fb0e8','#9fe024','#b980ff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳說','深淵'];
+  const SOCKET_RARITY={
+    common:{name:'普通',col:'#cfc6b0',glow:'rgba(207,198,176,0.16)'},
+    magic:{name:'魔法',col:'#6fb0e8',glow:'rgba(111,176,232,0.18)'},
+    rare:{name:'稀有',col:'#9fe024',glow:'rgba(159,224,36,0.18)'},
+    epic:{name:'史詩',col:'#b980ff',glow:'rgba(185,128,255,0.20)'},
+    legendary:{name:'傳說',col:'#ffb23c',glow:'rgba(255,178,60,0.22)'},
+    abyss:{name:'深淵',col:'#f4f0d0',glow:'rgba(244,240,208,0.24)'}
+  };
+
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  const affixName=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴')
+    .replace(/^鑲嵌[：:·\s]*/,'')
+    .replace(/^精煉[：:·\s]*/,'')
+    .replace(/^鍛造[：:·\s]*/,'');
+  const affixValue=a=>{
+    const v=Number(a&&a.val)||0;
+    const sign=v>=0?'+':'';
+    return sign+(a&&a.pct?Math.round(v*100)+'%':Math.round(v));
+  };
+  const affixLine=a=>affixName(a)+' '+affixValue(a);
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||'普通';
+
+  Game.prototype._hbRelicSortMode=function(){
+    if(!this._relicSortHero) this._relicSortHero='rarity';
+    return this._relicSortHero;
+  };
+
+  Game.prototype._hbRelicSortIds=function(ids){
+    const list=(ids||[]).filter(Boolean);
+    const mode=this._hbRelicSortMode();
+    const load=(this.save&&this.save.loadout)||[];
+    const equipped=new Set(load.filter(Boolean));
+    const display=id=>{
+      try{ return this._hbRelicDisplay?this._hbRelicDisplay(id):(this._relicDisplay?this._relicDisplay(id,true):null); }
+      catch(e){ return null; }
+    };
+    const key=id=>{
+      const it=display(id)||{};
+      const eq=equipped.has(id)?1:0;
+      const tier=Number(it.tier)||0;
+      const q=Number(it.q)||0;
+      const lvl=Number(it.lvl)||0;
+      const typeRank=RELIC_TYPE_ORDER[it.type]!=null?RELIC_TYPE_ORDER[it.type]:99;
+      if(mode==='type') return [typeRank,-tier,-q,-lvl,String(it.name||id)];
+      if(mode==='equipped') return [-eq,-tier,-q,-lvl,typeRank,String(it.name||id)];
+      if(mode==='upgrade') return [-eq,lvl,-tier,-q,typeRank,String(it.name||id)];
+      return [-tier,-q,-lvl,-eq,typeRank,String(it.name||id)];
+    };
+    return list.slice().sort((a,b)=>{
+      const ka=key(a), kb=key(b);
+      for(let i=0;i<Math.max(ka.length,kb.length);i++){
+        if(ka[i]===kb[i]) continue;
+        return ka[i]<kb[i]?-1:1;
+      }
+      return String(a).localeCompare(String(b));
+    });
+  };
+
+  const oldOwnedRelics=Game.prototype._hbOwnedRelicIds;
+  Game.prototype._hbOwnedRelicIds=function(includeEquipped){
+    const ids=oldOwnedRelics?oldOwnedRelics.call(this,includeEquipped):[];
+    return this._hbRelicSortIds(ids);
+  };
+
+  const oldSlotCandidates=Game.prototype._hbSlotCandidates;
+  Game.prototype._hbSlotCandidates=function(slot){
+    const ids=oldSlotCandidates?oldSlotCandidates.call(this,slot):[];
+    return this._hbRelicSortIds(ids);
+  };
+
+  Game.prototype._hbDrawRelicSortBar=function(){
+    if(this._relicCompare) return;
+    const ctx=this.ctx, safeT=this.insT||0, safeL=this.insL||0;
+    const mode=this._hbRelicSortMode();
+    const h=38, gap=8, w=96, total=RELIC_SORTS.length*w+(RELIC_SORTS.length-1)*gap;
+    const x=Math.max(safeL+398,Math.min(BW-total-210,BW/2-total/2+70));
+    const y=safeT+34;
+    this.text('排序',x-52,y+h/2+1,19,'#c8b894',{baseline:'middle',weight:'900'});
+    for(let i=0;i<RELIC_SORTS.length;i++){
+      const s=RELIC_SORTS[i], bx=x+i*(w+gap), on=s.id===mode;
+      this.rr(bx,y,w,h,10);
+      ctx.fillStyle=on?'rgba(184,255,47,0.22)':'rgba(8,6,8,0.72)';
+      ctx.fill();
+      ctx.lineWidth=2;
+      ctx.strokeStyle=on?'#bfff2f':'rgba(215,169,69,0.48)';
+      ctx.stroke();
+      this.text(s.label,bx+w/2,y+h/2+1,18,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((id)=>this.btn(bx,y,w,h,'hero_relic_sort_'+id,()=>{ this._relicSortHero=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); }))(s.id);
+    }
+  };
+
+  const oldDrawRelicBag=Game.prototype.drawRelicBag;
+  Game.prototype.drawRelicBag=function(){
+    const r=oldDrawRelicBag&&oldDrawRelicBag.apply(this,arguments);
+    this._hbDrawRelicSortBar&&this._hbDrawRelicSortBar();
+    return r;
+  };
+
+  Game.prototype._hbBossFxText=function(x,y,text,col,size){
+    if(!this.run) return;
+    this.floater&&this.floater(x,y,text,col||'#ffe7a6',size||34,{crit:true,t:1.25,vy:-54});
+  };
+
+  const oldEnterStage=Game.prototype.enterStage;
+  Game.prototype.enterStage=function(pi){
+    const r=oldEnterStage?oldEnterStage.apply(this,arguments):undefined;
+    const run=this.run;
+    if(run&&run.stage&&run.stage.boss){
+      const name=run.endless?('深淵 Boss · 第 '+(run.endlessDepth||1)+' 層'):(run.stage.name||'Boss');
+      run._hbBossIntro={start:this.t||0,dur:1.85,name,sub:run.stage.host||'守衛降臨'};
+      run.shake=Math.max(run.shake||0,14);
+      this.ringFx&&this.ringFx(BW/2,BH*0.38,'#ff7a3c',0.82,{r1:220,width:12});
+      this.burst&&this.burst(BW/2,BH*0.38,34,'#ff7a3c',420,0.72,{glow:true,r:7,g:-30,len:68});
+    }
+    return r;
+  };
+
+  const oldHurtGuard=Game.prototype.hurtGuard;
+  Game.prototype.hurtGuard=function(g,dmg,c,primary){
+    const beforeShield=!!(g&&g.shieldUp);
+    const beforeHp=g?Number(g.hp)||0:0;
+    const r=oldHurtGuard?oldHurtGuard.apply(this,arguments):undefined;
+    if(g&&beforeShield&&!g.shieldUp&&!g.dead){
+      this.audio&&this.audio.sfx&&this.audio.sfx('boss');
+      this.shockFx&&this.shockFx(g.x,g.y,'#ffe7a6',420,0.5);
+      this.ringFx&&this.ringFx(g.x,g.y,'#ffe7a6',0.62,{r1:(g.r||60)+55,width:12});
+      this.burst&&this.burst(g.x,g.y,30,'#ffe7a6',420,0.64,{kind:'shard',glow:true,r:6,g:120,len:58});
+      this._hbBossFxText(g.x,g.y-(g.r||60)-48,'破盾','#ffe7a6',38);
+      if(this.run) this.run.shake=Math.max(this.run.shake||0,16);
+    }else if(g&&beforeHp>0&&g.hp>0&&primary&&beforeHp-g.hp>=Math.max(24,(g.maxhp||80)*0.25)){
+      this._hbBossFxText(g.x,g.y-(g.r||60)-42,'重擊','#fff0c0',30);
+    }
+    return r;
+  };
+
+  const oldKillGuard=Game.prototype.killGuard;
+  Game.prototype.killGuard=function(g){
+    const wasDead=!!(g&&g.dead);
+    const elite=!!(g&&(g.elite||g.intf||g.eliteMove));
+    const r=oldKillGuard?oldKillGuard.apply(this,arguments):undefined;
+    if(g&&!wasDead&&g.dead&&!g.sandbag){
+      const col=elite?'#ffb23c':'#d8ff44';
+      this.ringFx&&this.ringFx(g.x,g.y,col,elite?0.72:0.48,{r1:(g.r||48)+(elite?90:58),width:elite?13:8});
+      this.burst&&this.burst(g.x,g.y,elite?42:24,col,elite?470:330,elite?0.78:0.55,{glow:true,r:elite?7:5,g:160,len:elite?74:48});
+      this._hbBossFxText(g.x,g.y-(g.r||55)-36,elite?'菁英擊破':'擊破',col,elite?36:27);
+      if(this.run) this.run.shake=Math.max(this.run.shake||0,elite?14:7);
+    }
+    return r;
+  };
+
+  const oldStageClear=Game.prototype.onStageClear;
+  Game.prototype.onStageClear=function(){
+    const run=this.run;
+    const finalBoss=!!(run&&run.stage&&run.stage.boss&&run.spawned>=run.guardsTotal&&!run._stageClearing);
+    const name=run&&run.stage&&run.stage.name;
+    const r=oldStageClear?oldStageClear.apply(this,arguments):undefined;
+    if(finalBoss&&this.run===run){
+      run._hbBossDefeat={start:this.t||0,dur:2.25,name:name||'Boss',sub:run.endless?'深淵層主已倒下':'守衛崩解，聖物氣息外洩'};
+      run.shake=Math.max(run.shake||0,24);
+      this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+      this.ringFx&&this.ringFx(BW/2,BH*0.36,'#d8ff44',0.95,{r1:260,width:15});
+      this.burst&&this.burst(BW/2,BH*0.36,60,'#d8ff44',520,0.9,{glow:true,r:8,g:-40,len:90});
+    }
+    return r;
+  };
+
+  const oldFinishRun=Game.prototype.finishRun;
+  Game.prototype.finishRun=function(won){
+    const r=oldFinishRun?oldFinishRun.apply(this,arguments):undefined;
+    if(this._endStats&&won&&this._endStats.loot&&this._endStats.loot.length){
+      this._endStats._hbLootFxStart=this.t||0;
+      this._endStats._hbLootFxDur=2.8;
+    }
+    return r;
+  };
+
+  Game.prototype._hbDrawBossDrama=function(){
+    const run=this.run; if(!run||run.modal||this._paused||this._detailOpen) return;
+    const ctx=this.ctx;
+    const drawCard=(fx,titleCol,title,sub)=>{
+      const p=clamp(((this.t||0)-fx.start)/fx.dur,0,1);
+      if(p>=1) return false;
+      const ease=p<0.5?p*2:1-(p-0.5)*0.35;
+      ctx.save();
+      ctx.globalAlpha=clamp(1-p*0.85,0,1);
+      const g=ctx.createRadialGradient(BW/2,BH*0.34,40,BW/2,BH*0.34,BW*0.52);
+      g.addColorStop(0,'rgba(255,230,170,0.22)');
+      g.addColorStop(0.4,'rgba(255,120,60,0.10)');
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,BW,BH);
+      const w=760,h=144,x=BW/2-w/2,y=BH*0.15-16*Math.sin(p*Math.PI);
+      this.rr(x,y,w,h,18);
+      const bg=ctx.createLinearGradient(0,y,0,y+h);
+      bg.addColorStop(0,'rgba(20,10,7,0.94)');
+      bg.addColorStop(1,'rgba(7,4,7,0.92)');
+      ctx.fillStyle=bg; ctx.fill();
+      ctx.lineWidth=4;
+      ctx.strokeStyle=titleCol;
+      ctx.shadowBlur=22*ease;
+      ctx.shadowColor=titleCol;
+      this.rr(x,y,w,h,18); ctx.stroke();
+      ctx.shadowBlur=0;
+      this.text(title,BW/2,y+58,48,titleCol,{align:'center',baseline:'middle',weight:'900',glow:14});
+      this.text(sub,BW/2,y+100,24,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+      ctx.restore();
+      return true;
+    };
+    if(run._hbBossIntro&&!drawCard(run._hbBossIntro,'#ff7a3c','BOSS 登場',run._hbBossIntro.name+' · '+run._hbBossIntro.sub)) run._hbBossIntro=null;
+    if(run._hbBossDefeat&&!drawCard(run._hbBossDefeat,'#d8ff44','BOSS 擊破',run._hbBossDefeat.name+' · '+run._hbBossDefeat.sub)) run._hbBossDefeat=null;
+  };
+
+  const oldDrawBattle=Game.prototype.drawBattle;
+  Game.prototype.drawBattle=function(){
+    const r=oldDrawBattle?oldDrawBattle.apply(this,arguments):undefined;
+    this._hbDrawBossDrama&&this._hbDrawBossDrama();
+    return r;
+  };
+
+  const oldDrawEnd=Game.prototype.drawEnd;
+  Game.prototype.drawEnd=function(){
+    const r=oldDrawEnd?oldDrawEnd.apply(this,arguments):undefined;
+    const s=this._endStats;
+    if(!s||!s._hbLootFxStart||!s.loot||!s.loot.length) return r;
+    const dur=s._hbLootFxDur||2.8, p=clamp(((this.t||0)-s._hbLootFxStart)/dur,0,1);
+    if(p>=1) return r;
+    const ctx=this.ctx, a=1-p;
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=0.26*a;
+    const rg=ctx.createRadialGradient(BW/2,BH*0.58,80,BW/2,BH*0.58,BW*0.5);
+    rg.addColorStop(0,'rgba(255,232,150,0.55)');
+    rg.addColorStop(0.55,'rgba(184,255,47,0.18)');
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha=clamp(a*1.2,0,1);
+    this.text('聖物掉落',BW/2,Math.max(130,(this.insT||0)+116),54,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:18});
+    this.text('戰利品已顯現，選擇收藏或丟棄',BW/2,Math.max(178,(this.insT||0)+164),25,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    ctx.restore();
+    return r;
+  };
+
+  Game.prototype._hbDrawForgeBackdrop=function(title,sub,accent){
+    const ctx=this.ctx;
+    ctx.save();
+    const bg=ctx.createLinearGradient(0,0,0,BH);
+    bg.addColorStop(0,'rgba(12,5,10,0.96)');
+    bg.addColorStop(0.55,'rgba(5,4,8,0.98)');
+    bg.addColorStop(1,'rgba(18,10,5,0.98)');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,BW,BH);
+    const rg=ctx.createRadialGradient(BW/2,BH*0.32,30,BW/2,BH*0.32,BW*0.58);
+    rg.addColorStop(0,'rgba(255,226,130,0.22)');
+    rg.addColorStop(0.35,(accent||'#d8ff44')===' #d8ff44'?'rgba(184,255,47,0.08)':'rgba(184,255,47,0.08)');
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(0,0,BW,BH,'forge_scrim',()=>{});
+    this.text(title,BW/2,88,62,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:18});
+    this.text(sub,BW/2,138,25,accent||'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    const y=174, w=1120, x=BW/2-w/2, h=58;
+    const steps=['每 5 層：裝備 +1 等','第 30 層後：詞綴鑲嵌','可放棄詞綴，避免洗分'];
+    for(let i=0;i<steps.length;i++){
+      const sw=(w-36)/3, sx=x+i*(sw+18);
+      this.rr(sx,y,sw,h,14);
+      ctx.fillStyle='rgba(20,13,8,0.88)'; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle=i===1?'rgba(184,255,47,0.72)':'rgba(215,169,69,0.42)'; ctx.stroke();
+      this.text(steps[i],sx+sw/2,y+h/2+1,21,i===1?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+  };
+
+  Game.prototype._hbDrawForgeRelicCard=function(it,x,y,w,h,opts){
+    opts=opts||{};
+    const ctx=this.ctx, col=tierCol(it);
+    this.rr(x,y,w,h,20);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(38,25,15,0.98)');
+    bg.addColorStop(0.48,'rgba(13,9,10,0.98)');
+    bg.addColorStop(1,'rgba(5,4,8,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=3.5; ctx.strokeStyle=col; ctx.shadowBlur=18; ctx.shadowColor=col; this.rr(x,y,w,h,20); ctx.stroke(); ctx.shadowBlur=0;
+    this.text(tierName(it)+' · '+(RELIC_TYPE_LABEL[it.type]||it.core||'聖物'),x+w/2,y+42,22,col,{align:'center',baseline:'middle',weight:'900'});
+    const side=Math.min(150,w*0.42);
+    if(this._drawRelicSheetIcon) this._drawRelicSheetIcon(it.type,it.idx,x+w/2-side/2,y+68,side,side,1);
+    this.text(clip(this,it.name,w-44,31,'900'),x+w/2,y+244,31,col,{align:'center',baseline:'middle',weight:'900'});
+    this.text('Lv '+(Number(it.lvl)||0)+'  →  Lv '+((Number(it.lvl)||0)+1)+'　強度 '+(it.q||0)+'/50',x+w/2,y+282,22,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+    const lines=(it.affixes||[]).slice(0,4).map(a=>'◆ '+affixLine(a));
+    if(!lines.length&&it.desc) lines.push(clip(this,it.desc,w-58,20,'800'));
+    for(let k=0;k<Math.min(4,lines.length);k++) this.text(clip(this,lines[k],w-54,20,'800'),x+28,y+326+k*34,20,'#efe3ca',{baseline:'middle',weight:'800'});
+    const by=y+h-78;
+    this.button(x+30,by,w-60,58,opts.forge?'升級並鑲嵌':'升級 +1','endless_gear_'+it.id,()=>this._hbChooseEndlessGearReward(it.id),{primary:true,size:25,weight:'900'});
+  };
+
+  const oldDrawModal=Game.prototype.drawModal;
+  Game.prototype.drawModal=function(){
+    const run=this.run, m=run&&run.modal;
+    if(!m||!(m.kind==='endlessGearReward'||m.kind==='endlessSocketAffixReward')) return oldDrawModal.apply(this,arguments);
+    const ctx=this.ctx;
+    if(m.kind==='endlessGearReward'){
+      this._hbDrawForgeBackdrop('深淵鍛造','第 '+m.depth+' 層完成：選擇一件身上聖物升級 1 等'+(m.forge?'，接著可鑲嵌詞綴':''),'#d8ff44');
+      const items=(m.choices||[]).map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):(this._relicDisplay?this._relicDisplay(id,true):null)).filter(Boolean);
+      const n=Math.max(1,items.length), gap=26, cw=Math.min(330,(BW-220-(n-1)*gap)/n), ch=520;
+      const total=n*cw+(n-1)*gap, x0=BW/2-total/2, y=264;
+      for(let i=0;i<items.length;i++) this._hbDrawForgeRelicCard(items[i],x0+i*(cw+gap),y,cw,ch,{forge:m.forge});
+      return;
+    }
+
+    this._hbDrawForgeBackdrop('深淵鑲嵌','第 '+m.depth+' 層：'+(m.itemName||'聖物')+' 已升至 Lv '+(m.upLevel||'')+'，選擇詞綴或放棄','#ffb23c');
+    const choices=Array.isArray(m.choices)?m.choices:[], n=Math.max(1,choices.length);
+    const gap=32, cw=Math.min(420,(BW-240-(n-1)*gap)/n), ch=474, total=n*cw+(n-1)*gap, x0=BW/2-total/2, y=274;
+    for(let i=0;i<choices.length;i++){
+      const a=choices[i], rm=SOCKET_RARITY[a.rarity]||SOCKET_RARITY.magic, x=x0+i*(cw+gap);
+      this.rr(x,y,cw,ch,20);
+      const bg=ctx.createLinearGradient(0,y,0,y+ch);
+      bg.addColorStop(0,'rgba(39,27,17,0.98)');
+      bg.addColorStop(1,'rgba(7,5,9,0.99)');
+      ctx.fillStyle=bg; ctx.fill();
+      ctx.lineWidth=3.5; ctx.strokeStyle=rm.col; ctx.shadowBlur=20; ctx.shadowColor=rm.col; this.rr(x,y,cw,ch,20); ctx.stroke(); ctx.shadowBlur=0;
+      ctx.save(); ctx.fillStyle=rm.glow; ctx.beginPath(); ctx.arc(x+cw/2,y+98,78,0,TAU); ctx.fill(); ctx.restore();
+      this.text(rm.name,x+cw/2,y+40,22,rm.col,{align:'center',baseline:'middle',weight:'900'});
+      this.text(a.mode==='refine'?'精煉既有詞綴':'鑲嵌新詞綴',x+cw/2,y+76,20,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      this.text(clip(this,affixName(a),cw-56,34,'900'),x+cw/2,y+134,34,'#fff4dc',{align:'center',baseline:'middle',weight:'900'});
+      this.text(affixValue(a),x+cw/2,y+190,36,rm.col,{align:'center',baseline:'middle',weight:'900',glow:10});
+      this.wrap(a.desc||'深淵詞綴會永久寫入裝備，可放棄本次鑲嵌。',x+cw/2,y+252,cw-62,31,'#c8b894',22,'center');
+      this.text(a.mode==='refine'?'提升這條詞綴數值':'佔用 1 個鑲嵌欄位',x+cw/2,y+360,20,'#8f846e',{align:'center',baseline:'middle',weight:'800'});
+      this.button(x+34,y+ch-80,cw-68,58,a.mode==='refine'?'精煉詞綴':'鑲嵌詞綴','endless_socket_'+i,()=>this._hbChooseSocketAffix(i),{primary:true,size:25,weight:'900'});
+    }
+    this.button(BW/2-220,y+ch+34,440,64,'放棄詞綴，繼續深入','endless_socket_skip',()=>this._hbSkipSocketAffix(),{size:25,color:'#f0c0b0',weight:'900'});
   };
 })();
