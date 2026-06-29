@@ -7044,7 +7044,7 @@ Object.assign(Game.prototype,{
         this._sb(x+sw-130,y+sh-46,110,34,'卸下',()=>{ s.library.push(id); s.relics[i]=null; persist(s); this.audio.sfx('ui'); }); }
       else this.text('（空）',x+20,y+78,22,'rgba(160,150,130,0.6)'); }
     // library
-    this.text('聖物庫 '+s.library.length+'/30',BW/2,y+sh+50,30,'#ece0c4',{align:'center',weight:'700'});
+    this.text('聖物庫 '+s.library.length+'/40',BW/2,y+sh+50,30,'#ece0c4',{align:'center',weight:'700'});
     const gx=120,gy=y+sh+80,cols=5,cw=(BW-240)/cols-16,ch=126;
     if(s.library.length===0) this.text('完成遠征以取得更多聖物',BW/2,gy+70,24,'rgba(200,190,170,0.5)',{align:'center'});
     for(let i=0;i<s.library.length&&i<10;i++){ const id=s.library[i],R=RELICS[id],x=gx+(i%cols)*(cw+16),cy=gy+((i/cols)|0)*(ch+16);
@@ -7077,7 +7077,7 @@ Object.assign(Game.prototype,{
   // loot claim from win screen
   claimLoot(id,how){ const s=this.save; const R=RELICS[id];
     if(how==='dismantle'){ this._endStats.picked=true; persist(s); this.audio.sfx('coin'); return; }
-    if(how==='library'){ if(s.library.length>=30){ this.toast('聖物庫已滿','請先分解'); return; } s.library.push(id); this._endStats.picked=true; persist(s); this.audio.sfx('select'); return; }
+    if(how==='library'){ if(s.library.length>=40){ this.toast('聖物庫已滿','請先整理背包'); return; } s.library.push(id); this._endStats.picked=true; persist(s); this.audio.sfx('select'); return; }
     // equip
     const empty=s.relics.indexOf(null); if(empty>=0){ s.relics[empty]=id; this._endStats.picked=true; persist(s); this.audio.sfx('select'); }
     else { this._replaceTarget={id,from:'loot'}; }
@@ -7496,7 +7496,7 @@ Object.assign(Game.prototype,{
         const by=lyy+lh-92, bw2=(lw-40)/2;
         { let ay=by-26-meta.affixes.length*36; for(const a of meta.affixes){ this.text('◆ '+a.label+' +'+(a.pct?Math.round(a.val*100)+'%':a.val), x+lw/2, ay, 24, '#9fe6ff', {align:'center',weight:'700'}); ay+=36; } }
         ((id2,idx)=>{
-          this._sb(x+14,by,bw2-6,76,'收下',()=>{ const sv=this.save; if((sv.library||[]).length>=30){ this.toast('聖物庫已滿','請先整理倉庫'); return; } sv.library.push(id2); persist(sv); this.audio.sfx('select'); s.loot.splice(idx,1); this.render(); },{size:32,primary:true});
+          this._sb(x+14,by,bw2-6,76,'收下',()=>{ const sv=this.save; if(!Array.isArray(sv.library)) sv.library=[]; if((sv.library||[]).length>=40){ this.toast('背包已滿','請先丟棄或整理裝備'); return; } if(!sv.library.includes(id2)) sv.library.push(id2); persist(sv); this.audio.sfx('select'); s.loot.splice(idx,1); this.render(); },{size:32,primary:true});
           this._sb(x+14+bw2+12,by,bw2-6,76,'丟棄',()=>{ s.loot.splice(idx,1); this.audio.sfx('ui'); this.render(); },{size:32});
         })(id,i); }
     } else {
@@ -15393,4 +15393,175 @@ Object.assign(Game.prototype,{
     this.button(p.x+p.w/2-W(65),p.y+p.h+H(10),W(130),H(36),'\u95dc\u9589','bean_v39_info_close',()=>{ this._relicCompare=null; this.render(); },{size:17*S,weight:'900',r:7*S});
   };
   try{ window.__HB_BEAN_BACKPACK_FINAL__='v39-user-calibrated'; }catch(e){}
+})();
+
+// === final activation v40: backpack loot capacity safety ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const CAP=40;
+  const BALL_SLOT=2;
+  const SIDE_SLOTS=[0,1,3,4];
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const ensure=s=>{
+    if(!s) return;
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    while(s.loadout.length<5) s.loadout.push(null);
+    if(s.loadout.length>5) s.loadout=s.loadout.slice(0,5);
+    if(!Array.isArray(s.library)) s.library=[];
+  };
+  const toast=(g,m,sub)=>{ try{ g.toast&&g.toast(m,sub); }catch(e){} };
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+  function itemFor(g,id){ return g&&g._hbRelicDisplay?g._hbRelicDisplay(id):(typeof RELICS!=='undefined'&&RELICS[id]?RELICS[id]:null); }
+  function accepts(g,slot,idOrItem){
+    if(!validSlot(slot)) return false;
+    const item=typeof idOrItem==='string'?itemFor(g,idOrItem):idOrItem;
+    if(!item) return false;
+    const type=item.type||item.equipType||'ball';
+    return type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT;
+  }
+  function preferredSlot(g,item){
+    const s=g.save||{};
+    ensure(s);
+    const type=item&& (item.type||item.equipType);
+    if(type==='ball') return BALL_SLOT;
+    if(validSlot(g._relicSlotTarget)&&accepts(g,g._relicSlotTarget,item)) return g._relicSlotTarget;
+    for(const slot of SIDE_SLOTS) if(!s.loadout[slot]) return slot;
+    return SIDE_SLOTS[0];
+  }
+  function uniquePush(arr,id){
+    if(!id) return true;
+    if(arr.includes(id)) return true;
+    if(arr.length>=CAP) return false;
+    arr.push(id);
+    return true;
+  }
+
+  Game.prototype._hbLibraryCap=function(){ return CAP; };
+  Game.prototype._hbLibraryFull=function(){
+    const s=this.save||{};
+    ensure(s);
+    return s.library.length>=CAP;
+  };
+  Game.prototype._hbStoreRelic=function(id){
+    const s=this.save||{};
+    ensure(s);
+    if(!id||typeof RELICS==='undefined'||!RELICS[id]) return false;
+    if(s.loadout.includes(id)||s.library.includes(id)) return true;
+    if(s.library.length>=CAP) return false;
+    s.library.push(id);
+    return true;
+  };
+  Game.prototype._hbKeepOwned=function(id){
+    return this._hbStoreRelic(id);
+  };
+
+  Game.prototype._hbUnequipRelic=function(rid){
+    const s=this.save||{};
+    ensure(s);
+    const idx=s.loadout.indexOf(rid);
+    if(idx<0) return;
+    if(!s.library.includes(rid)&&s.library.length>=CAP){
+      toast(this,'\u80cc\u5305\u5df2\u6eff','\u8acb\u5148\u4e1f\u68c4\u6216\u6574\u7406\u88dd\u5099');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    uniquePush(s.library,rid);
+    s.loadout[idx]=null;
+    persist(s);
+    sync(this);
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this._bagSel=rid;
+    toast(this,'\u5df2\u5378\u4e0b','\u653e\u56de\u5eab\u5b58');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbEquipRelic=function(rid,opts){
+    opts=opts||{};
+    const s=this.save||{};
+    ensure(s);
+    if(!rid||typeof RELICS==='undefined'||!RELICS[rid]) return;
+    const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():s.loadout;
+    const item=itemFor(this,rid);
+    if(!item) return;
+    if(load.includes(rid)){
+      toast(this,'\u5df2\u88dd\u5099',item.name||rid);
+      this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+      this.render&&this.render();
+      return;
+    }
+    let slot=(validSlot(opts.slot)&&accepts(this,opts.slot,item))?opts.slot:-1;
+    if(opts.current&&load.includes(opts.current)) slot=load.indexOf(opts.current);
+    if(!accepts(this,slot,item)) slot=preferredSlot(this,item);
+    if(!validSlot(slot)||!accepts(this,slot,item)){
+      toast(this,'\u88dd\u5099\u6b04\u4f4d\u4e0d\u7b26',(item.type||item.equipType)==='ball'?'\u7c43\u7403\u53ea\u80fd\u88dd\u5728\u4e2d\u9593\u552f\u4e00\u7c43\u7403\u6b04':'\u975e\u7c43\u7403\u4e0d\u80fd\u88dd\u5728\u4e2d\u9593\u6b04');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+
+    const displaced=[];
+    const old=load[slot];
+    if(old&&old!==rid&&!s.library.includes(old)) displaced.push(old);
+    if((item.type||item.equipType)==='ball'){
+      for(let i=0;i<load.length;i++){
+        const ex=load[i];
+        if(i!==slot&&ex&&this._hbIsBallRelic&&this._hbIsBallRelic(ex)&&!s.library.includes(ex)) displaced.push(ex);
+      }
+    }
+    const freed=s.library.includes(rid)?1:0;
+    const uniqueDisplaced=[...new Set(displaced.filter(Boolean))];
+    if(s.library.length-freed+uniqueDisplaced.length>CAP){
+      toast(this,'\u80cc\u5305\u5df2\u6eff','\u5148\u6574\u7406\u80cc\u5305\u624d\u80fd\u66ff\u63db\u88dd\u5099');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+
+    s.library=s.library.filter(id=>id!==rid);
+    if((item.type||item.equipType)==='ball'){
+      for(let i=0;i<load.length;i++){
+        const ex=load[i];
+        if(i!==slot&&ex&&this._hbIsBallRelic&&this._hbIsBallRelic(ex)){
+          load[i]=null;
+          uniquePush(s.library,ex);
+        }
+      }
+    }
+    if(old&&old!==rid) uniquePush(s.library,old);
+    load[slot]=rid;
+    if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots();
+    persist(s);
+    sync(this);
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this._bagSel=rid;
+    toast(this,'\u5df2\u88dd\u5099',item.name||rid);
+    this.audio&&this.audio.sfx&&this.audio.sfx('select');
+    this.render&&this.render();
+  };
+
+  const prevClaim=Game.prototype.claimLoot;
+  Game.prototype.claimLoot=function(id,how){
+    const s=this.save||{};
+    ensure(s);
+    if(how==='library'){
+      if(s.library.length>=CAP){
+        toast(this,'\u80cc\u5305\u5df2\u6eff','\u8acb\u5148\u4e1f\u68c4\u6216\u6574\u7406\u88dd\u5099');
+        this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+        return;
+      }
+      if(!s.library.includes(id)) s.library.push(id);
+      if(this._endStats) this._endStats.picked=true;
+      persist(s);
+      sync(this);
+      this.audio&&this.audio.sfx&&this.audio.sfx('select');
+      return;
+    }
+    return prevClaim?prevClaim.call(this,id,how):undefined;
+  };
+
+  try{ window.__HB_BACKPACK_CAPACITY_FINAL__='v40-capacity-safe'; }catch(e){}
 })();
