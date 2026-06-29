@@ -5425,14 +5425,19 @@ Object.assign(Game.prototype,{
     const drawSld=(rx,ry,rw,rh,label,key,cb)=>{ this.rr(rx,ry,rw,rh,14); ctx.fillStyle='rgba(26,18,10,0.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#5a4326'; this.rr(rx,ry,rw,rh,14); ctx.stroke();
       this.text(label,rx+30,ry+rh/2,30,'#ece0c4',{baseline:'middle'}); const sx=rx+rw*0.42, sw=rw*0.42, sy=ry+rh/2, v=st[key]; ctx.lineWidth=8; ctx.strokeStyle='rgba(200,155,60,0.4)'; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+sw,sy); ctx.stroke(); ctx.strokeStyle='#caa23a'; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+sw*v,sy); ctx.stroke(); ctx.beginPath(); ctx.arc(sx+sw*v,sy,18,0,TAU); ctx.fillStyle='#ece0c4'; ctx.fill();
       this._sliders[key]={x:sx,w:sw,y:ry,h:rh,cb}; this.btn(sx-12,ry,sw+24,rh,'sl'+key,()=>{}); };
+    const drawShot=(rx,ry,rw,rh)=>{ if(typeof st.shotPush!=='boolean') st.shotPush=false; const active=!!st.shotPush; this.rr(rx,ry,rw,rh,14); ctx.fillStyle='rgba(26,18,10,0.82)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#5a4326'; this.rr(rx,ry,rw,rh,14); ctx.stroke();
+      this.text('投籃手感',rx+30,ry+rh/2-12,30,'#ece0c4',{baseline:'middle',weight:'800'}); this.text(active?'手指往前推':'往後拉弓',rx+30,ry+rh/2+22,18,'#a99c80',{baseline:'middle',weight:'700'});
+      const gap=12,bw=118,bh=Math.min(58,rh-30),by=ry+rh/2-bh/2,bx=rx+rw-(bw*2+gap)-26;
+      this.button(bx,by,bw,bh,'拉弓','shot_setting_pull',()=>{ if(this._hbSetShotMode) this._hbSetShotMode(false); else { st.shotPush=false; persist(this.save); this.render(); } },{primary:!active,size:21,weight:'900'});
+      this.button(bx+bw+gap,by,bw,bh,'推投','shot_setting_push',()=>{ if(this._hbSetShotMode) this._hbSetShotMode(true); else { st.shotPush=true; persist(this.save); this.render(); } },{primary:active,size:21,weight:'900'}); };
     const sw=Math.min(BW*0.9,1720), cgap=40, cardW=(sw-cgap)/2, sx0=BW/2-sw/2;
     const cy=IT+168, devH=104, devY=BH-devH-54, cardH=devY-30-cy;
     const cards=[ {hdr:'音訊', sx:sx0, rows:[['t','音樂','music',v=>this.audio.setMusic(v)],['t','音效','sfx',v=>this.audio.setSfx(v)],['s','音樂音量','musicVol',v=>this.audio.setMVol(v)],['s','音效音量','sfxVol',v=>this.audio.setSVol(v)]] },
-                  {hdr:'遊戲', sx:sx0+cardW+cgap, rows:[['t','震動','vibrate'],['t','左手模式','lefty'],['t','減少動態','reduceMotion'],['t','低效能模式','lowPerf']] } ];
+                  {hdr:'遊戲', sx:sx0+cardW+cgap, rows:[['t','震動','vibrate'],['t','左手模式','lefty'],['shot','投籃手感'],['t','減少動態','reduceMotion'],['t','低效能模式','lowPerf']] } ];
     for(const c of cards){ this.rr(c.sx,cy,cardW,cardH,18); ctx.fillStyle='rgba(18,13,8,0.66)'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#5a4326'; this.rr(c.sx,cy,cardW,cardH,18); ctx.stroke();
       this.text(c.hdr, c.sx+34, cy+56, 34, '#e6c068', {weight:'800'});
       const innerTop=cy+86, innerH=cardH-86-22, n=c.rows.length, slot=innerH/n, rh=slot-16, rw=cardW-48, rx=c.sx+24;
-      for(let i=0;i<n;i++){ const ry=innerTop+i*slot+8; const r=c.rows[i]; if(r[0]==='t') drawTog(rx,ry,rw,rh,r[1],r[2],r[3]); else drawSld(rx,ry,rw,rh,r[1],r[2],r[3]); } }
+      for(let i=0;i<n;i++){ const ry=innerTop+i*slot+8; const r=c.rows[i]; if(r[0]==='t') drawTog(rx,ry,rw,rh,r[1],r[2],r[3]); else if(r[0]==='shot') drawShot(rx,ry,rw,rh); else drawSld(rx,ry,rw,rh,r[1],r[2],r[3]); } }
     { const adm=this.save.admin, dx=sx0, dw=sw; this.rr(dx,devY,dw,devH,16); const dg=ctx.createLinearGradient(dx,devY,dx,devY+devH); dg.addColorStop(0,'rgba(40,30,14,0.92)'); dg.addColorStop(1,'rgba(22,16,8,0.92)'); ctx.fillStyle=dg; ctx.fill(); ctx.lineWidth=2.5; ctx.strokeStyle=adm?'#39ff88':'#e6c068'; this.rr(dx,devY,dw,devH,16); ctx.stroke();
       this.text(adm?'🛠 開發者模式：開啟中（點此關閉）':'🛠 開發者模式', dx+40, devY+devH/2-8, 30, adm?'#39ff88':'#e6c068', {weight:'800',baseline:'middle'});
       this.text(adm?'全地圖 · 一球秒節點 · 排版調整 · 不計成績':'輸入密碼啟用 · 全地圖 / 一球秒節點 / 排版調整 / 不計成績', dx+40, devY+devH/2+28, 20, '#a99c80', {baseline:'middle'});
@@ -13040,10 +13045,7 @@ Object.assign(Game.prototype,{
 
   const latestDrawSettings=Game.prototype.drawSettings;
   Game.prototype.drawSettings=function(){
-    const r=latestDrawSettings?latestDrawSettings.apply(this,arguments):undefined;
-    const IT=this.insT||0, IR=this.insR||0;
-    this._hbDrawShotModeSwitch(BW-IR-610,IT+48,540,96,{U:1});
-    return r;
+    return latestDrawSettings?latestDrawSettings.apply(this,arguments):undefined;
   };
 
   const latestDrawPause=Game.prototype.drawPause;
