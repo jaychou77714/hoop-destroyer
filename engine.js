@@ -11935,3 +11935,291 @@ Object.assign(Game.prototype,{
     Game.prototype.killGuard=wrappedKill;
   }
 })();
+
+// === final activation v28: relic detail readability and clearer aim guide ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const RELIC_SHEETS={
+    ball:'icons_balls.png',
+    wrist:'icons_wrist.png',
+    shoes:'icons_shoes.png',
+    charm:'icons_charms.png',
+    mask:'icons_masks.png',
+    hoop:'icons_hoops.png'
+  };
+  const relicTierCol=it=>{
+    const q=['#6fb0e8','#9fe024','#b980ff','#ffb23c','#ff5a4d','#f4f0d0'];
+    return q[(it&&it.tier)||0]||q[0];
+  };
+  const validHeroSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+
+  Game.prototype._drawRelicSheetIcon=function(type,idx,x,y,w,h,alpha){
+    const im=this._relicUiImg&&this._relicUiImg(RELIC_SHEETS[type]||RELIC_SHEETS.ball);
+    const ctx=this.ctx; alpha=alpha==null?1:alpha;
+    const side=Math.min(w,h), dx=x+(w-side)/2, dy=y+(h-side)/2;
+    if(im&&im.complete&&im.naturalWidth&&!im._err){
+      const cols=4, sw=im.naturalWidth/cols, sh=im.naturalHeight/4;
+      const safeIdx=Math.max(0,Number(idx)||0);
+      const padX=Math.max(18,sw*0.115), padY=Math.max(22,sh*0.135);
+      const sx=(safeIdx%cols)*sw+padX, sy=((safeIdx/cols)|0)*sh+padY;
+      const cw=Math.max(8,sw-padX*2), ch=Math.max(8,sh-padY*2);
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      this.rr(x,y,w,h,10);
+      ctx.clip();
+      ctx.shadowColor='rgba(255,231,166,0.16)';
+      ctx.shadowBlur=8;
+      ctx.drawImage(im,sx,sy,cw,ch,dx,dy,side,side);
+      ctx.restore();
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    this.rr(dx,dy,side,side,10);
+    ctx.fillStyle='rgba(20,14,9,0.9)';
+    ctx.fill();
+    ctx.strokeStyle='rgba(215,169,69,0.45)';
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  Game.prototype._hbDrawModalCard=function(it,x,y,w,h,title,col){
+    const ctx=this.ctx;
+    this.text(title,x+w/2,y-24,30,col,{align:'center',baseline:'middle',weight:'900'});
+    this.rr(x,y,w,h,18);
+    ctx.fillStyle='rgba(5,4,8,0.66)';
+    ctx.fill();
+    ctx.lineWidth=3.2;
+    ctx.strokeStyle=it?relicTierCol(it):'rgba(160,150,130,0.35)';
+    ctx.stroke();
+    if(!it){
+      this.text('空欄',x+w/2,y+h/2,38,'rgba(210,200,180,0.56)',{align:'center',baseline:'middle',weight:'900'});
+      return;
+    }
+    const side=Math.min(w*0.5,h*0.40);
+    this._drawRelicSheetIcon(it.type,it.idx,x+w/2-side/2,y+34,side,side,1);
+    this.text(this._clip(it.name,w-64,36,'900'),x+w/2,y+h*0.56,36,relicTierCol(it),{align:'center',baseline:'middle',weight:'900'});
+    this.text(this._hbRelicSummary?this._hbRelicSummary(it):((it.core||'聖物')+(it.q?(' · 強度 '+it.q+'/50'):'')),x+w/2,y+h*0.65,24,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+    const lines=(it.affixes||[]).slice(0,3).map(a=>'◆ '+a.label+' +'+(a.pct?Math.round(a.val*100)+'%':a.val));
+    if(!lines.length&&it.desc) lines.push(this._clip(it.desc,w-88,22,'900'));
+    for(let i=0;i<Math.min(3,lines.length);i++) this.text(lines[i],x+48,y+h*0.74+i*41,23,'#fff1d5',{baseline:'middle',weight:'900'});
+  };
+
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare;
+    if(!c) return;
+    const ctx=this.ctx;
+    const selected=this._hbRelicDisplay?this._hbRelicDisplay(c.rid):(this._relicDisplay&&this._relicDisplay(c.rid,true));
+    if(!selected) return;
+    const current=c.current?(this._hbRelicDisplay?this._hbRelicDisplay(c.current):this._relicDisplay(c.current,true)):null;
+    const single=c.inspect||!current||current.id===selected.id;
+
+    ctx.save();
+    ctx.fillStyle='rgba(2,1,5,0.76)';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(0,0,BW,BH,'cmp_scrim',()=>{});
+
+    if(single){
+      const w=Math.min(900,BW-180), h=Math.min(730,BH-120), x=BW/2-w/2, y=BH/2-h/2+4;
+      this.rr(x,y,w,h,24);
+      ctx.fillStyle='rgba(8,5,10,0.97)';
+      ctx.fill();
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.82)';
+      ctx.stroke();
+      this.text(c.equipped?'已裝備聖物':'聖物詳情',x+w/2,y+60,46,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+      const icon=Math.min(224,w*0.32);
+      this._drawRelicSheetIcon(selected.type,selected.idx,x+w/2-icon/2,y+100,icon,icon,1);
+      this.text(this._clip(selected.name,w-120,42,'900'),x+w/2,y+354,42,relicTierCol(selected),{align:'center',baseline:'middle',weight:'900'});
+      const summary=this._hbRelicSummary?this._hbRelicSummary(selected):((selected.core||'聖物')+(selected.q?(' · 強度 '+selected.q+'/50'):''));
+      this.text(summary,x+w/2,y+402,27,'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      const lines=(selected.affixes||[]).slice(0,3).map(a=>'◆ '+a.label+' +'+(a.pct?Math.round(a.val*100)+'%':a.val));
+      if(selected.desc) lines.push(this._clip(selected.desc,w-150,24,'900'));
+      const maxLines=h>675?4:3, first=y+462, lh=42;
+      for(let i=0;i<Math.min(maxLines,lines.length);i++) this.text(lines[i],x+86,first+i*lh,25,'#fff1d5',{baseline:'middle',weight:'900'});
+      const bw=248,bh=72,by=y+h-96;
+      if(c.equipped){
+        this.button(x+w/2-bw-26,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
+        this.button(x+w/2+26,by,bw,bh,'卸下','cmp_unequip',()=>this._hbUnequipRelic(selected.id),{size:32,color:'#f0c0b0',weight:'900'});
+      }else{
+        const canDiscard=(this.save.library||[]).includes(selected.id);
+        if(canDiscard){
+          const sbw=216,gap=18,total=sbw*3+gap*2,sx=x+w/2-total/2;
+          this.button(sx,by,sbw,bh,'丟棄','cmp_discard',()=>this._hbConfirmDiscardRelic(selected.id),{danger:true,size:29,color:'#fff0e8',weight:'900'});
+          this.button(sx+sbw+gap,by,sbw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:29});
+          this.button(sx+(sbw+gap)*2,by,sbw,bh,validHeroSlot(c.slot)?('裝入第 '+(c.slot+1)+' 欄'):'裝備','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:28,weight:'900'});
+        }else{
+          this.button(x+w/2-bw-26,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:30});
+          this.button(x+w/2+26,by,bw,bh,validHeroSlot(c.slot)?('裝入第 '+(c.slot+1)+' 欄'):'裝備','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:31,weight:'900'});
+        }
+      }
+      return;
+    }
+
+    const w=Math.min(1360,BW-150), h=Math.min(760,BH-120), x=BW/2-w/2, y=BH/2-h/2+4;
+    const im=this._relicUiImg&&this._relicUiImg('compare_modal.png');
+    if(im&&im.complete&&im.naturalWidth&&!im._err) ctx.drawImage(im,x,y,w,h);
+    else {
+      this.rr(x,y,w,h,24);
+      ctx.fillStyle='rgba(8,5,10,0.97)';
+      ctx.fill();
+      ctx.lineWidth=4;
+      ctx.strokeStyle='rgba(215,169,69,0.82)';
+      ctx.stroke();
+    }
+    this.text('裝備比較',x+w/2,y+60,46,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:12});
+    const cardW=Math.min(510,(w-260)/2), cardH=Math.min(490,h-250);
+    this._hbDrawModalCard(current,x+96,y+148,cardW,cardH,'目前裝備','#bfff2f');
+    this._hbDrawModalCard(selected,x+w-96-cardW,y+148,cardW,cardH,'準備裝備','#b980ff');
+    this.text('VS',x+w/2,y+370,56,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:10});
+    const bw=286,bh=76,by=y+h-108;
+    const canDiscard=(this.save.library||[]).includes(selected.id)&&!((this.save.loadout||[]).includes(selected.id));
+    if(canDiscard){
+      const sbw=244,gap=24,total=sbw*3+gap*2,sx=x+w/2-total/2;
+      this.button(sx,by,sbw,bh,'丟棄','cmp_discard',()=>this._hbConfirmDiscardRelic(selected.id),{danger:true,size:31,color:'#fff0e8',weight:'900'});
+      this.button(sx+sbw+gap,by,sbw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:31});
+      this.button(sx+(sbw+gap)*2,by,sbw,bh,'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:33,weight:'900'});
+    }else{
+      this.button(x+w/2-bw-36,by,bw,bh,'返回','cmp_back',()=>{this._relicCompare=null;this.render();},{size:31});
+      this.button(x+w/2+36,by,bw,bh,'替換','cmp_equip',()=>this._equipFromCompare(),{primary:true,size:35,weight:'900'});
+    }
+  };
+
+  Game.prototype.drawAim=function(){
+    const ctx=this.ctx, run=this.run;
+    if(!run||!run.aiming) return;
+    const b=run.ball; if(!b) return;
+    const ax=(run.aimStartX!=null?run.aimStartX:b.x), ay=(run.aimStartY!=null?run.aimStartY:b.y);
+    const dx=ax-run.aimX, dy=ay-run.aimY, pull=Math.hypot(dx,dy);
+
+    if(run.prevTraj&&run.prevTraj.length>1){
+      ctx.save();
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      ctx.setLineDash([13,9]);
+      ctx.globalAlpha=0.55;
+      ctx.strokeStyle='rgba(0,0,0,0.88)';
+      ctx.lineWidth=8;
+      ctx.beginPath();
+      ctx.moveTo(run.prevTraj[0][0],run.prevTraj[0][1]);
+      for(let i=1;i<run.prevTraj.length;i++) ctx.lineTo(run.prevTraj[i][0],run.prevTraj[i][1]);
+      ctx.stroke();
+      ctx.globalAlpha=0.82;
+      ctx.strokeStyle='#fff0b8';
+      ctx.lineWidth=4;
+      ctx.shadowBlur=10;
+      ctx.shadowColor='#ffe14d';
+      ctx.beginPath();
+      ctx.moveTo(run.prevTraj[0][0],run.prevTraj[0][1]);
+      for(let i=1;i<run.prevTraj.length;i++) ctx.lineTo(run.prevTraj[i][0],run.prevTraj[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if(pull<60){
+      this.text('放開取消',b.x,b.y-60,26,'#ff6a4a',{align:'center',weight:'900',glow:8});
+      return;
+    }
+    let maxPull=520;
+    if(this._intfActive&&this._intfActive('maxPull')) maxPull*=0.85;
+    if(this._intfActive&&this._intfActive('slowCharge')) maxPull*=1.15;
+    const p=clamp(pull,0,maxPull)/maxPull, power=lerp(820,2650,p), ang=Math.atan2(dy,dx);
+    let vx=Math.cos(ang)*power, vy=Math.sin(ang)*power, x=b.x, y=b.y;
+    const G=2600*this._gravMul(), hh=1/60, pts=[];
+    let dots=70+Math.round((run.relicIds&&run.relicIds.includes('deadeye_sigil'))?8:0);
+    if(run.heroId==='shade'&&run._shadeBonus) dots+=6;
+    if(run.relicIds&&run.relicIds.includes('deadeye_sigil')) dots=Math.round(dots*1.2);
+    dots=Math.round(dots*this._getAimPreviewPct());
+    if(this._intfActive&&this._intfActive('shortTraj')) dots=Math.round(dots*0.5);
+    dots=Math.max(8,dots);
+    let lx=x, ly=y;
+    for(let i=0;i<dots;i++){
+      vy+=G*hh; x+=vx*hh; y+=vy*hh; lx=x; ly=y;
+      if(y>BH-92||x<0||x>BW) break;
+      pts.push([x,y,i/dots]);
+    }
+    const col=this._ballColor(run.form);
+    if(pts.length>1){
+      ctx.save();
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      ctx.setLineDash([12,10]);
+      ctx.globalAlpha=0.55;
+      ctx.strokeStyle='rgba(0,0,0,0.95)';
+      ctx.lineWidth=10;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.stroke();
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=0.88;
+      ctx.strokeStyle='#fff2b4';
+      ctx.lineWidth=5;
+      ctx.shadowBlur=14;
+      ctx.shadowColor=col;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(const pt of pts){
+      const tt=pt[2], r=lerp(10,3.8,tt), a=(1-tt)*0.96;
+      ctx.globalAlpha=a;
+      ctx.shadowBlur=12;
+      ctx.shadowColor=col;
+      ctx.fillStyle='rgba(0,0,0,0.85)';
+      ctx.beginPath();
+      ctx.arc(pt[0],pt[1],r+3,0,TAU);
+      ctx.fill();
+      ctx.fillStyle=tt<0.5?'#fff2b4':col;
+      ctx.beginPath();
+      ctx.arc(pt[0],pt[1],r,0,TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    if(!(this._intfActive&&this._intfActive('hideLanding'))){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.beginPath();
+      ctx.arc(lx,ly,16,0,TAU);
+      ctx.globalAlpha=0.28;
+      ctx.fillStyle=col;
+      ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.lineWidth=4;
+      ctx.strokeStyle='#fff2b4';
+      ctx.shadowBlur=14;
+      ctx.shadowColor=col;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,0.78)';
+    ctx.lineWidth=8;
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.lineTo(run.aimX,run.aimY);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,242,180,0.90)';
+    ctx.lineWidth=4;
+    ctx.shadowBlur=8;
+    ctx.shadowColor='#ffe14d';
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.lineTo(run.aimX,run.aimY);
+    ctx.stroke();
+    ctx.restore();
+
+    const pp=Math.round(p*100);
+    const elev=Math.atan2(-Math.sin(ang),Math.abs(Math.cos(ang)))*180/Math.PI;
+    const arc=elev<30?'平射':(elev<55?'標準':'高拋');
+    const ap=Math.round(this._getAimPreviewPct()*100);
+    this.text('力道 '+pp+'%　弧線 '+arc+'　軌跡 '+ap+'%',BW/2,BH-70,27,'#fff2b4',{align:'center',weight:'900',glow:true});
+  };
+})();
