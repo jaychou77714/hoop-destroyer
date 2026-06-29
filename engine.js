@@ -761,6 +761,908 @@ class Game{
   };
 })();
 
+// === final activation v35: last-write backpack alignment and clean crop fix ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const BALL_SLOT=2;
+  const SIDE_SLOTS=[0,1,3,4];
+  const TYPES=['ball','wrist','shoes','charm','mask','hoop'];
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const TABS=[['全部',''],['籃球','ball'],['護腕','wrist'],['球鞋','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+  const SORTS=[['稀有度','rarity'],['部位','type'],['已裝備','equipped'],['可升級','upgrade']];
+  const SLOT_LABELS=['副裝','護具','唯一籃球','飾品','籃框'];
+  const TIER_COL=['#d8d1bd','#7fd8ff','#c88cff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳奇','神話'];
+  const CLEAN_VER='20260629_clean_relics_v5';
+  const uniq=list=>{ const seen=new Set(), out=[]; for(const x of list||[]) if(x&&!seen.has(x)){ seen.add(x); out.push(x); } return out; };
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||'普通';
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  const affixValue=a=>{ const v=Number(a&&a.val)||0; return (v>=0?'+':'')+(a&&a.pct?Math.round(v*100)+'%':Math.round(v)); };
+  const affixLine=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴')+' '+affixValue(a);
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+
+  function stageOf(g){
+    const st=g._artStage?g._artStage():{x:0,y:0,w:BW,h:BH,U:BH/393};
+    const U=st.U||1;
+    return {st,U,X:v=>st.x+v*U,Y:v=>st.y+v*U,D:v=>v*U};
+  }
+
+  function panel(g,x,y,w,h,r,fill,stroke){
+    const ctx=g.ctx;
+    g.rr(x,y,w,h,r||18);
+    const gr=ctx.createLinearGradient(0,y,0,y+h);
+    gr.addColorStop(0,fill||'rgba(24,17,11,0.94)');
+    gr.addColorStop(1,'rgba(5,4,7,0.97)');
+    ctx.fillStyle=gr;
+    ctx.fill();
+    ctx.lineWidth=2.4;
+    ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)';
+    ctx.stroke();
+  }
+
+  Game.prototype._hbBeanRelicSourceUrl=function(type,idx){
+    type=TYPE_LABEL[type]?type:'ball';
+    idx=Math.max(0,Math.min(6,Number(idx)||0));
+    return '/assets/relic_ui/clean_42/'+type+'_'+idx+'.png?v='+CLEAN_VER;
+  };
+
+  Game.prototype._hbBeanRelicSourceImg=function(type,idx){
+    this._hbBeanCleanRelicImgs=this._hbBeanCleanRelicImgs||{};
+    const src=this._hbBeanRelicSourceUrl(type,idx);
+    if(this._hbBeanCleanRelicImgs[src]!==undefined) return this._hbBeanCleanRelicImgs[src];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=src;
+      this._hbBeanCleanRelicImgs[src]=im;
+      return im;
+    }catch(e){
+      this._hbBeanCleanRelicImgs[src]=null;
+      return null;
+    }
+  };
+
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const add=[];
+    for(const type of TYPES) for(let i=0;i<7;i++) add.push(this._hbBeanRelicSourceUrl(type,i));
+    return uniq((prevFullPreload?prevFullPreload.call(this):[]).concat(add));
+  };
+
+  Game.prototype._drawRelicSheetIcon=function(type,idx,x,y,w,h,alpha){
+    const ctx=this.ctx, im=this._hbBeanRelicSourceImg&&this._hbBeanRelicSourceImg(type,idx);
+    alpha=alpha==null?1:alpha;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    this.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.08));
+    ctx.clip();
+    if(im&&im.complete&&im.naturalWidth&&!im._err){
+      const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height;
+      const scale=Math.min(w/iw,h/ih)*0.985;
+      const dw=iw*scale, dh=ih*scale;
+      ctx.shadowColor='rgba(255,231,166,0.28)';
+      ctx.shadowBlur=Math.max(6,Math.min(w,h)*0.08);
+      ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    }else{
+      ctx.fillStyle='rgba(10,8,8,0.72)';
+      ctx.fillRect(x,y,w,h);
+      ctx.strokeStyle='rgba(215,169,69,0.38)';
+      ctx.lineWidth=2;
+      this.rr(x+3,y+3,w-6,h-6,Math.max(6,Math.min(w,h)*0.07));
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  Game.prototype._hbBeanSlotAccepts=function(slot,idOrItem){
+    if(!validSlot(slot)) return false;
+    const item=typeof idOrItem==='string'?(this._hbRelicDisplay?this._hbRelicDisplay(idOrItem):null):idOrItem;
+    if(!item) return false;
+    return item.type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT;
+  };
+
+  Game.prototype._hbBeanPreferredSlot=function(item){
+    const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():(this.save&&this.save.loadout)||[];
+    if(!item) return -1;
+    if(item.type==='ball') return BALL_SLOT;
+    if(validSlot(this._relicSlotTarget)&&this._hbBeanSlotAccepts(this._relicSlotTarget,item)) return this._relicSlotTarget;
+    for(const slot of SIDE_SLOTS) if(!load[slot]) return slot;
+    return SIDE_SLOTS[0];
+  };
+
+  Game.prototype._hbUnequipRelic=function(rid){
+    const s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    const idx=s.loadout.indexOf(rid);
+    if(idx<0) return;
+    if(!s.library.includes(rid)&&s.library.length<40) s.library.push(rid);
+    s.loadout[idx]=null;
+    persist(s);
+    sync(this);
+    this._relicCompare=null;
+    this._bagSel=rid;
+    this.toast&&this.toast('已卸下','放回庫存');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbDiscardRelic=function(rid){
+    const s=this.save||{};
+    if(!Array.isArray(s.library)) s.library=[];
+    if((s.loadout||[]).includes(rid)){
+      this.toast&&this.toast('無法丟棄','請先卸下裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    const before=s.library.length;
+    s.library=s.library.filter(id=>id!==rid);
+    if(before===s.library.length){
+      this.toast&&this.toast('庫存沒有這件裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    persist(s);
+    sync(this);
+    this._bagSel=null;
+    this._relicCompare=null;
+    this.toast&&this.toast('已丟棄','裝備已移除');
+    this.audio&&this.audio.sfx&&this.audio.sfx('coin');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbConfirmDiscardRelic=function(rid){
+    const it=this._hbRelicDisplay?this._hbRelicDisplay(rid):null;
+    if(!it) return;
+    if((this.save.loadout||[]).includes(rid)){
+      this.toast&&this.toast('無法丟棄','請先卸下裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    this.confirm('確定丟棄「'+it.name+'」？這個動作不能復原。',()=>this._hbDiscardRelic(rid));
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._openRelicCompare=function(rid,opts){
+    opts=opts||{};
+    const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):null;
+    if(!item) return;
+    this._bagSel=rid;
+    if(validSlot(opts.slot)) this._relicSlotTarget=opts.slot;
+    if(this._bag){
+      this._relicCompare=null;
+    }else{
+      const load=(this.save&&this.save.loadout)||[];
+      this._relicCompare={rid,current:null,slot:this._hbBeanPreferredSlot(item),inspect:true,equipped:load.includes(rid)};
+    }
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbBeanVisibleRelics=function(){
+    const s=this.save||{}, load=s.loadout||[];
+    let ids=[];
+    if(validSlot(this._relicSlotTarget)&&this._hbSlotCandidates){
+      ids=this._hbSlotCandidates(this._relicSlotTarget);
+      if(load[this._relicSlotTarget]) ids=[load[this._relicSlotTarget]].concat(ids);
+    }else if(this._hbOwnedRelicIds){
+      ids=this._hbOwnedRelicIds(true);
+    }else{
+      ids=uniq(load.filter(Boolean).concat(s.library||[]));
+    }
+    const tab=this._relicTabHero||'';
+    if(tab) ids=ids.filter(id=>{ const it=this._hbRelicDisplay&&this._hbRelicDisplay(id); return it&&it.type===tab; });
+    return uniq(ids).map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):null).filter(Boolean);
+  };
+
+  function card(g,it,x,y,w,h,o){
+    o=o||{};
+    const ctx=g.ctx, col=it?tierCol(it):'rgba(215,169,69,0.42)', pressed=g._press&&g._press({x,y,w,h});
+    panel(g,x,y,w,h,Math.max(8,Math.min(w,h)*0.12),'rgba(20,15,11,0.92)',o.selected?'#fff0b0':col);
+    if(o.selected||o.equipped){
+      ctx.save();
+      ctx.shadowColor=o.selected?'#fff0b0':col;
+      ctx.shadowBlur=o.selected?18:11;
+      g.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.12));
+      ctx.strokeStyle=o.selected?'#fff0b0':col;
+      ctx.lineWidth=o.selected?4:2.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(pressed){
+      ctx.save();
+      ctx.fillStyle='rgba(255,255,255,0.16)';
+      g.rr(x+4,y+4,w-8,h-8,Math.max(6,Math.min(w,h)*0.10));
+      ctx.fill();
+      ctx.restore();
+    }
+    if(!it) return;
+    const pad=Math.max(5,Math.min(w,h)*0.10);
+    g._drawRelicSheetIcon(it.type,it.idx,x+pad,y+pad,w-pad*2,h-pad*2,1);
+    if(o.equipped){
+      ctx.save();
+      ctx.fillStyle='#b8ff2f';
+      ctx.shadowColor='#b8ff2f';
+      ctx.shadowBlur=10;
+      ctx.beginPath();
+      ctx.arc(x+w-15,y+15,13,0,TAU);
+      ctx.fill();
+      ctx.restore();
+      g.text('✓',x+w-15,y+16,21,'#142008',{align:'center',baseline:'middle',weight:'900'});
+    }
+  }
+
+  function slot(g,slotNo,r,rid,U){
+    const ctx=g.ctx;
+    const target=g._relicSlotTarget===slotNo;
+    const item=rid&&(g._hbRelicDisplay?g._hbRelicDisplay(rid):null);
+    const col=item?tierCol(item):(slotNo===BALL_SLOT?'rgba(185,128,255,0.82)':'rgba(215,169,69,0.48)');
+    g.text(SLOT_LABELS[slotNo]||'裝備',r.x+r.w/2,r.y-6*U,10.5*U,slotNo===BALL_SLOT?'#f5bcff':'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:slotNo===BALL_SLOT?5*U:0});
+    panel(g,r.x,r.y,r.w,r.h,8*U,'rgba(12,9,8,0.94)',target?'#d8ff44':col);
+    if(slotNo===BALL_SLOT){
+      ctx.save();
+      ctx.shadowColor='#b980ff';
+      ctx.shadowBlur=target?20*U:10*U;
+      g.rr(r.x+4*U,r.y+4*U,r.w-8*U,r.h-8*U,7*U);
+      ctx.strokeStyle=target?'#fff0ff':'#b980ff';
+      ctx.lineWidth=target?3:2.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(item){
+      const side=Math.min(r.w,r.h)*0.78;
+      g._drawRelicSheetIcon(item.type,item.idx,r.x+r.w/2-side/2,r.y+r.h/2-side/2+2*U,side,side,1);
+    }else{
+      g.text('+',r.x+r.w/2,r.y+r.h/2-6*U,23*U,target?'#d8ff44':'rgba(215,169,69,0.68)',{align:'center',baseline:'middle',weight:'900'});
+      g.text(slotNo===BALL_SLOT?'空籃球':'空欄',r.x+r.w/2,r.y+r.h/2+13*U,8.5*U,target?'#d8ff44':'rgba(226,210,174,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+  }
+
+  function detail(g,sel,p,load,U){
+    const ctx=g.ctx;
+    panel(g,p.x,p.y,p.w,p.h,9*U,'rgba(16,13,10,0.96)','rgba(215,169,69,0.76)');
+    if(!sel){
+      g.text('選擇一件裝備',p.x+p.w/2,p.y+p.h/2-10*U,15*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:6*U});
+      g.text('點擊庫存或上方欄位查看資訊',p.x+p.w/2,p.y+p.h/2+17*U,10*U,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      return;
+    }
+    const col=tierCol(sel), equipped=load.includes(sel.id), inLibrary=(g.save.library||[]).includes(sel.id);
+    const iconBox={x:p.x+10*U,y:p.y+28*U,w:p.w*0.40,h:p.h-72*U};
+    panel(g,iconBox.x,iconBox.y,iconBox.w,iconBox.h,7*U,'rgba(8,7,7,0.88)',col);
+    const side=Math.min(iconBox.w-12*U,iconBox.h-12*U);
+    g._drawRelicSheetIcon(sel.type,sel.idx,iconBox.x+iconBox.w/2-side/2,iconBox.y+iconBox.h/2-side/2,side,side,1);
+
+    const tx=p.x+p.w*0.46, tw=p.w*0.50;
+    g.text(equipped?'已裝備聖物':'庫存裝備',tx,p.y+18*U,10.5*U,equipped?'#d8ff44':'#9fe6ff',{weight:'900'});
+    g.text(clip(g,sel.name,tw,16*U,'900'),tx,p.y+38*U,16*U,col,{weight:'900',glow:5*U});
+    g.rr(tx,p.y+48*U,82*U,18*U,4*U);
+    ctx.fillStyle=col; ctx.globalAlpha=0.26; ctx.fill(); ctx.globalAlpha=1;
+    g.text(tierName(sel)+' · '+(TYPE_LABEL[sel.type]||sel.core||'裝備'),tx+41*U,p.y+57*U,8.7*U,'#fff4dc',{align:'center',baseline:'middle',weight:'900'});
+    g.text('Lv. '+(Number(sel.lvl)||0)+' / 50',tx,p.y+82*U,12*U,'#ffe7a6',{weight:'900'});
+    g.text('強度 '+(Number(sel.q)||0)+'/50',tx+88*U,p.y+82*U,10.5*U,'#c8b894',{weight:'900'});
+
+    let y=p.y+107*U;
+    ctx.save();
+    ctx.strokeStyle='rgba(215,169,69,0.28)';
+    ctx.beginPath();
+    ctx.moveTo(tx,y-12*U);
+    ctx.lineTo(tx+tw,y-12*U);
+    ctx.stroke();
+    ctx.restore();
+    g.text('基礎素質',tx,y,10.5*U,'#ffce5c',{weight:'900'});
+    g.text(sel.desc?clip(g,sel.desc,tw-10*U,9.8*U,'800'):'裝備後獲得投籃與戰鬥加成',tx,y+18*U,9.8*U,'#efe3ca',{weight:'800'});
+
+    y+=50*U;
+    g.text('詞綴',tx,y,10.5*U,'#ffce5c',{weight:'900'});
+    const lines=(sel.affixes||[]).slice(0,4).map(a=>'◆ '+affixLine(a));
+    if(!lines.length) lines.push('◆ 尚未鑲嵌詞綴');
+    for(let i=0;i<Math.min(4,lines.length);i++){
+      g.text(clip(g,lines[i],tw-6*U,9.8*U,'900'),tx,y+(18+i*15)*U,9.8*U,i===0?'#d8ff44':'#fff1d5',{weight:'900'});
+    }
+
+    const by=p.y+p.h-29*U, bh=22*U, gap=5*U, bw=(p.w-20*U-gap*3)/4, bx=p.x+10*U;
+    const equipLabel=equipped?'卸下':'裝備';
+    const equipCb=equipped?(()=>g._hbUnequipRelic(sel.id)):(()=>g._hbEquipRelic(sel.id,{slot:g._hbBeanPreferredSlot(sel)}));
+    g.button(bx,by,bw,bh,equipLabel,'bean_v35_equip_'+sel.id,equipCb,{primary:true,size:11.5*U,weight:'900',r:5*U});
+    g.button(bx+(bw+gap),by,bw,bh,'升級','bean_v35_upgrade_'+sel.id,()=>g.toast&&g.toast('無盡鍛造','無盡模式每 5 層可升級裝備'),{size:11.5*U,weight:'900',r:5*U});
+    g.button(bx+(bw+gap)*2,by,bw,bh,'鎖定','bean_v35_lock_'+sel.id,()=>g.toast&&g.toast('鎖定功能','下一版開放，現在不改動資料'),{size:11.5*U,weight:'900',r:5*U});
+    g.button(bx+(bw+gap)*3,by,bw,bh,'丟棄','bean_v35_discard_'+sel.id,()=>inLibrary&&!equipped?g._hbConfirmDiscardRelic(sel.id):g.toast&&g.toast('無法丟棄','請先卸下並確認在庫存中'),{danger:true,size:11.5*U,color:'#fff0e8',weight:'900',r:5*U});
+  }
+
+  Game.prototype.drawRelicBag=function(){
+    const ctx=this.ctx, s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots();
+    this._relicCompare=null;
+    this.btn(0,0,BW,BH,'hero_bag_blocker_v35',()=>{});
+    const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png');
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH);
+    else { ctx.fillStyle='#09060b'; ctx.fillRect(0,0,BW,BH); }
+
+    const {U,X,Y,D}=stageOf(this);
+    const safeT=this.insT||0, safeR=this.insR||0, safeL=this.insL||0, load=s.loadout||[];
+    this.text('聖物背包',Math.max(X(48),safeL+D(24)),Math.max(Y(24),safeT+D(22)),18*U,'#ffe7a6',{weight:'900',glow:9*U});
+    this.text('已裝備 '+load.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',X(150),Math.max(Y(24),safeT+D(22)),10.5*U,'#d8c9a8',{baseline:'middle',weight:'900'});
+    this.button(Math.min(X(760),BW-safeR-D(94)),Math.max(Y(14),safeT+D(8)),D(66),D(26),'返回','hero_bag_close_v35',()=>this._closeHeroRelicBag(),{size:10.5*U,color:'#f0d0b0',weight:'900',r:5*U});
+
+    const tabX=Math.max(X(34),safeL+D(8)), tabY=Y(129), tabW=D(56), tabH=D(19), tabGap=D(5.6), tab=this._relicTabHero||'';
+    for(let i=0;i<TABS.length;i++){
+      const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type;
+      panel(this,tabX,y,tabW,tabH,5*U,on?'rgba(86,138,12,0.94)':'rgba(15,11,9,0.88)',on?'#b8ff2f':'rgba(215,169,69,0.50)');
+      this.text(label,tabX+tabW/2,y+tabH/2+0.5*U,8.7*U,on?'#d8ff44':'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      ((t,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v35_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type,tabX,y,tabW,tabH);
+    }
+
+    const slotW=D(68), slotH=D(52), slotGap=D(18), slotX=X(106), slotY=Y(36);
+    for(let i=0;i<5;i++){
+      const r={x:slotX+i*(slotW+slotGap),y:slotY,w:slotW,h:slotH};
+      slot(this,i,r,load[i],U);
+      ((slotNo,rr,id)=>this.btn(rr.x,rr.y,rr.w,rr.h,'bean_v35_slot_'+slotNo,()=>{
+        this._relicSlotTarget=slotNo;
+        if(id) this._bagSel=id;
+        else {
+          this._bagSel=null;
+          if(slotNo===BALL_SLOT) this._relicTabHero='ball';
+          else if(this._relicTabHero==='ball') this._relicTabHero='';
+        }
+        this._relicPageHero=0;
+        this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+        this.render();
+      }))(i,r,load[i]);
+    }
+
+    const main={x:X(92),y:Y(130),w:D(600),h:D(250)};
+    panel(this,main.x,main.y,main.w,main.h,8*U,'rgba(8,7,7,0.90)','rgba(215,169,69,0.72)');
+    const sortMode=this._hbRelicSortMode?this._hbRelicSortMode():(this._relicSortHero||'rarity');
+    const sortX=main.x+D(14), sortY=main.y+D(9), sortH=D(16), sortW=D(43), sortGap=D(4.5);
+    this.text('排序',sortX,sortY+sortH/2+0.5*U,8.2*U,'#c8b894',{baseline:'middle',weight:'900'});
+    for(let i=0;i<SORTS.length;i++){
+      const label=SORTS[i][0], id=SORTS[i][1], bx=sortX+D(29)+i*(sortW+sortGap), on=sortMode===id;
+      panel(this,bx,sortY,sortW,sortH,4.5*U,on?'rgba(86,138,12,0.85)':'rgba(10,8,8,0.80)',on?'#b8ff2f':'rgba(215,169,69,0.42)');
+      this.text(label,bx+sortW/2,sortY+sortH/2+0.5*U,7.5*U,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((mode,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v35_sort_'+mode,()=>{ this._relicSortHero=mode; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(id,bx,sortY,sortW,sortH);
+    }
+
+    const allItems=this._hbBeanVisibleRelics?this._hbBeanVisibleRelics():[];
+    const grid={x:main.x+D(15),y:main.y+D(45),w:D(212),h:D(151)};
+    const cols=4, rows=3, pageSize=cols*rows, cg=D(7), rg=D(7);
+    const pages=Math.max(1,Math.ceil(allItems.length/pageSize));
+    this._relicPageHero=Math.max(0,Math.min(pages-1,Number(this._relicPageHero)||0));
+    const items=allItems.slice(this._relicPageHero*pageSize,this._relicPageHero*pageSize+pageSize);
+    const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows;
+    const visibleIds=new Set(allItems.map(it=>it.id));
+    if(this._bagSel&&!visibleIds.has(this._bagSel)) this._bagSel=null;
+    if(!this._bagSel&&allItems[0]) this._bagSel=allItems[0].id;
+    for(let i=0;i<items.length;i++){
+      const it=items[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg);
+      card(this,it,x,y,cellW,cellH,{selected:this._bagSel===it.id,equipped:load.includes(it.id)});
+      ((id,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v35_item_'+id,()=>{ this._bagSel=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(it.id,x,y,cellW,cellH);
+    }
+    if(!items.length){
+      this.text(validSlot(this._relicSlotTarget)?'這個欄位沒有可裝備物品':'庫存沒有已取得裝備',grid.x+grid.w/2,grid.y+grid.h/2,11.5*U,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+
+    const py=main.y+D(210), pw=D(24), ph=D(19);
+    this.button(grid.x+grid.w/2-D(45),py,pw,ph,'◀','bean_v35_page_prev',()=>{ this._relicPageHero=Math.max(0,(this._relicPageHero||0)-1); this.render(); },{size:8.7*U,weight:'900',r:4*U});
+    this.text((this._relicPageHero+1)+' / '+pages,grid.x+grid.w/2,py+ph/2+0.5*U,9.5*U,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+    this.button(grid.x+grid.w/2+D(21),py,pw,ph,'▶','bean_v35_page_next',()=>{ this._relicPageHero=Math.min(pages-1,(this._relicPageHero||0)+1); this.render(); },{size:8.7*U,weight:'900',r:4*U});
+    const selected=this._bagSel&&(this._hbRelicDisplay?this._hbRelicDisplay(this._bagSel):null);
+    detail(this,selected,{x:main.x+D(244),y:main.y+D(18),w:main.w-D(262),h:main.h-D(35)},load,U);
+  };
+
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare;
+    if(!c) return;
+    const selected=this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null;
+    if(!selected) return;
+    const ctx=this.ctx, {U}=stageOf(this);
+    ctx.save();
+    ctx.fillStyle='rgba(2,1,5,0.76)';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v35_info_scrim',()=>{});
+    const w=Math.min(330*U,BW-70*U), h=Math.min(272*U,BH-44*U), x=BW/2-w/2, y=BH/2-h/2;
+    detail(this,selected,{x,y,w,h},(this.save&&this.save.loadout)||[],U);
+    this.button(x+w/2-48*U,y+h+8*U,96*U,24*U,'關閉','bean_v35_info_close',()=>{ this._relicCompare=null; this.render(); },{size:10.5*U,weight:'900',r:5*U});
+  };
+
+  try{ window.__HB_BEAN_BACKPACK_FINAL__='v35-clean-layout'; }catch(e){}
+})();
+
+// === final activation v34: clean relic art + mobile-safe bean backpack layout ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const BALL_SLOT=2;
+  const SIDE_SLOTS=[0,1,3,4];
+  const TYPES=['ball','wrist','shoes','charm','mask','hoop'];
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const TABS=[['全部',''],['籃球','ball'],['護腕','wrist'],['球鞋','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+  const SORTS=[['稀有度','rarity'],['部位','type'],['已裝備','equipped'],['可升級','upgrade']];
+  const SLOT_LABELS=['副裝','護具','唯一籃球','飾品','籃框'];
+  const TIER_COL=['#d8d1bd','#7fd8ff','#c88cff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳奇','神話'];
+  const CLEAN_VER='20260629_clean_relics_v4';
+
+  const uniq=list=>{
+    const seen=new Set(), out=[];
+    for(const x of list||[]) if(x&&!seen.has(x)){ seen.add(x); out.push(x); }
+    return out;
+  };
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||'普通';
+  const affixValue=a=>{
+    const v=Number(a&&a.val)||0;
+    const sign=v>=0?'+':'';
+    return sign+(a&&a.pct?Math.round(v*100)+'%':Math.round(v));
+  };
+  const affixLine=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴')+' '+affixValue(a);
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  const scheduleSync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+
+  Game.prototype._hbBeanRelicSourceUrl=function(type,idx){
+    type=TYPE_LABEL[type]?type:'ball';
+    idx=Math.max(0,Math.min(6,Number(idx)||0));
+    return '/assets/relic_ui/clean_42/'+type+'_'+idx+'.png?v='+CLEAN_VER;
+  };
+
+  Game.prototype._hbBeanRelicSourceImg=function(type,idx){
+    this._hbBeanCleanRelicImgs=this._hbBeanCleanRelicImgs||{};
+    const src=this._hbBeanRelicSourceUrl(type,idx);
+    if(this._hbBeanCleanRelicImgs[src]!==undefined) return this._hbBeanCleanRelicImgs[src];
+    try{
+      const im=new Image();
+      im.decoding='async';
+      im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(e){} };
+      im.onerror=()=>{ im._err=true; };
+      im.src=src;
+      this._hbBeanCleanRelicImgs[src]=im;
+      return im;
+    }catch(e){
+      this._hbBeanCleanRelicImgs[src]=null;
+      return null;
+    }
+  };
+
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const add=[];
+    for(const type of TYPES) for(let i=0;i<7;i++) add.push(this._hbBeanRelicSourceUrl(type,i));
+    return uniq((prevFullPreload?prevFullPreload.call(this):[]).concat(add));
+  };
+
+  Game.prototype._drawRelicSheetIcon=function(type,idx,x,y,w,h,alpha){
+    const ctx=this.ctx;
+    const im=this._hbBeanRelicSourceImg&&this._hbBeanRelicSourceImg(type,idx);
+    alpha=alpha==null?1:alpha;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    this.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.08));
+    ctx.clip();
+    if(im&&im.complete&&im.naturalWidth&&!im._err){
+      const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height;
+      const pad=Math.max(0,Math.min(w,h)*0.015);
+      const scale=Math.min((w-pad*2)/iw,(h-pad*2)/ih);
+      const dw=iw*scale, dh=ih*scale;
+      ctx.shadowColor='rgba(255,231,166,0.28)';
+      ctx.shadowBlur=Math.max(6,Math.min(w,h)*0.08);
+      ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    }else{
+      ctx.fillStyle='rgba(10,8,8,0.72)';
+      ctx.fillRect(x,y,w,h);
+      ctx.strokeStyle='rgba(215,169,69,0.38)';
+      ctx.lineWidth=2;
+      this.rr(x+3,y+3,w-6,h-6,Math.max(6,Math.min(w,h)*0.07));
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  Game.prototype._hbBeanSlotAccepts=function(slot,idOrItem){
+    if(!validSlot(slot)) return false;
+    const item=typeof idOrItem==='string'?(this._hbRelicDisplay?this._hbRelicDisplay(idOrItem):null):idOrItem;
+    if(!item) return false;
+    return item.type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT;
+  };
+
+  Game.prototype._hbBeanPreferredSlot=function(item){
+    const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():(this.save&&this.save.loadout)||[];
+    if(!item) return -1;
+    if(item.type==='ball') return BALL_SLOT;
+    if(validSlot(this._relicSlotTarget)&&this._hbBeanSlotAccepts(this._relicSlotTarget,item)) return this._relicSlotTarget;
+    for(const slot of SIDE_SLOTS) if(!load[slot]) return slot;
+    return SIDE_SLOTS[0];
+  };
+
+  Game.prototype._hbEquipRelic=function(rid,opts){
+    opts=opts||{};
+    const s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    if(!rid||typeof RELICS==='undefined'||!RELICS[rid]) return;
+    const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():s.loadout;
+    const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):(this._relicDisplay?this._relicDisplay(rid,true):null);
+    if(!item) return;
+    if(load.includes(rid)){
+      this.toast&&this.toast('已裝備',item.name);
+      this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+      this.render&&this.render();
+      return;
+    }
+    let slot=(validSlot(opts.slot)&&this._hbBeanSlotAccepts(opts.slot,item))?opts.slot:-1;
+    if(!validSlot(slot)) slot=this._hbBeanPreferredSlot(item);
+    if(!validSlot(slot)||!this._hbBeanSlotAccepts(slot,item)){
+      this.toast&&this.toast('裝備欄位不符',item.type==='ball'?'籃球只能裝在中間唯一籃球欄':'非籃球不能裝在中間欄');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    if(item.type==='ball'){
+      for(let i=0;i<load.length;i++){
+        const ex=load[i];
+        if(i!==BALL_SLOT&&ex&&this._hbRelicDisplay&&this._hbRelicDisplay(ex)&&this._hbRelicDisplay(ex).type==='ball'){
+          load[i]=null;
+          if(!s.library.includes(ex)&&s.library.length<40) s.library.push(ex);
+        }
+      }
+    }
+    const old=load[slot];
+    if(old&&old!==rid&&!s.library.includes(old)&&s.library.length<40) s.library.push(old);
+    load[slot]=rid;
+    s.library=s.library.filter(id=>id!==rid);
+    if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots();
+    persist(s);
+    scheduleSync(this);
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this._bagSel=rid;
+    this.toast&&this.toast('已裝備',item.name);
+    this.audio&&this.audio.sfx&&this.audio.sfx('select');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbUnequipRelic=function(rid){
+    const s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    const idx=s.loadout.indexOf(rid);
+    if(idx<0) return;
+    if(!s.library.includes(rid)&&s.library.length<40) s.library.push(rid);
+    s.loadout[idx]=null;
+    persist(s);
+    scheduleSync(this);
+    this._relicCompare=null;
+    this._bagSel=rid;
+    this.toast&&this.toast('已卸下','放回庫存');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbDiscardRelic=function(rid){
+    const s=this.save||{};
+    if(!Array.isArray(s.library)) s.library=[];
+    if((s.loadout||[]).includes(rid)){
+      this.toast&&this.toast('無法丟棄','請先卸下裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    const before=s.library.length;
+    s.library=s.library.filter(id=>id!==rid);
+    if(before===s.library.length){
+      this.toast&&this.toast('庫存沒有這件裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    persist(s);
+    scheduleSync(this);
+    this._bagSel=null;
+    this._relicCompare=null;
+    this.toast&&this.toast('已丟棄','裝備已移除');
+    this.audio&&this.audio.sfx&&this.audio.sfx('coin');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbConfirmDiscardRelic=function(rid){
+    const it=this._hbRelicDisplay?this._hbRelicDisplay(rid):null;
+    if(!it) return;
+    if((this.save.loadout||[]).includes(rid)){
+      this.toast&&this.toast('無法丟棄','請先卸下裝備');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    this.confirm('確定丟棄「'+it.name+'」？這個動作不能復原。',()=>this._hbDiscardRelic(rid));
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._openRelicCompare=function(rid,opts){
+    opts=opts||{};
+    const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):null;
+    if(!item) return;
+    this._bagSel=rid;
+    if(validSlot(opts.slot)) this._relicSlotTarget=opts.slot;
+    if(this._bag){
+      this._relicCompare=null;
+    }else{
+      const load=(this.save&&this.save.loadout)||[];
+      this._relicCompare={rid,current:null,slot:this._hbBeanPreferredSlot(item),inspect:true,equipped:load.includes(rid)};
+    }
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbBeanVisibleRelics=function(){
+    const s=this.save||{}, load=s.loadout||[];
+    let ids=[];
+    if(validSlot(this._relicSlotTarget)&&this._hbSlotCandidates){
+      ids=this._hbSlotCandidates(this._relicSlotTarget);
+      if(load[this._relicSlotTarget]) ids=[load[this._relicSlotTarget]].concat(ids);
+    }else if(this._hbOwnedRelicIds){
+      ids=this._hbOwnedRelicIds(true);
+    }else{
+      ids=uniq(load.filter(Boolean).concat(s.library||[]));
+    }
+    const tab=this._relicTabHero||'';
+    if(tab) ids=ids.filter(id=>{ const it=this._hbRelicDisplay&&this._hbRelicDisplay(id); return it&&it.type===tab; });
+    return uniq(ids).map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):null).filter(Boolean);
+  };
+
+  Game.prototype._hbDrawBeanPanel=function(x,y,w,h,r,fill,stroke){
+    const ctx=this.ctx;
+    this.rr(x,y,w,h,r||18);
+    const g=ctx.createLinearGradient(0,y,0,y+h);
+    g.addColorStop(0,fill||'rgba(24,17,11,0.94)');
+    g.addColorStop(1,'rgba(5,4,7,0.97)');
+    ctx.fillStyle=g;
+    ctx.fill();
+    ctx.lineWidth=2.4;
+    ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)';
+    ctx.stroke();
+  };
+
+  Game.prototype._hbDrawBeanRelicCard=function(it,x,y,w,h,o){
+    o=o||{};
+    const ctx=this.ctx, col=it?tierCol(it):'rgba(215,169,69,0.42)', pressed=this._press&&this._press({x,y,w,h});
+    this._hbDrawBeanPanel(x,y,w,h,Math.max(8,Math.min(w,h)*0.12),'rgba(20,15,11,0.92)',o.selected?'#fff0b0':col);
+    if(o.selected||o.equipped){
+      ctx.save();
+      ctx.shadowColor=o.selected?'#fff0b0':col;
+      ctx.shadowBlur=o.selected?18:11;
+      this.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.12));
+      ctx.strokeStyle=o.selected?'#fff0b0':col;
+      ctx.lineWidth=o.selected?4:2.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(pressed){
+      ctx.save();
+      ctx.fillStyle='rgba(255,255,255,0.16)';
+      this.rr(x+4,y+4,w-8,h-8,Math.max(6,Math.min(w,h)*0.10));
+      ctx.fill();
+      ctx.restore();
+    }
+    if(!it) return;
+    const pad=Math.max(5,Math.min(w,h)*0.10);
+    this._drawRelicSheetIcon(it.type,it.idx,x+pad,y+pad,w-pad*2,h-pad*2,1);
+    if(o.equipped){
+      ctx.save();
+      ctx.fillStyle='#b8ff2f';
+      ctx.shadowColor='#b8ff2f';
+      ctx.shadowBlur=10;
+      ctx.beginPath();
+      ctx.arc(x+w-15,y+15,13,0,TAU);
+      ctx.fill();
+      ctx.restore();
+      this.text('✓',x+w-15,y+16,21,'#142008',{align:'center',baseline:'middle',weight:'900'});
+    }
+  };
+
+  Game.prototype._hbDrawBeanSlot=function(slot,r,rid,U){
+    const ctx=this.ctx;
+    const target=this._relicSlotTarget===slot;
+    const item=rid&&(this._hbRelicDisplay?this._hbRelicDisplay(rid):null);
+    const col=item?tierCol(item):(slot===BALL_SLOT?'rgba(185,128,255,0.82)':'rgba(215,169,69,0.48)');
+    this.text(SLOT_LABELS[slot]||'裝備',r.x+r.w/2,r.y-6*U,10.5*U,slot===BALL_SLOT?'#f5bcff':'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:slot===BALL_SLOT?5*U:0});
+    this._hbDrawBeanPanel(r.x,r.y,r.w,r.h,8*U,'rgba(12,9,8,0.94)',target?'#d8ff44':col);
+    if(slot===BALL_SLOT){
+      ctx.save();
+      ctx.shadowColor='#b980ff';
+      ctx.shadowBlur=target?20*U:10*U;
+      this.rr(r.x+4*U,r.y+4*U,r.w-8*U,r.h-8*U,7*U);
+      ctx.strokeStyle=target?'#fff0ff':'#b980ff';
+      ctx.lineWidth=target?3:2.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if(item){
+      const side=Math.min(r.w,r.h)*0.78;
+      this._drawRelicSheetIcon(item.type,item.idx,r.x+r.w/2-side/2,r.y+r.h/2-side/2+2*U,side,side,1);
+    }else{
+      this.text('+',r.x+r.w/2,r.y+r.h/2-6*U,23*U,target?'#d8ff44':'rgba(215,169,69,0.68)',{align:'center',baseline:'middle',weight:'900'});
+      this.text(slot===BALL_SLOT?'空籃球':'空欄',r.x+r.w/2,r.y+r.h/2+13*U,8.5*U,target?'#d8ff44':'rgba(226,210,174,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+  };
+
+  Game.prototype._hbDrawBeanDetail=function(sel,panel,load,U){
+    const ctx=this.ctx;
+    this._hbDrawBeanPanel(panel.x,panel.y,panel.w,panel.h,9*U,'rgba(16,13,10,0.96)','rgba(215,169,69,0.76)');
+    if(!sel){
+      this.text('選擇一件裝備',panel.x+panel.w/2,panel.y+panel.h/2-10*U,15*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:6*U});
+      this.text('點擊庫存或上方欄位查看資訊',panel.x+panel.w/2,panel.y+panel.h/2+17*U,10*U,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      return;
+    }
+    const col=tierCol(sel), equipped=load.includes(sel.id), inLibrary=(this.save.library||[]).includes(sel.id);
+    const iconBox={x:panel.x+10*U,y:panel.y+28*U,w:panel.w*0.40,h:panel.h-72*U};
+    this._hbDrawBeanPanel(iconBox.x,iconBox.y,iconBox.w,iconBox.h,7*U,'rgba(8,7,7,0.88)',col);
+    const side=Math.min(iconBox.w-12*U,iconBox.h-12*U);
+    this._drawRelicSheetIcon(sel.type,sel.idx,iconBox.x+iconBox.w/2-side/2,iconBox.y+iconBox.h/2-side/2,side,side,1);
+
+    const tx=panel.x+panel.w*0.46, tw=panel.w*0.50;
+    this.text(equipped?'已裝備聖物':'庫存裝備',tx,panel.y+18*U,10.5*U,equipped?'#d8ff44':'#9fe6ff',{weight:'900'});
+    this.text(clip(this,sel.name,tw,16*U,'900'),tx,panel.y+38*U,16*U,col,{weight:'900',glow:5*U});
+    this.rr(tx,panel.y+48*U,82*U,18*U,4*U);
+    ctx.fillStyle=col;
+    ctx.globalAlpha=0.26;
+    ctx.fill();
+    ctx.globalAlpha=1;
+    this.text(tierName(sel)+' · '+(TYPE_LABEL[sel.type]||sel.core||'裝備'),tx+41*U,panel.y+57*U,8.7*U,'#fff4dc',{align:'center',baseline:'middle',weight:'900'});
+    this.text('Lv. '+(Number(sel.lvl)||0)+' / 50',tx,panel.y+82*U,12*U,'#ffe7a6',{weight:'900'});
+    this.text('強度 '+(Number(sel.q)||0)+'/50',tx+88*U,panel.y+82*U,10.5*U,'#c8b894',{weight:'900'});
+
+    let y=panel.y+107*U;
+    ctx.save();
+    ctx.strokeStyle='rgba(215,169,69,0.28)';
+    ctx.beginPath();
+    ctx.moveTo(tx,y-12*U);
+    ctx.lineTo(tx+tw,y-12*U);
+    ctx.stroke();
+    ctx.restore();
+    this.text('基礎素質',tx,y,10.5*U,'#ffce5c',{weight:'900'});
+    const desc=sel.desc?clip(this,sel.desc,tw-10*U,9.8*U,'800'):'裝備後獲得投籃與戰鬥加成';
+    this.text(desc,tx,y+18*U,9.8*U,'#efe3ca',{weight:'800'});
+
+    y+=50*U;
+    this.text('詞綴',tx,y,10.5*U,'#ffce5c',{weight:'900'});
+    const lines=(sel.affixes||[]).slice(0,4).map(a=>'◆ '+affixLine(a));
+    if(!lines.length) lines.push('◆ 尚未鑲嵌詞綴');
+    for(let i=0;i<Math.min(4,lines.length);i++){
+      this.text(clip(this,lines[i],tw-6*U,9.8*U,'900'),tx,y+(18+i*15)*U,9.8*U,i===0?'#d8ff44':'#fff1d5',{weight:'900'});
+    }
+
+    const by=panel.y+panel.h-29*U, bh=22*U, gap=5*U;
+    const bw=(panel.w-20*U-gap*3)/4;
+    const bx=panel.x+10*U;
+    const equipLabel=equipped?'卸下':'裝備';
+    const equipCb=equipped?(()=>this._hbUnequipRelic(sel.id)):(()=>this._hbEquipRelic(sel.id,{slot:this._hbBeanPreferredSlot(sel)}));
+    this.button(bx,by,bw,bh,equipLabel,'bean_v34_equip_'+sel.id,equipCb,{primary:true,size:11.5*U,weight:'900',r:5*U});
+    this.button(bx+(bw+gap),by,bw,bh,'升級','bean_v34_upgrade_'+sel.id,()=>this.toast&&this.toast('無盡鍛造','無盡模式每 5 層可升級裝備'),{size:11.5*U,weight:'900',r:5*U});
+    this.button(bx+(bw+gap)*2,by,bw,bh,'鎖定','bean_v34_lock_'+sel.id,()=>this.toast&&this.toast('鎖定功能','下一版開放，現在不改動資料'),{size:11.5*U,weight:'900',r:5*U});
+    this.button(bx+(bw+gap)*3,by,bw,bh,'丟棄','bean_v34_discard_'+sel.id,()=>inLibrary&&!equipped?this._hbConfirmDiscardRelic(sel.id):this.toast&&this.toast('無法丟棄','請先卸下並確認在庫存中'),{danger:true,size:11.5*U,color:'#fff0e8',weight:'900',r:5*U});
+  };
+
+  Game.prototype.drawRelicBag=function(){
+    const ctx=this.ctx, s=this.save||{};
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    if(!Array.isArray(s.library)) s.library=[];
+    if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots();
+    this._relicCompare=null;
+    this.btn(0,0,BW,BH,'hero_bag_blocker_v34',()=>{});
+
+    const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png');
+    if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH);
+    else { ctx.fillStyle='#09060b'; ctx.fillRect(0,0,BW,BH); }
+
+    const st=this._artStage?this._artStage():{x:0,y:0,w:BW,h:BH,U:BH/393};
+    const U=st.U||1, X=v=>st.x+v*U, Y=v=>st.y+v*U, D=v=>v*U;
+    const safeT=this.insT||0, safeR=this.insR||0, safeL=this.insL||0;
+    const load=s.loadout||[];
+
+    this.text('聖物背包',Math.max(X(48),safeL+D(24)),Math.max(Y(24),safeT+D(22)),18*U,'#ffe7a6',{weight:'900',glow:9*U});
+    this.text('已裝備 '+load.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',X(150),Math.max(Y(24),safeT+D(22)),10.5*U,'#d8c9a8',{baseline:'middle',weight:'900'});
+    this.button(Math.min(X(760),BW-safeR-D(94)),Math.max(Y(14),safeT+D(8)),D(66),D(26),'返回','hero_bag_close_v34',()=>this._closeHeroRelicBag(),{size:10.5*U,color:'#f0d0b0',weight:'900',r:5*U});
+
+    const tabX=Math.max(X(34),safeL+D(8)), tabY=Y(129), tabW=D(56), tabH=D(19), tabGap=D(5.6), tab=this._relicTabHero||'';
+    for(let i=0;i<TABS.length;i++){
+      const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type;
+      this._hbDrawBeanPanel(tabX,y,tabW,tabH,5*U,on?'rgba(86,138,12,0.94)':'rgba(15,11,9,0.88)',on?'#b8ff2f':'rgba(215,169,69,0.50)');
+      this.text(label,tabX+tabW/2,y+tabH/2+0.5*U,8.7*U,on?'#d8ff44':'#d8c9a8',{align:'center',baseline:'middle',weight:'900'});
+      ((t,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v34_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type,tabX,y,tabW,tabH);
+    }
+
+    const slotW=D(68), slotH=D(52), slotGap=D(18), slotX=X(106), slotY=Y(36);
+    for(let i=0;i<5;i++){
+      const r={x:slotX+i*(slotW+slotGap),y:slotY,w:slotW,h:slotH};
+      this._hbDrawBeanSlot(i,r,load[i],U);
+      ((slot,rr,id)=>this.btn(rr.x,rr.y,rr.w,rr.h,'bean_v34_slot_'+slot,()=>{
+        this._relicSlotTarget=slot;
+        if(id) this._bagSel=id;
+        else {
+          this._bagSel=null;
+          if(slot===BALL_SLOT) this._relicTabHero='ball';
+          else if(this._relicTabHero==='ball') this._relicTabHero='';
+        }
+        this._relicPageHero=0;
+        this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+        this.render();
+      }))(i,r,load[i]);
+    }
+
+    const main={x:X(92),y:Y(130),w:D(600),h:D(250)};
+    this._hbDrawBeanPanel(main.x,main.y,main.w,main.h,8*U,'rgba(8,7,7,0.90)','rgba(215,169,69,0.72)');
+
+    const sortMode=this._hbRelicSortMode?this._hbRelicSortMode():(this._relicSortHero||'rarity');
+    const sortX=main.x+D(14), sortY=main.y+D(9), sortH=D(16), sortW=D(43), sortGap=D(4.5);
+    this.text('排序',sortX,sortY+sortH/2+0.5*U,8.2*U,'#c8b894',{baseline:'middle',weight:'900'});
+    for(let i=0;i<SORTS.length;i++){
+      const label=SORTS[i][0], id=SORTS[i][1], bx=sortX+D(29)+i*(sortW+sortGap), on=sortMode===id;
+      this._hbDrawBeanPanel(bx,sortY,sortW,sortH,4.5*U,on?'rgba(86,138,12,0.85)':'rgba(10,8,8,0.80)',on?'#b8ff2f':'rgba(215,169,69,0.42)');
+      this.text(label,bx+sortW/2,sortY+sortH/2+0.5*U,7.5*U,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+      ((mode,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v34_sort_'+mode,()=>{ this._relicSortHero=mode; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(id,bx,sortY,sortW,sortH);
+    }
+
+    const allItems=this._hbBeanVisibleRelics?this._hbBeanVisibleRelics():[];
+    const grid={x:main.x+D(15),y:main.y+D(45),w:D(212),h:D(151)};
+    const cols=4, rows=3, pageSize=cols*rows, cg=D(7), rg=D(7);
+    const pages=Math.max(1,Math.ceil(allItems.length/pageSize));
+    this._relicPageHero=Math.max(0,Math.min(pages-1,Number(this._relicPageHero)||0));
+    const items=allItems.slice(this._relicPageHero*pageSize,this._relicPageHero*pageSize+pageSize);
+    const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows;
+    const visibleIds=new Set(allItems.map(it=>it.id));
+    if(this._bagSel&&!visibleIds.has(this._bagSel)) this._bagSel=null;
+    if(!this._bagSel&&allItems[0]) this._bagSel=allItems[0].id;
+
+    for(let i=0;i<items.length;i++){
+      const it=items[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg);
+      this._hbDrawBeanRelicCard(it,x,y,cellW,cellH,{selected:this._bagSel===it.id,equipped:load.includes(it.id)});
+      ((id,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v34_item_'+id,()=>{ this._bagSel=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(it.id,x,y,cellW,cellH);
+    }
+    if(!items.length){
+      this.text(validSlot(this._relicSlotTarget)?'這個欄位沒有可裝備物品':'庫存沒有已取得裝備',grid.x+grid.w/2,grid.y+grid.h/2,11.5*U,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'});
+    }
+
+    const py=main.y+D(210), pw=D(24), ph=D(19);
+    this.button(grid.x+grid.w/2-D(45),py,pw,ph,'◀','bean_v34_page_prev',()=>{ this._relicPageHero=Math.max(0,(this._relicPageHero||0)-1); this.render(); },{size:8.7*U,weight:'900',r:4*U});
+    this.text((this._relicPageHero+1)+' / '+pages,grid.x+grid.w/2,py+ph/2+0.5*U,9.5*U,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+    this.button(grid.x+grid.w/2+D(21),py,pw,ph,'▶','bean_v34_page_next',()=>{ this._relicPageHero=Math.min(pages-1,(this._relicPageHero||0)+1); this.render(); },{size:8.7*U,weight:'900',r:4*U});
+
+    const selected=this._bagSel&&(this._hbRelicDisplay?this._hbRelicDisplay(this._bagSel):null);
+    this._hbDrawBeanDetail(selected,{x:main.x+D(244),y:main.y+D(18),w:main.w-D(262),h:main.h-D(35)},load,U);
+  };
+
+  Game.prototype.drawRelicCompare=function(){
+    const c=this._relicCompare;
+    if(!c) return;
+    const selected=this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null;
+    if(!selected) return;
+    const ctx=this.ctx, st=this._artStage?this._artStage():{x:0,y:0,w:BW,h:BH,U:BH/393};
+    const U=st.U||1;
+    ctx.save();
+    ctx.fillStyle='rgba(2,1,5,0.76)';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v34_info_scrim',()=>{});
+    const w=Math.min(330*U,BW-70*U), h=Math.min(272*U,BH-44*U), x=BW/2-w/2, y=BH/2-h/2;
+    this._hbDrawBeanDetail(selected,{x,y,w,h},(this.save&&this.save.loadout)||[],U);
+    this.button(x+w/2-48*U,y+h+8*U,96*U,24*U,'關閉','bean_v34_info_close',()=>{ this._relicCompare=null; this.render(); },{size:10.5*U,weight:'900',r:5*U});
+  };
+
+  try{ window.__HB_BEAN_BACKPACK_FINAL__='v34-clean-layout'; }catch(e){}
+})();
+
 // === final activation v33: bean equipment backpack replica ===
 (function(){
   if(typeof Game==='undefined') return;
@@ -13960,4 +14862,89 @@ Object.assign(Game.prototype,{
     this._hbDrawBeanDetail(selected,{x,y,w,h},(this.save&&this.save.loadout)||[]);
     this.button(x+w/2-130,y+h+18,260,58,'關閉','bean_info_close',()=>{ this._relicCompare=null; this.render(); },{size:25,weight:'900'});
   };
+})();
+
+// === final activation v36: actual last-write backpack fix ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const BALL_SLOT=2, SIDE_SLOTS=[0,1,3,4];
+  const TYPES=['ball','wrist','shoes','charm','mask','hoop'];
+  const TYPE_LABEL={ball:'籃球',wrist:'護腕',shoes:'球鞋',charm:'護符',mask:'面具',hoop:'籃框'};
+  const TABS=[['全部',''],['籃球','ball'],['護腕','wrist'],['球鞋','shoes'],['護符','charm'],['面具','mask'],['籃框','hoop']];
+  const SORTS=[['稀有度','rarity'],['部位','type'],['已裝備','equipped'],['可升級','upgrade']];
+  const SLOT_LABELS=['副裝','護具','唯一籃球','飾品','籃框'];
+  const TIER_COL=['#d8d1bd','#7fd8ff','#c88cff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['普通','精良','稀有','史詩','傳奇','神話'];
+  const CLEAN_VER='20260629_clean_relics_v6';
+  const uniq=list=>{ const seen=new Set(), out=[]; for(const x of list||[]) if(x&&!seen.has(x)){ seen.add(x); out.push(x); } return out; };
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||'普通';
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  const affixValue=a=>{ const v=Number(a&&a.val)||0; return (v>=0?'+':'')+(a&&a.pct?Math.round(v*100)+'%':Math.round(v)); };
+  const affixLine=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'詞綴')+' '+affixValue(a);
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+  function stageOf(g){ const st=g._artStage?g._artStage():{x:0,y:0,w:BW,h:BH,U:BH/393}; const U=st.U||1; return {U,X:v=>st.x+v*U,Y:v=>st.y+v*U,D:v=>v*U}; }
+  function panel(g,x,y,w,h,r,fill,stroke){ const ctx=g.ctx; g.rr(x,y,w,h,r||18); const gr=ctx.createLinearGradient(0,y,0,y+h); gr.addColorStop(0,fill||'rgba(24,17,11,0.94)'); gr.addColorStop(1,'rgba(5,4,7,0.97)'); ctx.fillStyle=gr; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)'; ctx.stroke(); }
+  Game.prototype._hbBeanRelicSourceUrl=function(type,idx){ type=TYPE_LABEL[type]?type:'ball'; idx=Math.max(0,Math.min(6,Number(idx)||0)); return '/assets/relic_ui/clean_42/'+type+'_'+idx+'.png?v='+CLEAN_VER; };
+  Game.prototype._hbBeanRelicSourceImg=function(type,idx){ this._hbBeanCleanRelicImgs=this._hbBeanCleanRelicImgs||{}; const src=this._hbBeanRelicSourceUrl(type,idx); if(this._hbBeanCleanRelicImgs[src]!==undefined) return this._hbBeanCleanRelicImgs[src]; try{ const im=new Image(); im.decoding='async'; im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(e){} }; im.onerror=()=>{ im._err=true; }; im.src=src; this._hbBeanCleanRelicImgs[src]=im; return im; }catch(e){ this._hbBeanCleanRelicImgs[src]=null; return null; } };
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){ const add=[]; for(const type of TYPES) for(let i=0;i<7;i++) add.push(this._hbBeanRelicSourceUrl(type,i)); return uniq((prevFullPreload?prevFullPreload.call(this):[]).concat(add)); };
+  Game.prototype._drawRelicSheetIcon=function(type,idx,x,y,w,h,alpha){ const ctx=this.ctx, im=this._hbBeanRelicSourceImg&&this._hbBeanRelicSourceImg(type,idx); alpha=alpha==null?1:alpha; ctx.save(); ctx.globalAlpha=alpha; this.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.08)); ctx.clip(); if(im&&im.complete&&im.naturalWidth&&!im._err){ const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height, scale=Math.min(w/iw,h/ih)*0.985, dw=iw*scale, dh=ih*scale; ctx.shadowColor='rgba(255,231,166,0.28)'; ctx.shadowBlur=Math.max(6,Math.min(w,h)*0.08); ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }else{ ctx.fillStyle='rgba(10,8,8,0.72)'; ctx.fillRect(x,y,w,h); ctx.strokeStyle='rgba(215,169,69,0.38)'; ctx.lineWidth=2; this.rr(x+3,y+3,w-6,h-6,Math.max(6,Math.min(w,h)*0.07)); ctx.stroke(); } ctx.restore(); };
+  Game.prototype._hbBeanSlotAccepts=function(slot,idOrItem){ if(!validSlot(slot)) return false; const item=typeof idOrItem==='string'?(this._hbRelicDisplay?this._hbRelicDisplay(idOrItem):null):idOrItem; if(!item) return false; return item.type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT; };
+  Game.prototype._hbBeanPreferredSlot=function(item){ const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():(this.save&&this.save.loadout)||[]; if(!item) return -1; if(item.type==='ball') return BALL_SLOT; if(validSlot(this._relicSlotTarget)&&this._hbBeanSlotAccepts(this._relicSlotTarget,item)) return this._relicSlotTarget; for(const slot of SIDE_SLOTS) if(!load[slot]) return slot; return SIDE_SLOTS[0]; };
+  Game.prototype._hbEquipRelic=function(rid,opts){ opts=opts||{}; const s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; if(!rid||typeof RELICS==='undefined'||!RELICS[rid]) return; const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():s.loadout; const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):(this._relicDisplay?this._relicDisplay(rid,true):null); if(!item) return; if(load.includes(rid)){ this.toast&&this.toast('已裝備',item.name); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); return; } let slot=(validSlot(opts.slot)&&this._hbBeanSlotAccepts(opts.slot,item))?opts.slot:-1; if(!validSlot(slot)) slot=this._hbBeanPreferredSlot(item); if(!validSlot(slot)||!this._hbBeanSlotAccepts(slot,item)){ this.toast&&this.toast('裝備欄位不符',item.type==='ball'?'籃球只能裝在中間唯一籃球欄':'非籃球不能裝在中間欄'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } if(item.type==='ball'){ for(let i=0;i<load.length;i++){ const ex=load[i]; if(i!==BALL_SLOT&&ex&&this._hbRelicDisplay&&this._hbRelicDisplay(ex)&&this._hbRelicDisplay(ex).type==='ball'){ load[i]=null; if(!s.library.includes(ex)&&s.library.length<40) s.library.push(ex); } } } const old=load[slot]; if(old&&old!==rid&&!s.library.includes(old)&&s.library.length<40) s.library.push(old); load[slot]=rid; s.library=s.library.filter(id=>id!==rid); if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots(); persist(s); sync(this); this._relicCompare=null; this._relicSlotTarget=null; this._bagSel=rid; this.toast&&this.toast('已裝備',item.name); this.audio&&this.audio.sfx&&this.audio.sfx('select'); this.render&&this.render(); };
+  Game.prototype._hbUnequipRelic=function(rid){ const s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; const idx=s.loadout.indexOf(rid); if(idx<0) return; if(!s.library.includes(rid)&&s.library.length<40) s.library.push(rid); s.loadout[idx]=null; persist(s); sync(this); this._relicCompare=null; this._bagSel=rid; this.toast&&this.toast('已卸下','放回庫存'); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._hbDiscardRelic=function(rid){ const s=this.save||{}; if(!Array.isArray(s.library)) s.library=[]; if((s.loadout||[]).includes(rid)){ this.toast&&this.toast('無法丟棄','請先卸下裝備'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } const before=s.library.length; s.library=s.library.filter(id=>id!==rid); if(before===s.library.length){ this.toast&&this.toast('庫存沒有這件裝備'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } persist(s); sync(this); this._bagSel=null; this._relicCompare=null; this.toast&&this.toast('已丟棄','裝備已移除'); this.audio&&this.audio.sfx&&this.audio.sfx('coin'); this.render&&this.render(); };
+  Game.prototype._hbConfirmDiscardRelic=function(rid){ const it=this._hbRelicDisplay?this._hbRelicDisplay(rid):null; if(!it) return; if((this.save.loadout||[]).includes(rid)){ this.toast&&this.toast('無法丟棄','請先卸下裝備'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } this.confirm('確定丟棄「'+it.name+'」？這個動作不能復原。',()=>this._hbDiscardRelic(rid)); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._openRelicCompare=function(rid,opts){ opts=opts||{}; const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):null; if(!item) return; this._bagSel=rid; if(validSlot(opts.slot)) this._relicSlotTarget=opts.slot; if(this._bag) this._relicCompare=null; else { const load=(this.save&&this.save.loadout)||[]; this._relicCompare={rid,current:null,slot:this._hbBeanPreferredSlot(item),inspect:true,equipped:load.includes(rid)}; } this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._hbBeanVisibleRelics=function(){ const s=this.save||{}, load=s.loadout||[]; let ids=[]; if(validSlot(this._relicSlotTarget)&&this._hbSlotCandidates){ ids=this._hbSlotCandidates(this._relicSlotTarget); if(load[this._relicSlotTarget]) ids=[load[this._relicSlotTarget]].concat(ids); }else if(this._hbOwnedRelicIds) ids=this._hbOwnedRelicIds(true); else ids=uniq(load.filter(Boolean).concat(s.library||[])); const tab=this._relicTabHero||''; if(tab) ids=ids.filter(id=>{ const it=this._hbRelicDisplay&&this._hbRelicDisplay(id); return it&&it.type===tab; }); return uniq(ids).map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):null).filter(Boolean); };
+  function drawCard(g,it,x,y,w,h,o){ o=o||{}; const ctx=g.ctx, col=it?tierCol(it):'rgba(215,169,69,0.42)', pressed=g._press&&g._press({x,y,w,h}); panel(g,x,y,w,h,Math.max(8,Math.min(w,h)*0.12),'rgba(20,15,11,0.92)',o.selected?'#fff0b0':col); if(o.selected||o.equipped){ ctx.save(); ctx.shadowColor=o.selected?'#fff0b0':col; ctx.shadowBlur=o.selected?18:11; g.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.12)); ctx.strokeStyle=o.selected?'#fff0b0':col; ctx.lineWidth=o.selected?4:2.8; ctx.stroke(); ctx.restore(); } if(pressed){ ctx.save(); ctx.fillStyle='rgba(255,255,255,0.16)'; g.rr(x+4,y+4,w-8,h-8,Math.max(6,Math.min(w,h)*0.10)); ctx.fill(); ctx.restore(); } if(!it) return; const pad=Math.max(5,Math.min(w,h)*0.10); g._drawRelicSheetIcon(it.type,it.idx,x+pad,y+pad,w-pad*2,h-pad*2,1); if(o.equipped){ ctx.save(); ctx.fillStyle='#b8ff2f'; ctx.shadowColor='#b8ff2f'; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(x+w-15,y+15,13,0,TAU); ctx.fill(); ctx.restore(); g.text('✓',x+w-15,y+16,21,'#142008',{align:'center',baseline:'middle',weight:'900'}); } }
+  function drawSlot(g,slotNo,r,rid,U){ const ctx=g.ctx, target=g._relicSlotTarget===slotNo, item=rid&&(g._hbRelicDisplay?g._hbRelicDisplay(rid):null); const col=item?tierCol(item):(slotNo===BALL_SLOT?'rgba(185,128,255,0.82)':'rgba(215,169,69,0.48)'); g.text(SLOT_LABELS[slotNo]||'裝備',r.x+r.w/2,r.y-6*U,10.5*U,slotNo===BALL_SLOT?'#f5bcff':'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:slotNo===BALL_SLOT?5*U:0}); panel(g,r.x,r.y,r.w,r.h,8*U,'rgba(12,9,8,0.94)',target?'#d8ff44':col); if(slotNo===BALL_SLOT){ ctx.save(); ctx.shadowColor='#b980ff'; ctx.shadowBlur=target?20*U:10*U; g.rr(r.x+4*U,r.y+4*U,r.w-8*U,r.h-8*U,7*U); ctx.strokeStyle=target?'#fff0ff':'#b980ff'; ctx.lineWidth=target?3:2.5; ctx.stroke(); ctx.restore(); } if(item){ const side=Math.min(r.w,r.h)*0.78; g._drawRelicSheetIcon(item.type,item.idx,r.x+r.w/2-side/2,r.y+r.h/2-side/2+2*U,side,side,1); }else{ g.text('+',r.x+r.w/2,r.y+r.h/2-6*U,23*U,target?'#d8ff44':'rgba(215,169,69,0.68)',{align:'center',baseline:'middle',weight:'900'}); g.text(slotNo===BALL_SLOT?'空籃球':'空欄',r.x+r.w/2,r.y+r.h/2+13*U,8.5*U,target?'#d8ff44':'rgba(226,210,174,0.62)',{align:'center',baseline:'middle',weight:'900'}); } }
+  function drawDetail(g,sel,p,load,U){ const ctx=g.ctx; panel(g,p.x,p.y,p.w,p.h,9*U,'rgba(16,13,10,0.96)','rgba(215,169,69,0.76)'); if(!sel){ g.text('選擇一件裝備',p.x+p.w/2,p.y+p.h/2-10*U,15*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:6*U}); g.text('點擊庫存或上方欄位查看資訊',p.x+p.w/2,p.y+p.h/2+17*U,10*U,'#c8b894',{align:'center',baseline:'middle',weight:'900'}); return; } const col=tierCol(sel), equipped=load.includes(sel.id), inLibrary=(g.save.library||[]).includes(sel.id); const iconBox={x:p.x+10*U,y:p.y+28*U,w:p.w*0.40,h:p.h-72*U}; panel(g,iconBox.x,iconBox.y,iconBox.w,iconBox.h,7*U,'rgba(8,7,7,0.88)',col); const side=Math.min(iconBox.w-12*U,iconBox.h-12*U); g._drawRelicSheetIcon(sel.type,sel.idx,iconBox.x+iconBox.w/2-side/2,iconBox.y+iconBox.h/2-side/2,side,side,1); const tx=p.x+p.w*0.46, tw=p.w*0.50; g.text(equipped?'已裝備聖物':'庫存裝備',tx,p.y+18*U,10.5*U,equipped?'#d8ff44':'#9fe6ff',{weight:'900'}); g.text(clip(g,sel.name,tw,16*U,'900'),tx,p.y+38*U,16*U,col,{weight:'900',glow:5*U}); g.rr(tx,p.y+48*U,82*U,18*U,4*U); ctx.fillStyle=col; ctx.globalAlpha=0.26; ctx.fill(); ctx.globalAlpha=1; g.text(tierName(sel)+' · '+(TYPE_LABEL[sel.type]||sel.core||'裝備'),tx+41*U,p.y+57*U,8.7*U,'#fff4dc',{align:'center',baseline:'middle',weight:'900'}); g.text('Lv. '+(Number(sel.lvl)||0)+' / 50',tx,p.y+82*U,12*U,'#ffe7a6',{weight:'900'}); g.text('強度 '+(Number(sel.q)||0)+'/50',tx+88*U,p.y+82*U,10.5*U,'#c8b894',{weight:'900'}); let y=p.y+107*U; ctx.save(); ctx.strokeStyle='rgba(215,169,69,0.28)'; ctx.beginPath(); ctx.moveTo(tx,y-12*U); ctx.lineTo(tx+tw,y-12*U); ctx.stroke(); ctx.restore(); g.text('基礎素質',tx,y,10.5*U,'#ffce5c',{weight:'900'}); g.text(sel.desc?clip(g,sel.desc,tw-10*U,9.8*U,'800'):'裝備後獲得投籃與戰鬥加成',tx,y+18*U,9.8*U,'#efe3ca',{weight:'800'}); y+=50*U; g.text('詞綴',tx,y,10.5*U,'#ffce5c',{weight:'900'}); const lines=(sel.affixes||[]).slice(0,4).map(a=>'◆ '+affixLine(a)); if(!lines.length) lines.push('◆ 尚未鑲嵌詞綴'); for(let i=0;i<Math.min(4,lines.length);i++) g.text(clip(g,lines[i],tw-6*U,9.8*U,'900'),tx,y+(18+i*15)*U,9.8*U,i===0?'#d8ff44':'#fff1d5',{weight:'900'}); const by=p.y+p.h-29*U, bh=22*U, gap=5*U, bw=(p.w-20*U-gap*3)/4, bx=p.x+10*U; const equipLabel=equipped?'卸下':'裝備'; const equipCb=equipped?(()=>g._hbUnequipRelic(sel.id)):(()=>g._hbEquipRelic(sel.id,{slot:g._hbBeanPreferredSlot(sel)})); g.button(bx,by,bw,bh,equipLabel,'bean_v36_equip_'+sel.id,equipCb,{primary:true,size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap),by,bw,bh,'升級','bean_v36_upgrade_'+sel.id,()=>g.toast&&g.toast('無盡鍛造','無盡模式每 5 層可升級裝備'),{size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap)*2,by,bw,bh,'鎖定','bean_v36_lock_'+sel.id,()=>g.toast&&g.toast('鎖定功能','下一版開放，現在不改動資料'),{size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap)*3,by,bw,bh,'丟棄','bean_v36_discard_'+sel.id,()=>inLibrary&&!equipped?g._hbConfirmDiscardRelic(sel.id):g.toast&&g.toast('無法丟棄','請先卸下並確認在庫存中'),{danger:true,size:11.5*U,color:'#fff0e8',weight:'900',r:5*U}); }
+  Game.prototype.drawRelicBag=function(){ const ctx=this.ctx, s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots(); this._relicCompare=null; this.btn(0,0,BW,BH,'hero_bag_blocker_v36',()=>{}); const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png'); if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH); else { ctx.fillStyle='#09060b'; ctx.fillRect(0,0,BW,BH); } const {U,X,Y,D}=stageOf(this), safeT=this.insT||0, safeR=this.insR||0, safeL=this.insL||0, load=s.loadout||[]; this.text('聖物背包',Math.max(X(48),safeL+D(24)),Math.max(Y(24),safeT+D(22)),18*U,'#ffe7a6',{weight:'900',glow:9*U}); this.text('已裝備 '+load.filter(Boolean).length+'/5  ·  庫存 '+s.library.length+'/40',X(150),Math.max(Y(24),safeT+D(22)),10.5*U,'#d8c9a8',{baseline:'middle',weight:'900'}); this.button(Math.min(X(760),BW-safeR-D(94)),Math.max(Y(14),safeT+D(8)),D(66),D(26),'返回','hero_bag_close_v36',()=>this._closeHeroRelicBag(),{size:10.5*U,color:'#f0d0b0',weight:'900',r:5*U}); const tabX=Math.max(X(34),safeL+D(8)), tabY=Y(129), tabW=D(56), tabH=D(19), tabGap=D(5.6), tab=this._relicTabHero||''; for(let i=0;i<TABS.length;i++){ const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type; panel(this,tabX,y,tabW,tabH,5*U,on?'rgba(86,138,12,0.94)':'rgba(15,11,9,0.88)',on?'#b8ff2f':'rgba(215,169,69,0.50)'); this.text(label,tabX+tabW/2,y+tabH/2+0.5*U,8.7*U,on?'#d8ff44':'#d8c9a8',{align:'center',baseline:'middle',weight:'900'}); ((t,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v36_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type,tabX,y,tabW,tabH); } const slotW=D(68), slotH=D(52), slotGap=D(18), slotX=X(106), slotY=Y(36); for(let i=0;i<5;i++){ const r={x:slotX+i*(slotW+slotGap),y:slotY,w:slotW,h:slotH}; drawSlot(this,i,r,load[i],U); ((slotNo,rr,id)=>this.btn(rr.x,rr.y,rr.w,rr.h,'bean_v36_slot_'+slotNo,()=>{ this._relicSlotTarget=slotNo; if(id) this._bagSel=id; else { this._bagSel=null; if(slotNo===BALL_SLOT) this._relicTabHero='ball'; else if(this._relicTabHero==='ball') this._relicTabHero=''; } this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(i,r,load[i]); } const main={x:X(92),y:Y(130),w:D(600),h:D(250)}; panel(this,main.x,main.y,main.w,main.h,8*U,'rgba(8,7,7,0.90)','rgba(215,169,69,0.72)'); const sortMode=this._hbRelicSortMode?this._hbRelicSortMode():(this._relicSortHero||'rarity'); const sortX=main.x+D(14), sortY=main.y+D(9), sortH=D(16), sortW=D(43), sortGap=D(4.5); this.text('排序',sortX,sortY+sortH/2+0.5*U,8.2*U,'#c8b894',{baseline:'middle',weight:'900'}); for(let i=0;i<SORTS.length;i++){ const label=SORTS[i][0], id=SORTS[i][1], bx=sortX+D(29)+i*(sortW+sortGap), on=sortMode===id; panel(this,bx,sortY,sortW,sortH,4.5*U,on?'rgba(86,138,12,0.85)':'rgba(10,8,8,0.80)',on?'#b8ff2f':'rgba(215,169,69,0.42)'); this.text(label,bx+sortW/2,sortY+sortH/2+0.5*U,7.5*U,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'}); ((mode,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v36_sort_'+mode,()=>{ this._relicSortHero=mode; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(id,bx,sortY,sortW,sortH); } const allItems=this._hbBeanVisibleRelics?this._hbBeanVisibleRelics():[]; const grid={x:main.x+D(15),y:main.y+D(45),w:D(212),h:D(151)}, cols=4, rows=3, pageSize=cols*rows, cg=D(7), rg=D(7); const pages=Math.max(1,Math.ceil(allItems.length/pageSize)); this._relicPageHero=Math.max(0,Math.min(pages-1,Number(this._relicPageHero)||0)); const items=allItems.slice(this._relicPageHero*pageSize,this._relicPageHero*pageSize+pageSize); const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows, visibleIds=new Set(allItems.map(it=>it.id)); if(this._bagSel&&!visibleIds.has(this._bagSel)) this._bagSel=null; if(!this._bagSel&&allItems[0]) this._bagSel=allItems[0].id; for(let i=0;i<items.length;i++){ const it=items[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg); drawCard(this,it,x,y,cellW,cellH,{selected:this._bagSel===it.id,equipped:load.includes(it.id)}); ((id,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v36_item_'+id,()=>{ this._bagSel=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(it.id,x,y,cellW,cellH); } if(!items.length) this.text(validSlot(this._relicSlotTarget)?'這個欄位沒有可裝備物品':'庫存沒有已取得裝備',grid.x+grid.w/2,grid.y+grid.h/2,11.5*U,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'}); const py=main.y+D(210), pw=D(24), ph=D(19); this.button(grid.x+grid.w/2-D(45),py,pw,ph,'◀','bean_v36_page_prev',()=>{ this._relicPageHero=Math.max(0,(this._relicPageHero||0)-1); this.render(); },{size:8.7*U,weight:'900',r:4*U}); this.text((this._relicPageHero+1)+' / '+pages,grid.x+grid.w/2,py+ph/2+0.5*U,9.5*U,'#efe3ca',{align:'center',baseline:'middle',weight:'900'}); this.button(grid.x+grid.w/2+D(21),py,pw,ph,'▶','bean_v36_page_next',()=>{ this._relicPageHero=Math.min(pages-1,(this._relicPageHero||0)+1); this.render(); },{size:8.7*U,weight:'900',r:4*U}); const selected=this._bagSel&&(this._hbRelicDisplay?this._hbRelicDisplay(this._bagSel):null); drawDetail(this,selected,{x:main.x+D(244),y:main.y+D(18),w:main.w-D(262),h:main.h-D(35)},load,U); };
+  Game.prototype.drawRelicCompare=function(){ const c=this._relicCompare, selected=c&&this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null; if(!selected) return; const ctx=this.ctx, {U}=stageOf(this); ctx.save(); ctx.fillStyle='rgba(2,1,5,0.76)'; ctx.fillRect(0,0,BW,BH); ctx.restore(); this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v36_info_scrim',()=>{}); const w=Math.min(330*U,BW-70*U), h=Math.min(272*U,BH-44*U), x=BW/2-w/2, y=BH/2-h/2; drawDetail(this,selected,{x,y,w,h},(this.save&&this.save.loadout)||[],U); this.button(x+w/2-48*U,y+h+8*U,96*U,24*U,'關閉','bean_v36_info_close',()=>{ this._relicCompare=null; this.render(); },{size:10.5*U,weight:'900',r:5*U}); };
+  try{ window.__HB_BEAN_BACKPACK_FINAL__='v36-clean-layout'; }catch(e){}
+})();
+// === final activation v37: ascii-safe chinese backpack fix ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const BALL_SLOT=2, SIDE_SLOTS=[0,1,3,4];
+  const TYPES=['ball','wrist','shoes','charm','mask','hoop'];
+  const TYPE_LABEL={ball:'\u7c43\u7403',wrist:'\u8b77\u8155',shoes:'\u7403\u978b',charm:'\u8b77\u7b26',mask:'\u9762\u5177',hoop:'\u7c43\u6846'};
+  const TABS=[['\u5168\u90e8',''],['\u7c43\u7403','ball'],['\u8b77\u8155','wrist'],['\u7403\u978b','shoes'],['\u8b77\u7b26','charm'],['\u9762\u5177','mask'],['\u7c43\u6846','hoop']];
+  const SORTS=[['\u7a00\u6709\u5ea6','rarity'],['\u90e8\u4f4d','type'],['\u5df2\u88dd\u5099','equipped'],['\u53ef\u5347\u7d1a','upgrade']];
+  const SLOT_LABELS=['\u526f\u88dd','\u8b77\u5177','\u552f\u4e00\u7c43\u7403','\u98fe\u54c1','\u7c43\u6846'];
+  const TIER_COL=['#d8d1bd','#7fd8ff','#c88cff','#ffb23c','#ff5a4d','#f4f0d0'];
+  const TIER_NAME=['\u666e\u901a','\u7cbe\u826f','\u7a00\u6709','\u53f2\u8a69','\u50b3\u5947','\u795e\u8a71'];
+  const CLEAN_VER='20260629_clean_relics_v7';
+  const uniq=list=>{ const seen=new Set(), out=[]; for(const x of list||[]) if(x&&!seen.has(x)){ seen.add(x); out.push(x); } return out; };
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const tierCol=it=>TIER_COL[Math.max(0,Math.min(TIER_COL.length-1,Number(it&&it.tier)||0))]||'#e6c068';
+  const tierName=it=>TIER_NAME[Math.max(0,Math.min(TIER_NAME.length-1,Number(it&&it.tier)||0))]||TIER_NAME[0];
+  const clip=(g,s,w,fs,weight)=>g&&g._clip?g._clip(String(s||''),w,fs,weight||'900'):String(s||'');
+  const affixValue=a=>{ const v=Number(a&&a.val)||0; return (v>=0?'+':'')+(a&&a.pct?Math.round(v*100)+'%':Math.round(v)); };
+  const affixLine=a=>String((a&&a.label)||(a&&a.name)||(a&&a.key)||'\u8a5e\u7db4')+' '+affixValue(a);
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+  function stageOf(g){ const st=g._artStage?g._artStage():{x:0,y:0,w:BW,h:BH,U:BH/393}; const U=st.U||1; return {U,X:v=>st.x+v*U,Y:v=>st.y+v*U,D:v=>v*U}; }
+  function panel(g,x,y,w,h,r,fill,stroke){ const ctx=g.ctx; g.rr(x,y,w,h,r||18); const gr=ctx.createLinearGradient(0,y,0,y+h); gr.addColorStop(0,fill||'rgba(24,17,11,0.94)'); gr.addColorStop(1,'rgba(5,4,7,0.97)'); ctx.fillStyle=gr; ctx.fill(); ctx.lineWidth=2.4; ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)'; ctx.stroke(); }
+  Game.prototype._hbBeanRelicSourceUrl=function(type,idx){ type=TYPE_LABEL[type]?type:'ball'; idx=Math.max(0,Math.min(6,Number(idx)||0)); return '/assets/relic_ui/clean_42/'+type+'_'+idx+'.png?v='+CLEAN_VER; };
+  Game.prototype._hbBeanRelicSourceImg=function(type,idx){ this._hbBeanCleanRelicImgs=this._hbBeanCleanRelicImgs||{}; const src=this._hbBeanRelicSourceUrl(type,idx); if(this._hbBeanCleanRelicImgs[src]!==undefined) return this._hbBeanCleanRelicImgs[src]; try{ const im=new Image(); im.decoding='async'; im.onload=()=>{ try{ if(this._bag||this._relicCompare||this.screen==='relics') this.render(); }catch(e){} }; im.onerror=()=>{ im._err=true; }; im.src=src; this._hbBeanCleanRelicImgs[src]=im; return im; }catch(e){ this._hbBeanCleanRelicImgs[src]=null; return null; } };
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){ const add=[]; for(const type of TYPES) for(let i=0;i<7;i++) add.push(this._hbBeanRelicSourceUrl(type,i)); return uniq((prevFullPreload?prevFullPreload.call(this):[]).concat(add)); };
+  Game.prototype._drawRelicSheetIcon=function(type,idx,x,y,w,h,alpha){ const ctx=this.ctx, im=this._hbBeanRelicSourceImg&&this._hbBeanRelicSourceImg(type,idx); alpha=alpha==null?1:alpha; ctx.save(); ctx.globalAlpha=alpha; this.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.08)); ctx.clip(); if(im&&im.complete&&im.naturalWidth&&!im._err){ const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height, scale=Math.min(w/iw,h/ih)*0.985, dw=iw*scale, dh=ih*scale; ctx.shadowColor='rgba(255,231,166,0.28)'; ctx.shadowBlur=Math.max(6,Math.min(w,h)*0.08); ctx.drawImage(im,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }else{ ctx.fillStyle='rgba(10,8,8,0.72)'; ctx.fillRect(x,y,w,h); ctx.strokeStyle='rgba(215,169,69,0.38)'; ctx.lineWidth=2; this.rr(x+3,y+3,w-6,h-6,Math.max(6,Math.min(w,h)*0.07)); ctx.stroke(); } ctx.restore(); };
+  Game.prototype._hbBeanSlotAccepts=function(slot,idOrItem){ if(!validSlot(slot)) return false; const item=typeof idOrItem==='string'?(this._hbRelicDisplay?this._hbRelicDisplay(idOrItem):null):idOrItem; if(!item) return false; return item.type==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT; };
+  Game.prototype._hbBeanPreferredSlot=function(item){ const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():(this.save&&this.save.loadout)||[]; if(!item) return -1; if(item.type==='ball') return BALL_SLOT; if(validSlot(this._relicSlotTarget)&&this._hbBeanSlotAccepts(this._relicSlotTarget,item)) return this._relicSlotTarget; for(const slot of SIDE_SLOTS) if(!load[slot]) return slot; return SIDE_SLOTS[0]; };
+  Game.prototype._hbEquipRelic=function(rid,opts){ opts=opts||{}; const s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; if(!rid||typeof RELICS==='undefined'||!RELICS[rid]) return; const load=this._hbNormalizeLoadoutSlots?this._hbNormalizeLoadoutSlots():s.loadout; const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):(this._relicDisplay?this._relicDisplay(rid,true):null); if(!item) return; if(load.includes(rid)){ this.toast&&this.toast('\u5df2\u88dd\u5099',item.name); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); return; } let slot=(validSlot(opts.slot)&&this._hbBeanSlotAccepts(opts.slot,item))?opts.slot:-1; if(!validSlot(slot)) slot=this._hbBeanPreferredSlot(item); if(!validSlot(slot)||!this._hbBeanSlotAccepts(slot,item)){ this.toast&&this.toast('\u88dd\u5099\u6b04\u4f4d\u4e0d\u7b26',item.type==='ball'?'\u7c43\u7403\u53ea\u80fd\u88dd\u5728\u4e2d\u9593\u552f\u4e00\u7c43\u7403\u6b04':'\u975e\u7c43\u7403\u4e0d\u80fd\u88dd\u5728\u4e2d\u9593\u6b04'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } if(item.type==='ball'){ for(let i=0;i<load.length;i++){ const ex=load[i]; if(i!==BALL_SLOT&&ex&&this._hbRelicDisplay&&this._hbRelicDisplay(ex)&&this._hbRelicDisplay(ex).type==='ball'){ load[i]=null; if(!s.library.includes(ex)&&s.library.length<40) s.library.push(ex); } } } const old=load[slot]; if(old&&old!==rid&&!s.library.includes(old)&&s.library.length<40) s.library.push(old); load[slot]=rid; s.library=s.library.filter(id=>id!==rid); if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots(); persist(s); sync(this); this._relicCompare=null; this._relicSlotTarget=null; this._bagSel=rid; this.toast&&this.toast('\u5df2\u88dd\u5099',item.name); this.audio&&this.audio.sfx&&this.audio.sfx('select'); this.render&&this.render(); };
+  Game.prototype._hbUnequipRelic=function(rid){ const s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; const idx=s.loadout.indexOf(rid); if(idx<0) return; if(!s.library.includes(rid)&&s.library.length<40) s.library.push(rid); s.loadout[idx]=null; persist(s); sync(this); this._relicCompare=null; this._bagSel=rid; this.toast&&this.toast('\u5df2\u5378\u4e0b','\u653e\u56de\u5eab\u5b58'); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._hbDiscardRelic=function(rid){ const s=this.save||{}; if(!Array.isArray(s.library)) s.library=[]; if((s.loadout||[]).includes(rid)){ this.toast&&this.toast('\u7121\u6cd5\u4e1f\u68c4','\u8acb\u5148\u5378\u4e0b\u88dd\u5099'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } const before=s.library.length; s.library=s.library.filter(id=>id!==rid); if(before===s.library.length){ this.toast&&this.toast('\u5eab\u5b58\u6c92\u6709\u9019\u4ef6\u88dd\u5099'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } persist(s); sync(this); this._bagSel=null; this._relicCompare=null; this.toast&&this.toast('\u5df2\u4e1f\u68c4','\u88dd\u5099\u5df2\u79fb\u9664'); this.audio&&this.audio.sfx&&this.audio.sfx('coin'); this.render&&this.render(); };
+  Game.prototype._hbConfirmDiscardRelic=function(rid){ const it=this._hbRelicDisplay?this._hbRelicDisplay(rid):null; if(!it) return; if((this.save.loadout||[]).includes(rid)){ this.toast&&this.toast('\u7121\u6cd5\u4e1f\u68c4','\u8acb\u5148\u5378\u4e0b\u88dd\u5099'); this.audio&&this.audio.sfx&&this.audio.sfx('hurt'); this.render&&this.render(); return; } this.confirm('\u78ba\u5b9a\u4e1f\u68c4\u300c'+it.name+'\u300d\uff1f\u9019\u500b\u52d5\u4f5c\u4e0d\u80fd\u5fa9\u539f\u3002',()=>this._hbDiscardRelic(rid)); this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._openRelicCompare=function(rid,opts){ opts=opts||{}; const item=this._hbRelicDisplay?this._hbRelicDisplay(rid):null; if(!item) return; this._bagSel=rid; if(validSlot(opts.slot)) this._relicSlotTarget=opts.slot; if(this._bag) this._relicCompare=null; else { const load=(this.save&&this.save.loadout)||[]; this._relicCompare={rid,current:null,slot:this._hbBeanPreferredSlot(item),inspect:true,equipped:load.includes(rid)}; } this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); };
+  Game.prototype._hbBeanVisibleRelics=function(){ const s=this.save||{}, load=s.loadout||[]; let ids=[]; if(validSlot(this._relicSlotTarget)&&this._hbSlotCandidates){ ids=this._hbSlotCandidates(this._relicSlotTarget); if(load[this._relicSlotTarget]) ids=[load[this._relicSlotTarget]].concat(ids); }else if(this._hbOwnedRelicIds) ids=this._hbOwnedRelicIds(true); else ids=uniq(load.filter(Boolean).concat(s.library||[])); const tab=this._relicTabHero||''; if(tab) ids=ids.filter(id=>{ const it=this._hbRelicDisplay&&this._hbRelicDisplay(id); return it&&it.type===tab; }); return uniq(ids).map(id=>this._hbRelicDisplay?this._hbRelicDisplay(id):null).filter(Boolean); };
+  function drawCard(g,it,x,y,w,h,o){ o=o||{}; const ctx=g.ctx, col=it?tierCol(it):'rgba(215,169,69,0.42)', pressed=g._press&&g._press({x,y,w,h}); panel(g,x,y,w,h,Math.max(8,Math.min(w,h)*0.12),'rgba(20,15,11,0.92)',o.selected?'#fff0b0':col); if(o.selected||o.equipped){ ctx.save(); ctx.shadowColor=o.selected?'#fff0b0':col; ctx.shadowBlur=o.selected?18:11; g.rr(x,y,w,h,Math.max(8,Math.min(w,h)*0.12)); ctx.strokeStyle=o.selected?'#fff0b0':col; ctx.lineWidth=o.selected?4:2.8; ctx.stroke(); ctx.restore(); } if(pressed){ ctx.save(); ctx.fillStyle='rgba(255,255,255,0.16)'; g.rr(x+4,y+4,w-8,h-8,Math.max(6,Math.min(w,h)*0.10)); ctx.fill(); ctx.restore(); } if(!it) return; const pad=Math.max(5,Math.min(w,h)*0.10); g._drawRelicSheetIcon(it.type,it.idx,x+pad,y+pad,w-pad*2,h-pad*2,1); if(o.equipped){ ctx.save(); ctx.fillStyle='#b8ff2f'; ctx.shadowColor='#b8ff2f'; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(x+w-15,y+15,13,0,TAU); ctx.fill(); ctx.restore(); g.text('\u2713',x+w-15,y+16,21,'#142008',{align:'center',baseline:'middle',weight:'900'}); } }
+  function drawSlot(g,slotNo,r,rid,U){ const ctx=g.ctx, target=g._relicSlotTarget===slotNo, item=rid&&(g._hbRelicDisplay?g._hbRelicDisplay(rid):null); const col=item?tierCol(item):(slotNo===BALL_SLOT?'rgba(185,128,255,0.82)':'rgba(215,169,69,0.48)'); g.text(SLOT_LABELS[slotNo]||'\u88dd\u5099',r.x+r.w/2,r.y-6*U,10.5*U,slotNo===BALL_SLOT?'#f5bcff':'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:slotNo===BALL_SLOT?5*U:0}); panel(g,r.x,r.y,r.w,r.h,8*U,'rgba(12,9,8,0.94)',target?'#d8ff44':col); if(slotNo===BALL_SLOT){ ctx.save(); ctx.shadowColor='#b980ff'; ctx.shadowBlur=target?20*U:10*U; g.rr(r.x+4*U,r.y+4*U,r.w-8*U,r.h-8*U,7*U); ctx.strokeStyle=target?'#fff0ff':'#b980ff'; ctx.lineWidth=target?3:2.5; ctx.stroke(); ctx.restore(); } if(item){ const side=Math.min(r.w,r.h)*0.78; g._drawRelicSheetIcon(item.type,item.idx,r.x+r.w/2-side/2,r.y+r.h/2-side/2+2*U,side,side,1); }else{ g.text('+',r.x+r.w/2,r.y+r.h/2-6*U,23*U,target?'#d8ff44':'rgba(215,169,69,0.68)',{align:'center',baseline:'middle',weight:'900'}); g.text(slotNo===BALL_SLOT?'\u7a7a\u7c43\u7403':'\u7a7a\u6b04',r.x+r.w/2,r.y+r.h/2+13*U,8.5*U,target?'#d8ff44':'rgba(226,210,174,0.62)',{align:'center',baseline:'middle',weight:'900'}); } }
+  function drawDetail(g,sel,p,load,U){ const ctx=g.ctx; panel(g,p.x,p.y,p.w,p.h,9*U,'rgba(16,13,10,0.96)','rgba(215,169,69,0.76)'); if(!sel){ g.text('\u9078\u64c7\u4e00\u4ef6\u88dd\u5099',p.x+p.w/2,p.y+p.h/2-10*U,15*U,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:6*U}); g.text('\u9ede\u64ca\u5eab\u5b58\u6216\u4e0a\u65b9\u6b04\u4f4d\u67e5\u770b\u8cc7\u8a0a',p.x+p.w/2,p.y+p.h/2+17*U,10*U,'#c8b894',{align:'center',baseline:'middle',weight:'900'}); return; } const col=tierCol(sel), equipped=load.includes(sel.id), inLibrary=(g.save.library||[]).includes(sel.id); const iconBox={x:p.x+10*U,y:p.y+28*U,w:p.w*0.40,h:p.h-72*U}; panel(g,iconBox.x,iconBox.y,iconBox.w,iconBox.h,7*U,'rgba(8,7,7,0.88)',col); const side=Math.min(iconBox.w-12*U,iconBox.h-12*U); g._drawRelicSheetIcon(sel.type,sel.idx,iconBox.x+iconBox.w/2-side/2,iconBox.y+iconBox.h/2-side/2,side,side,1); const tx=p.x+p.w*0.46, tw=p.w*0.50; g.text(equipped?'\u5df2\u88dd\u5099\u8056\u7269':'\u5eab\u5b58\u88dd\u5099',tx,p.y+18*U,10.5*U,equipped?'#d8ff44':'#9fe6ff',{weight:'900'}); g.text(clip(g,sel.name,tw,16*U,'900'),tx,p.y+38*U,16*U,col,{weight:'900',glow:5*U}); g.rr(tx,p.y+48*U,82*U,18*U,4*U); ctx.fillStyle=col; ctx.globalAlpha=0.26; ctx.fill(); ctx.globalAlpha=1; g.text(tierName(sel)+' \u00b7 '+(TYPE_LABEL[sel.type]||sel.core||'\u88dd\u5099'),tx+41*U,p.y+57*U,8.7*U,'#fff4dc',{align:'center',baseline:'middle',weight:'900'}); g.text('Lv. '+(Number(sel.lvl)||0)+' / 50',tx,p.y+82*U,12*U,'#ffe7a6',{weight:'900'}); g.text('\u5f37\u5ea6 '+(Number(sel.q)||0)+'/50',tx+88*U,p.y+82*U,10.5*U,'#c8b894',{weight:'900'}); let y=p.y+107*U; ctx.save(); ctx.strokeStyle='rgba(215,169,69,0.28)'; ctx.beginPath(); ctx.moveTo(tx,y-12*U); ctx.lineTo(tx+tw,y-12*U); ctx.stroke(); ctx.restore(); g.text('\u57fa\u790e\u7d20\u8cea',tx,y,10.5*U,'#ffce5c',{weight:'900'}); g.text(sel.desc?clip(g,sel.desc,tw-10*U,9.8*U,'800'):'\u88dd\u5099\u5f8c\u7372\u5f97\u6295\u7c43\u8207\u6230\u9b25\u52a0\u6210',tx,y+18*U,9.8*U,'#efe3ca',{weight:'800'}); y+=50*U; g.text('\u8a5e\u7db4',tx,y,10.5*U,'#ffce5c',{weight:'900'}); const lines=(sel.affixes||[]).slice(0,4).map(a=>'\u25c6 '+affixLine(a)); if(!lines.length) lines.push('\u25c6 \u5c1a\u672a\u9472\u5d4c\u8a5e\u7db4'); for(let i=0;i<Math.min(4,lines.length);i++) g.text(clip(g,lines[i],tw-6*U,9.8*U,'900'),tx,y+(18+i*15)*U,9.8*U,i===0?'#d8ff44':'#fff1d5',{weight:'900'}); const by=p.y+p.h-29*U, bh=22*U, gap=5*U, bw=(p.w-20*U-gap*3)/4, bx=p.x+10*U; const equipLabel=equipped?'\u5378\u4e0b':'\u88dd\u5099'; const equipCb=equipped?(()=>g._hbUnequipRelic(sel.id)):(()=>g._hbEquipRelic(sel.id,{slot:g._hbBeanPreferredSlot(sel)})); g.button(bx,by,bw,bh,equipLabel,'bean_v37_equip_'+sel.id,equipCb,{primary:true,size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap),by,bw,bh,'\u5347\u7d1a','bean_v37_upgrade_'+sel.id,()=>g.toast&&g.toast('\u7121\u76e1\u935b\u9020','\u7121\u76e1\u6a21\u5f0f\u6bcf 5 \u5c64\u53ef\u5347\u7d1a\u88dd\u5099'),{size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap)*2,by,bw,bh,'\u9396\u5b9a','bean_v37_lock_'+sel.id,()=>g.toast&&g.toast('\u9396\u5b9a\u529f\u80fd','\u4e0b\u4e00\u7248\u958b\u653e\uff0c\u73fe\u5728\u4e0d\u6539\u52d5\u8cc7\u6599'),{size:11.5*U,weight:'900',r:5*U}); g.button(bx+(bw+gap)*3,by,bw,bh,'\u4e1f\u68c4','bean_v37_discard_'+sel.id,()=>inLibrary&&!equipped?g._hbConfirmDiscardRelic(sel.id):g.toast&&g.toast('\u7121\u6cd5\u4e1f\u68c4','\u8acb\u5148\u5378\u4e0b\u4e26\u78ba\u8a8d\u5728\u5eab\u5b58\u4e2d'),{danger:true,size:11.5*U,color:'#fff0e8',weight:'900',r:5*U}); }
+  Game.prototype.drawRelicBag=function(){ const ctx=this.ctx, s=this.save||{}; if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null]; if(!Array.isArray(s.library)) s.library=[]; if(this._hbNormalizeLoadoutSlots) this._hbNormalizeLoadoutSlots(); this._relicCompare=null; this.btn(0,0,BW,BH,'hero_bag_blocker_v37',()=>{}); const bg=this._relicUiImg&&this._relicUiImg('backpack_bg.png'); if(bg&&bg.complete&&bg.naturalWidth&&!bg._err) ctx.drawImage(bg,0,0,BW,BH); else { ctx.fillStyle='#09060b'; ctx.fillRect(0,0,BW,BH); } const {U,X,Y,D}=stageOf(this), safeT=this.insT||0, safeR=this.insR||0, safeL=this.insL||0, load=s.loadout||[]; this.text('\u8056\u7269\u80cc\u5305',Math.max(X(48),safeL+D(24)),Math.max(Y(24),safeT+D(22)),18*U,'#ffe7a6',{weight:'900',glow:9*U}); this.text('\u5df2\u88dd\u5099 '+load.filter(Boolean).length+'/5  \u00b7  \u5eab\u5b58 '+s.library.length+'/40',X(150),Math.max(Y(24),safeT+D(22)),10.5*U,'#d8c9a8',{baseline:'middle',weight:'900'}); this.button(Math.min(X(760),BW-safeR-D(94)),Math.max(Y(14),safeT+D(8)),D(66),D(26),'\u8fd4\u56de','hero_bag_close_v37',()=>this._closeHeroRelicBag(),{size:10.5*U,color:'#f0d0b0',weight:'900',r:5*U}); const tabX=Math.max(X(34),safeL+D(8)), tabY=Y(129), tabW=D(56), tabH=D(19), tabGap=D(5.6), tab=this._relicTabHero||''; for(let i=0;i<TABS.length;i++){ const label=TABS[i][0], type=TABS[i][1], y=tabY+i*(tabH+tabGap), on=tab===type; panel(this,tabX,y,tabW,tabH,5*U,on?'rgba(86,138,12,0.94)':'rgba(15,11,9,0.88)',on?'#b8ff2f':'rgba(215,169,69,0.50)'); this.text(label,tabX+tabW/2,y+tabH/2+0.5*U,8.7*U,on?'#d8ff44':'#d8c9a8',{align:'center',baseline:'middle',weight:'900'}); ((t,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v37_tab_'+(t||'all'),()=>{ this._relicTabHero=t; this._relicSlotTarget=null; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(type,tabX,y,tabW,tabH); } const slotW=D(68), slotH=D(52), slotGap=D(18), slotX=X(106), slotY=Y(36); for(let i=0;i<5;i++){ const r={x:slotX+i*(slotW+slotGap),y:slotY,w:slotW,h:slotH}; drawSlot(this,i,r,load[i],U); ((slotNo,rr,id)=>this.btn(rr.x,rr.y,rr.w,rr.h,'bean_v37_slot_'+slotNo,()=>{ this._relicSlotTarget=slotNo; if(id) this._bagSel=id; else { this._bagSel=null; if(slotNo===BALL_SLOT) this._relicTabHero='ball'; else if(this._relicTabHero==='ball') this._relicTabHero=''; } this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(i,r,load[i]); } const main={x:X(92),y:Y(130),w:D(600),h:D(250)}; panel(this,main.x,main.y,main.w,main.h,8*U,'rgba(8,7,7,0.90)','rgba(215,169,69,0.72)'); const sortMode=this._hbRelicSortMode?this._hbRelicSortMode():(this._relicSortHero||'rarity'); const sortX=main.x+D(14), sortY=main.y+D(9), sortH=D(16), sortW=D(43), sortGap=D(4.5); this.text('\u6392\u5e8f',sortX,sortY+sortH/2+0.5*U,8.2*U,'#c8b894',{baseline:'middle',weight:'900'}); for(let i=0;i<SORTS.length;i++){ const label=SORTS[i][0], id=SORTS[i][1], bx=sortX+D(29)+i*(sortW+sortGap), on=sortMode===id; panel(this,bx,sortY,sortW,sortH,4.5*U,on?'rgba(86,138,12,0.85)':'rgba(10,8,8,0.80)',on?'#b8ff2f':'rgba(215,169,69,0.42)'); this.text(label,bx+sortW/2,sortY+sortH/2+0.5*U,7.5*U,on?'#d8ff44':'#c8b894',{align:'center',baseline:'middle',weight:'900'}); ((mode,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v37_sort_'+mode,()=>{ this._relicSortHero=mode; this._relicPageHero=0; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(id,bx,sortY,sortW,sortH); } const allItems=this._hbBeanVisibleRelics?this._hbBeanVisibleRelics():[]; const grid={x:main.x+D(15),y:main.y+D(45),w:D(212),h:D(151)}, cols=4, rows=3, pageSize=cols*rows, cg=D(7), rg=D(7); const pages=Math.max(1,Math.ceil(allItems.length/pageSize)); this._relicPageHero=Math.max(0,Math.min(pages-1,Number(this._relicPageHero)||0)); const items=allItems.slice(this._relicPageHero*pageSize,this._relicPageHero*pageSize+pageSize); const cellW=(grid.w-cg*(cols-1))/cols, cellH=(grid.h-rg*(rows-1))/rows, visibleIds=new Set(allItems.map(it=>it.id)); if(this._bagSel&&!visibleIds.has(this._bagSel)) this._bagSel=null; if(!this._bagSel&&allItems[0]) this._bagSel=allItems[0].id; for(let i=0;i<items.length;i++){ const it=items[i], x=grid.x+(i%cols)*(cellW+cg), y=grid.y+((i/cols)|0)*(cellH+rg); drawCard(this,it,x,y,cellW,cellH,{selected:this._bagSel===it.id,equipped:load.includes(it.id)}); ((id,rx,ry,rw,rh)=>this.btn(rx,ry,rw,rh,'bean_v37_item_'+id,()=>{ this._bagSel=id; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render(); }))(it.id,x,y,cellW,cellH); } if(!items.length) this.text(validSlot(this._relicSlotTarget)?'\u9019\u500b\u6b04\u4f4d\u6c92\u6709\u53ef\u88dd\u5099\u7269\u54c1':'\u5eab\u5b58\u6c92\u6709\u5df2\u53d6\u5f97\u88dd\u5099',grid.x+grid.w/2,grid.y+grid.h/2,11.5*U,'rgba(240,226,190,0.62)',{align:'center',baseline:'middle',weight:'900'}); const py=main.y+D(210), pw=D(24), ph=D(19); this.button(grid.x+grid.w/2-D(45),py,pw,ph,'\u25c0','bean_v37_page_prev',()=>{ this._relicPageHero=Math.max(0,(this._relicPageHero||0)-1); this.render(); },{size:8.7*U,weight:'900',r:4*U}); this.text((this._relicPageHero+1)+' / '+pages,grid.x+grid.w/2,py+ph/2+0.5*U,9.5*U,'#efe3ca',{align:'center',baseline:'middle',weight:'900'}); this.button(grid.x+grid.w/2+D(21),py,pw,ph,'\u25b6','bean_v37_page_next',()=>{ this._relicPageHero=Math.min(pages-1,(this._relicPageHero||0)+1); this.render(); },{size:8.7*U,weight:'900',r:4*U}); const selected=this._bagSel&&(this._hbRelicDisplay?this._hbRelicDisplay(this._bagSel):null); drawDetail(this,selected,{x:main.x+D(244),y:main.y+D(18),w:main.w-D(262),h:main.h-D(35)},load,U); };
+  Game.prototype.drawRelicCompare=function(){ const c=this._relicCompare, selected=c&&this._hbRelicDisplay?this._hbRelicDisplay(c.rid):null; if(!selected) return; const ctx=this.ctx, {U}=stageOf(this); ctx.save(); ctx.fillStyle='rgba(2,1,5,0.76)'; ctx.fillRect(0,0,BW,BH); ctx.restore(); this.btn(-4000,-4000,BW+8000,BH+8000,'bean_v37_info_scrim',()=>{}); const w=Math.min(330*U,BW-70*U), h=Math.min(272*U,BH-44*U), x=BW/2-w/2, y=BH/2-h/2; drawDetail(this,selected,{x,y,w,h},(this.save&&this.save.loadout)||[],U); this.button(x+w/2-48*U,y+h+8*U,96*U,24*U,'\u95dc\u9589','bean_v37_info_close',()=>{ this._relicCompare=null; this.render(); },{size:10.5*U,weight:'900',r:5*U}); };
+  try{ window.__HB_BEAN_BACKPACK_FINAL__='v37-clean-layout'; }catch(e){}
 })();
