@@ -16868,6 +16868,25 @@ Object.assign(Game.prototype,{
   }
   function drawMiniScene(g,r,m,locked){
     const ctx=g.ctx, x=r.x, y=r.y, w=r.w, h=r.h;
+    const gateBg=img(g,'./assets/atlas_v2/bg_war_gates.png');
+    if(gateBg&&gateBg.complete&&gateBg.naturalWidth&&!gateBg._err){
+      const nw=gateBg.naturalWidth||1672, nh=gateBg.naturalHeight||941;
+      const starts=[0.025,0.188,0.323,0.462,0.595];
+      const sx=nw*starts[Math.max(0,Math.min(4,m.id-1))], sy=nh*0.105, sw=nw*0.18, sh=nh*0.64;
+      ctx.save();
+      g.rr(x,y,w,h,14);
+      ctx.clip();
+      ctx.globalAlpha=locked?0.42:1;
+      ctx.drawImage(gateBg,sx,sy,sw,sh,x,y,w,h);
+      const shade=ctx.createLinearGradient(0,y,0,y+h);
+      shade.addColorStop(0,'rgba(0,0,0,0.06)');
+      shade.addColorStop(0.72,'rgba(0,0,0,0.10)');
+      shade.addColorStop(1,'rgba(0,0,0,0.56)');
+      ctx.fillStyle=shade;
+      ctx.fillRect(x,y,w,h);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     g.rr(x,y,w,h,14);
     ctx.clip();
@@ -16969,13 +16988,29 @@ Object.assign(Game.prototype,{
     const ctx=g.ctx, press=isPressed(g,r), lift=selected?0:10;
     const x=r.x, y=r.y+(press?6:lift), w=r.w, h=r.h-(selected?0:lift);
     const glow=selected?'rgba(255,220,92,0.50)':(locked?'rgba(120,80,80,0.08)':'rgba(154,255,52,0.18)');
-    panel(g,x,y,w,h,20,locked?'rgba(8,7,8,0.72)':'rgba(12,10,10,0.90)',selected?'#ffd866':'rgba(166,124,51,0.64)',glow);
-    ctx.save();
-    ctx.strokeStyle=selected?'rgba(255,238,153,0.90)':'rgba(70,52,38,0.82)';
-    ctx.lineWidth=selected?6:4;
-    g.rr(x+8,y+8,w-16,h-16,16);
-    ctx.stroke();
-    ctx.restore();
+    const frame=img(g,'./assets/atlas_v2/card_frame.png');
+    if(frame&&frame.complete&&frame.naturalWidth&&!frame._err){
+      ctx.save();
+      ctx.globalAlpha=locked?0.55:(selected?1:0.84);
+      ctx.shadowColor=selected?'rgba(255,222,92,0.72)':'rgba(0,0,0,0)';
+      ctx.shadowBlur=selected?30:0;
+      ctx.drawImage(frame,x-30,y-48,w+60,h+96);
+      ctx.restore();
+      ctx.save();
+      g.rr(x+7,y+7,w-14,h-14,17);
+      ctx.strokeStyle=selected?'rgba(255,238,153,0.95)':'rgba(166,124,51,0.55)';
+      ctx.lineWidth=selected?5:3;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      panel(g,x,y,w,h,20,locked?'rgba(8,7,8,0.72)':'rgba(12,10,10,0.90)',selected?'#ffd866':'rgba(166,124,51,0.64)',glow);
+      ctx.save();
+      ctx.strokeStyle=selected?'rgba(255,238,153,0.90)':'rgba(70,52,38,0.82)';
+      ctx.lineWidth=selected?6:4;
+      g.rr(x+8,y+8,w-16,h-16,16);
+      ctx.stroke();
+      ctx.restore();
+    }
     label(g,'第 '+m.id+' 幕',x+w/2,y+44,selected?35:25,locked?'rgba(230,211,165,0.46)':'#ffe66f',{align:'center',baseline:'middle',glow:selected?10:0});
     label(g,m.name,x+w/2,y+(selected?96:86),selected?48:33,locked?'rgba(240,228,204,0.44)':'#fff1d5',{align:'center',baseline:'middle',glow:selected?8:0});
     label(g,m.sub,x+w/2,y+(selected?142:125),selected?23:18,locked?'rgba(207,188,148,0.36)':'#e6c783',{align:'center',baseline:'middle',weight:'800'});
@@ -17011,6 +17046,29 @@ Object.assign(Game.prototype,{
   }
   function drawBallButton(g,r,m,locked){
     const ctx=g.ctx, press=isPressed(g,r), cx=r.x+r.w/2, cy=r.y+r.h/2+(press?5:0), radius=Math.min(r.w,r.h)*0.48;
+    const ballArt=img(g,'./assets/atlas_v2/enter_ball.png');
+    if(ballArt&&ballArt.complete&&ballArt.naturalWidth&&!ballArt._err){
+      ctx.save();
+      const pulse=0.6+0.4*Math.sin((g.t||0)*4.2);
+      ctx.globalAlpha=locked?0.45:1;
+      ctx.shadowColor=locked?'rgba(120,90,60,0.18)':'rgba(255,217,74,'+(0.45+0.25*pulse)+')';
+      ctx.shadowBlur=locked?10:34+18*pulse;
+      drawContain(ctx,ballArt,r.x-18,r.y-18,r.w+36,r.h+36,0);
+      ctx.restore();
+      label(g,locked?'尚未解鎖':'進入第 '+m.id+' 幕',cx,cy+radius+34,28,locked?'rgba(226,204,160,0.52)':'#ffe58a',{align:'center',baseline:'middle',glow:locked?0:8});
+      g.btn(r.x,r.y,r.w,r.h,'atlas_gate_ball_'+m.id,()=>{
+        g._selAct=m.id;
+        if(locked){
+          if(g.audio&&g.audio.sfx)g.audio.sfx('hurt');
+          if(g.toast)g.toast('戰幕尚未解鎖','先擊破前一幕 Boss');
+          if(g.render)g.render();
+          return;
+        }
+        if(g.audio&&g.audio.sfx)g.audio.sfx('ui');
+        g.go('route');
+      });
+      return;
+    }
     ctx.save();
     const pulse=0.6+0.4*Math.sin((g.t||0)*4.2);
     ctx.shadowColor=locked?'rgba(120,90,60,0.18)':'rgba(255,217,74,'+(0.45+0.25*pulse)+')';
