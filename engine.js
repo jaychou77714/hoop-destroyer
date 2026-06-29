@@ -16209,3 +16209,242 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_SPEED_FOUL_FINAL__='v43-speed-five-foul'; window.__HB_DEFEAT_SCALE_FINAL__='v44-bigger-defeat-results'; }catch(e){}
 })();
+
+// === final activation v45: larger 50-player leaderboards ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const MAX_ROWS=50;
+  const MIN_SHOTS=10;
+  const p100=n=>Math.max(0,Math.min(100,Math.round((Number(n)||0)*100)));
+  const countText=n=>String(Math.max(0,Number(n)||0));
+  const clipName=(g,txt,w,size)=>g._clip?g._clip(String(txt||''),w,size,'900'):String(txt||'');
+  const resetCountdown=()=>{
+    try{
+      const now=new Date(), next=new Date(now);
+      next.setHours(24,0,0,0);
+      let ms=Math.max(0,next-now);
+      const h=Math.floor(ms/3600000); ms-=h*3600000;
+      const m=Math.floor(ms/60000); ms-=m*60000;
+      const s=Math.floor(ms/1000);
+      return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    }catch(e){ return '--:--:--'; }
+  };
+  const snapSave=row=>{
+    let p=row&&row.profile_json;
+    if(typeof p==='string'){ try{ p=JSON.parse(p); }catch(e){ p=null; } }
+    if(p&&p.save) p=p.save;
+    return p||{};
+  };
+  const button=(g,x,y,w,h,text,id,cb,primary)=>{
+    if(g._hbDrawLeaderButton) return g._hbDrawLeaderButton(x,y,w,h,text,id,cb,!!primary);
+    return g.button(x,y,w,h,text,id,cb,{primary:!!primary,size:24,weight:'900',r:12});
+  };
+  function setLeaderScroll(g,v){
+    g._scroll=clamp(v,0,g._scrollMax||0);
+    g.render&&g.render();
+  }
+  function drawScrollBar(g,x,y,h,totalH,viewH,scroll){
+    if(totalH<=viewH) return;
+    const ctx=g.ctx, trackW=12;
+    g.rr(x,y,trackW,h,8);
+    ctx.fillStyle='rgba(255,231,166,0.12)'; ctx.fill();
+    const thumbH=Math.max(60,h*(viewH/totalH));
+    const thumbY=y+(h-thumbH)*(scroll/(totalH-viewH));
+    g.rr(x,thumbY,trackW,thumbH,8);
+    ctx.fillStyle='#d8ff44'; ctx.fill();
+  }
+
+  const prevOpenLeaderboard=Game.prototype._openLeaderboard;
+  Game.prototype._openLeaderboard=function(mode){
+    this._scroll=0;
+    return prevOpenLeaderboard?prevOpenLeaderboard.apply(this,arguments):undefined;
+  };
+
+  const prevFetchLeaderboard=Game.prototype._fetchLeaderboard;
+  Game.prototype._fetchLeaderboard=async function(){
+    const cfg=this._supabaseCfg?this._supabaseCfg():{};
+    if(!cfg.url||!cfg.key){
+      if(prevFetchLeaderboard) return prevFetchLeaderboard.apply(this,arguments);
+      this._leaderboardLoading=false; this._leaderboardStatus='目前顯示本機成績'; this.render&&this.render(); return;
+    }
+    const base=cfg.url.replace(/\/+$/,'')+'/rest/v1/'+encodeURIComponent(cfg.table||'player_accounts');
+    const headers={apikey:cfg.key,Authorization:'Bearer '+cfg.key};
+    try{
+      const fields='player_name,today_key,today_shots,today_makes,today_swishes,today_banks,today_luckies,endless_best,endless_best_score,endless_best_bosses,last_login_at,profile_json,profile_updated_at';
+      const q='?select='+encodeURIComponent(fields)+'&order=last_login_at.desc&limit=150';
+      const res=await fetch(base+q,{headers});
+      if(!res.ok) throw new Error(await res.text());
+      this._leaderboardCache=await res.json();
+      this._leaderboardStatus=(this._leaderboardCache&&this._leaderboardCache.length)?'雲端排行榜已更新 · 最多顯示 50 人':'目前沒有雲端成績';
+    }catch(e){
+      try{
+        const q='?select=player_name,today_key,today_shots,today_makes,last_login_at&today_key=eq.'+encodeURIComponent(this._dayKey&&this._dayKey())+'&order=today_shots.desc&limit=50';
+        const res=await fetch(base+q,{headers});
+        if(!res.ok) throw new Error(await res.text());
+        this._leaderboardCache=await res.json();
+        this._leaderboardStatus='雲端排行榜已更新 · 最多顯示 50 人';
+      }catch(e2){
+        this._leaderboardCache=[];
+        this._leaderboardStatus='雲端排行榜讀取失敗，先顯示本機成績';
+        try{ console.warn('[HB leaderboard v45]',e,e2); }catch(_e){}
+      }
+    }finally{
+      this._leaderboardLoading=false;
+      this.render&&this.render();
+    }
+  };
+
+  const prevDailyRows=Game.prototype._leaderboardRows;
+  Game.prototype._leaderboardRows=function(){
+    const rows=[], add=row=>{
+      const r=this._normalLeaderboardRow?this._normalLeaderboardRow(row):null;
+      if(!r) return;
+      const key=String(r.name||'').toLowerCase();
+      const i=rows.findIndex(x=>String(x.name||'').toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const c=rows[i];
+        if(r.local||r.shots>c.shots||(r.shots===c.shots&&r.makes>c.makes)) rows[i]=Object.assign(c,r,{local:c.local||r.local});
+      }
+    };
+    for(const r of (Array.isArray(this._leaderboardCache)?this._leaderboardCache:[])) add(r);
+    if(this._leaderboardLocalRow) add(this._leaderboardLocalRow());
+    if(!rows.length&&prevDailyRows) return prevDailyRows.call(this).slice(0,MAX_ROWS);
+    rows.sort((a,b)=>a.qualified!==b.qualified?(a.qualified?-1:1):(b.score-a.score)||(b.makes-a.makes)||(b.swishes-a.swishes)||(b.luckies-a.luckies)||(b.shots-a.shots)||String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+    let rank=1;
+    for(const r of rows) r.rank=r.qualified?rank++:'觀察';
+    return rows.slice(0,MAX_ROWS);
+  };
+
+  Game.prototype._endlessLeaderboardRows=function(){
+    const rows=[], add=row=>{
+      if(!row) return;
+      const name=String(row.player_name||row.name||'').trim();
+      if(!name) return;
+      const s=snapSave(row);
+      const depth=Math.max(0,Number(row.endless_best)||Number(s.endlessBest)||0);
+      if(depth<=0&&!row._local) return;
+      const r={
+        name,depth,
+        score:Math.max(0,Number(row.endless_best_score)||Number(s.endlessBestScore)||Number(s.stats&&s.stats.bestScore)||0),
+        bosses:Math.max(0,Number(row.endless_best_bosses)||Number(s.endlessBestBosses)||0),
+        kills:Math.max(0,Number(s.endlessBestKills)||0),
+        local:!!row._local,
+        updated:row.last_login_at||row.profile_updated_at||''
+      };
+      const key=name.toLowerCase();
+      const i=rows.findIndex(x=>String(x.name||'').toLowerCase()===key);
+      if(i<0) rows.push(r);
+      else {
+        const c=rows[i];
+        if(r.local||r.depth>c.depth||(r.depth===c.depth&&r.score>c.score)) rows[i]=Object.assign(c,r,{local:c.local||r.local});
+      }
+    };
+    for(const r of (Array.isArray(this._leaderboardCache)?this._leaderboardCache:[])) add(r);
+    const L=this.save&&this.save.login?this.save.login:{};
+    const localName=String((L.name||'').trim()||'你');
+    add({player_name:localName,_local:true,profile_json:this._progressSnapshot?this._progressSnapshot():{save:this.save||{}}});
+    rows.sort((a,b)=>(b.depth-a.depth)||(b.score-a.score)||(b.bosses-a.bosses)||String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+    let rank=1;
+    for(const r of rows) r.rank=r.depth>0?rank++:'觀察';
+    return rows.slice(0,MAX_ROWS);
+  };
+
+  Game.prototype.drawLeaderboardModal=function(){
+    const ctx=this.ctx, IL=this.insL||0, IR=this.insR||0, IT=this.insT||0, IB=this.insB||0;
+    const mode=this._leaderboardMode==='endless'?'endless':'daily';
+    ctx.save(); ctx.fillStyle='rgba(3,1,7,0.94)'; ctx.fillRect(-4000,-4000,BW+8000,BH+8000); ctx.restore();
+    this.btn(-4000,-4000,BW+8000,BH+8000,'leaderboard_scrim',()=>{});
+    const x=IL+26,y=IT+16,w=BW-IL-IR-52,h=BH-IT-IB-34;
+    this.rr(x,y,w,h,22);
+    const bg=ctx.createLinearGradient(0,y,0,y+h);
+    bg.addColorStop(0,'rgba(24,16,11,0.99)');
+    bg.addColorStop(0.48,'rgba(9,7,10,0.99)');
+    bg.addColorStop(1,'rgba(5,4,8,0.99)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(215,169,69,0.90)'; this.rr(x,y,w,h,22); ctx.stroke();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(185,255,47,0.36)'; this.rr(x+12,y+12,w-24,h-24,16); ctx.stroke();
+
+    this.text(mode==='endless'?'無盡深淵排行榜':'今日命中排行榜',x+w/2,y+58,58,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:16});
+    this.text(mode==='endless'?'最多顯示 50 人 · 依最高層數排序':'最多顯示 50 人 · 每日重置倒數 '+resetCountdown(),x+w/2,y+108,30,mode==='endless'?'#c8b894':'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+    this._hbLeaderTab(x+44,y+30,172,58,'今日命中',mode==='daily',()=>{this._leaderboardMode='daily';this._scroll=0;this.render();});
+    this._hbLeaderTab(x+230,y+30,172,58,'無盡深淵',mode==='endless',()=>{this._leaderboardMode='endless';this._scroll=0;this.render();});
+    button(this,x+w-162,y+30,120,58,'關閉','leaderboard_close',()=>this._closeLeaderboard(),false);
+    button(this,x+w-302,y+30,120,58,'刷新','leaderboard_refresh',()=>{ this._leaderboardLoading=true; this._leaderboardStatus='重新整理...'; this._fetchLeaderboard&&this._fetchLeaderboard(); this.render(); },true);
+
+    const scrollW=76;
+    const tx=x+44, ty=y+152, tw=w-88-scrollW, headerH=66, rowH=86;
+    const listY=ty+headerH+10, listH=Math.max(260,y+h-listY-84);
+    const rows=(mode==='endless'?(this._endlessLeaderboardRows?this._endlessLeaderboardRows():[]):(this._leaderboardRows?this._leaderboardRows():[])).slice(0,MAX_ROWS);
+    const totalH=rows.length*rowH;
+    this._scrollable=true;
+    this._scrollMax=Math.max(0,totalH-listH);
+    this._scroll=clamp(Number(this._scroll)||0,0,this._scrollMax);
+
+    this.rr(tx,ty,tw,headerH,12);
+    ctx.fillStyle='rgba(215,169,69,0.14)'; ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(215,169,69,0.40)'; this.rr(tx,ty,tw,headerH,12); ctx.stroke();
+
+    if(mode==='endless'){
+      const cols={rank:tx+82,name:tx+220,depth:tx+tw*0.56,score:tx+tw*0.72,boss:tx+tw*0.86,kills:tx+tw-72};
+      [['名次',cols.rank,1],['投手',cols.name,0],['最高層',cols.depth,1],['分數',cols.score,1],['Boss',cols.boss,1],['擊殺',cols.kills,1]].forEach(c=>this.text(c[0],c[1],ty+headerH/2,c[0]==='投手'?30:31,'#d7a945',c[2]?{align:'center',baseline:'middle',weight:'900'}:{baseline:'middle',weight:'900'}));
+      ctx.save(); ctx.beginPath(); ctx.rect(tx,listY,tw,listH); ctx.clip();
+      const start=Math.max(0,Math.floor(this._scroll/rowH)-1), end=Math.min(rows.length,start+Math.ceil(listH/rowH)+3);
+      for(let i=start;i<end;i++){
+        const r=rows[i], ry=listY+i*rowH-this._scroll, mid=ry+(rowH-8)/2;
+        this.rr(tx,ry,tw,rowH-8,12); ctx.fillStyle=r.local?'rgba(159,224,36,0.20)':(i%2?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.18)'); ctx.fill();
+        ctx.lineWidth=r.local?2.5:1.2; ctx.strokeStyle=r.local?'rgba(185,255,47,0.62)':'rgba(215,169,69,0.22)'; this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const bx=tx+18,by=ry+11,bw=126,bh=rowH-30; this.rr(bx,by,bw,bh,14); ctx.fillStyle='rgba(215,169,69,0.18)'; ctx.fill(); ctx.lineWidth=1.9; ctx.strokeStyle='rgba(255,231,166,0.50)'; this.rr(bx,by,bw,bh,14); ctx.stroke();
+        this.text(String(r.rank||'觀察'),bx+bw/2,mid,34,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未知投手');
+        this.text(clipName(this,name,cols.depth-cols.name-38,34),cols.name,mid-12,34,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(r.depth>=25?'終焉深層':'第 '+(r.depth||0)+' 層',cols.name,mid+24,19,r.depth>=25?'#c89bff':'#9e9178',{baseline:'middle',weight:'800'});
+        this.text(countText(r.depth),cols.depth,mid,36,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        this.text(countText(r.score),cols.score,mid,31,'#ece0c4',{align:'center',baseline:'middle',weight:'900'});
+        this.text(countText(r.bosses),cols.boss,mid,31,'#e6c068',{align:'center',baseline:'middle',weight:'900'});
+        this.text(countText(r.kills),cols.kills,mid,31,'#b8ad96',{align:'center',baseline:'middle',weight:'900'});
+      }
+      ctx.restore();
+    }else{
+      const cols={rank:tx+82,name:tx+224,shot:tx+tw*0.56,special:tx+tw*0.72,acc:tx+tw*0.86,score:tx+tw-72};
+      [['名次',cols.rank],['出手 / 命中',cols.shot],['空心 / 幸運',cols.special],['命中率',cols.acc],['穩定',cols.score]].forEach(c=>this.text(c[0],c[1],ty+headerH/2,29,'#d7a945',{align:'center',baseline:'middle',weight:'900'}));
+      this.text('投手',cols.name,ty+headerH/2,30,'#d7a945',{baseline:'middle',weight:'900'});
+      ctx.save(); ctx.beginPath(); ctx.rect(tx,listY,tw,listH); ctx.clip();
+      const start=Math.max(0,Math.floor(this._scroll/rowH)-1), end=Math.min(rows.length,start+Math.ceil(listH/rowH)+3);
+      for(let i=start;i<end;i++){
+        const r=rows[i], ry=listY+i*rowH-this._scroll, mid=ry+(rowH-8)/2;
+        const shots=Math.max(0,Number(r.shots)||0), makes=Math.max(0,Number(r.makes)||0), q=!!r.qualified, need=Math.max(0,MIN_SHOTS-shots);
+        this.rr(tx,ry,tw,rowH-8,12); ctx.fillStyle=r.local?'rgba(159,224,36,0.20)':(i%2?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.18)'); ctx.fill();
+        ctx.lineWidth=r.local?2.5:1.2; ctx.strokeStyle=r.local?'rgba(185,255,47,0.62)':'rgba(215,169,69,0.22)'; this.rr(tx,ry,tw,rowH-8,12); ctx.stroke();
+        const bx=tx+18,by=ry+11,bw=126,bh=rowH-30; this.rr(bx,by,bw,bh,14); ctx.fillStyle=q?'rgba(215,169,69,0.18)':'rgba(159,224,36,0.15)'; ctx.fill(); ctx.lineWidth=1.9; ctx.strokeStyle=q?'rgba(255,231,166,0.50)':'rgba(159,224,36,0.62)'; this.rr(bx,by,bw,bh,14); ctx.stroke();
+        this.text(q?String(r.rank):'觀察',bx+bw/2,mid-(q?0:10),q?34:28,q?'#ffe7a6':'#9fe024',{align:'center',baseline:'middle',weight:'900'});
+        if(!q) this.text('差 '+need+' 球',bx+bw/2,mid+21,18,'#d8ff44',{align:'center',baseline:'middle',weight:'900'});
+        const name=(r.local?'你 · ':'')+String(r.name||'未知投手');
+        this.text(clipName(this,name,cols.shot-cols.name-38,34),cols.name,mid-12,34,r.local?'#d8ff44':'#efe3ca',{baseline:'middle',weight:'900'});
+        this.text(q?'已入榜 · 樣本 '+shots+' 球':'未滿 '+MIN_SHOTS+' 球先觀察',cols.name,mid+24,19,q?'#a99a7a':'#9fe024',{baseline:'middle',weight:'800'});
+        this.text(shots+' / '+makes,cols.shot,mid-6,31,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+        this.text('出手 / 命中',cols.shot,mid+25,17,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text(countText(r.swishes)+' / '+countText(r.luckies),cols.special,mid-6,31,'#ffe7a6',{align:'center',baseline:'middle',weight:'900'});
+        this.text('空心 / 幸運',cols.special,mid+25,17,'#8f8068',{align:'center',baseline:'middle',weight:'800'});
+        this.text(shots?Math.round((r.acc||0)*100)+'%':'0%',cols.acc,mid,33,q?'#ece0c4':'#b6aa90',{align:'center',baseline:'middle',weight:'900'});
+        this.text(String(p100(r.score!=null?r.score:r.acc)),cols.score,mid,32,q?'#ffe7a6':'#9e9178',{align:'center',baseline:'middle',weight:'900'});
+      }
+      ctx.restore();
+    }
+
+    if(!rows.length) this.text(mode==='endless'?'尚無無盡紀錄':'今天還沒有排行資料',x+w/2,y+h/2+18,42,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    const scrollX=x+w-88;
+    drawScrollBar(this,scrollX+43,listY,listH,totalH,listH,this._scroll);
+    if(this._scrollMax>0){
+      button(this,scrollX,listY,54,60,'▲','leaderboard_scroll_up',()=>setLeaderScroll(this,(this._scroll||0)-rowH*3),false);
+      button(this,scrollX,listY+listH-60,54,60,'▼','leaderboard_scroll_down',()=>setLeaderScroll(this,(this._scroll||0)+rowH*3),false);
+      const first=Math.min(rows.length,Math.floor(this._scroll/rowH)+1);
+      const last=Math.min(rows.length,Math.floor((this._scroll+listH)/rowH)+1);
+      this.text(first+'-'+last+' / '+rows.length,scrollX+28,listY+listH/2,22,'#c8b894',{align:'center',baseline:'middle',weight:'900'});
+    }
+    const status=this._leaderboardLoading?'載入中...':(this._leaderboardStatus||'');
+    this.text(status,x+w/2,y+h-34,25,'#9e9178',{align:'center',baseline:'middle',weight:'800'});
+  };
+
+  try{ window.__HB_LEADERBOARD_FINAL__='v45-large-50-leaderboard'; }catch(e){}
+})();
