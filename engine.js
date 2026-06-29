@@ -17112,8 +17112,8 @@ Object.assign(Game.prototype,{
     });
   }
   function drawRightPanel(g,sel,unlocked){
-    const ctx=g.ctx, m=pickMeta(sel), locked=sel>unlocked, safeR=g.insR||0;
-    const w=Math.min(430,Math.max(360,BW*0.18)), x=BW-safeR-w-54, y=165, h=BH-225;
+    const ctx=g.ctx, m=pickMeta(sel), locked=sel>unlocked, safeR=g.insR||0, box=arguments[3]||null;
+    const w=box?box.w:Math.min(430,Math.max(360,BW*0.18)), x=box?box.x:BW-safeR-w-54, y=box?box.y:165, h=box?box.h:BH-225;
     panel(g,x,y,w,h,22,'rgba(10,8,8,0.91)',locked?'rgba(110,88,60,0.45)':'rgba(226,176,74,0.72)',locked?null:'rgba(255,221,96,0.18)');
     label(g,'第 '+m.id+' 幕',x+38,y+58,24,locked?'rgba(237,221,184,0.44)':'#ffe66f',{baseline:'middle'});
     label(g,m.name,x+38,y+106,45,locked?'rgba(252,239,210,0.50)':'#fff1d6',{baseline:'middle',glow:locked?0:8});
@@ -17168,6 +17168,118 @@ Object.assign(Game.prototype,{
       label(g,'點卡片選幕，按發光籃球出戰',x+w/2,y+h-44,22,'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:8});
     }
   }
+  drawRightPanel=function(g,sel,unlocked,box){
+    const ctx=g.ctx, m=pickMeta(sel), locked=sel>unlocked, raw=box||{};
+    const baseW=326, baseH=612;
+    const rawW=Number(raw.w)||Math.min(430,Math.max(360,BW*0.18));
+    const rawH=Number(raw.h)||Math.max(520,BH-225);
+    const rawX=Number(raw.x)||(BW-(g.insR||0)-rawW-54);
+    const rawY=Number(raw.y)||165;
+    const S=Math.max(0.72,Math.min(rawW/baseW,rawH/baseH));
+    const x=rawX+(rawW-baseW*S)/2, y=rawY+(rawH-baseH*S)/2, w=baseW*S, h=baseH*S;
+    const X=v=>x+v*S, Y=v=>y+v*S, D=v=>v*S;
+    ctx.save();
+    ctx.globalAlpha=locked?0.58:1;
+    panel(g,x,y,w,h,D(18),'rgba(8,7,7,0.94)',locked?'rgba(118,92,58,0.55)':'rgba(218,167,65,0.86)',locked?null:'rgba(255,217,86,0.10)');
+    ctx.strokeStyle='rgba(255,232,153,0.08)';
+    ctx.lineWidth=D(1);
+    g.rr(X(10),Y(10),D(306),D(592),D(15));
+    ctx.stroke();
+    label(g,'\u7b2c '+m.id+' \u5e55',X(36),Y(58),D(23),locked?'rgba(240,223,178,0.54)':'#ffe66f',{baseline:'middle'});
+    label(g,m.name,X(36),Y(105),D(39),locked?'rgba(252,239,210,0.56)':'#fff1d6',{baseline:'middle',glow:locked?0:D(8)});
+    label(g,'Boss\u3000'+m.boss,X(36),Y(158),D(23),locked?'rgba(226,204,166,0.48)':'#e8c88a',{baseline:'middle'});
+    const art={x:X(32),y:Y(182),w:D(262),h:D(172)};
+    panel(g,art.x,art.y,art.w,art.h,D(9),'rgba(6,5,6,0.78)',locked?'rgba(110,88,60,0.48)':m.tone,locked?null:m.tone);
+    const boss=img(g,'./assets/mob/bosses/act'+m.id+'.png');
+    if(boss&&boss.complete&&boss.naturalWidth&&!boss._err){
+      ctx.save();
+      ctx.globalAlpha=locked?0.42:1;
+      ctx.shadowColor=m.tone;
+      ctx.shadowBlur=locked?0:D(18);
+      drawContain(ctx,boss,art.x+D(8),art.y+D(7),art.w-D(16),art.h-D(14),0);
+      ctx.restore();
+    }else{
+      ctx.save();
+      ctx.fillStyle='#f1c17f';
+      ctx.strokeStyle='#070506';
+      ctx.lineWidth=D(5);
+      ctx.beginPath();
+      ctx.ellipse(art.x+art.w/2,art.y+art.h*0.58,art.w*0.20,art.h*0.30,0,0,TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle='#070506';
+      ctx.beginPath(); ctx.arc(art.x+art.w/2+D(12),art.y+art.h*0.50,D(4),0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(art.x+art.w/2+D(32),art.y+art.h*0.50,D(4),0,TAU); ctx.fill();
+      ctx.restore();
+    }
+    const rec=recordFor(g,m.id);
+    label(g,'\u9032\u5ea6',X(36),Y(392),D(21),'#cbb88e',{baseline:'middle'});
+    label(g,rec.progress+' / 5',X(282),Y(392),D(30),locked?'rgba(237,221,184,0.50)':'#fff0b6',{align:'right',baseline:'middle'});
+    ctx.strokeStyle='rgba(226,176,74,0.32)';
+    ctx.lineWidth=D(2);
+    ctx.beginPath(); ctx.moveTo(X(34),Y(425)); ctx.lineTo(X(292),Y(425)); ctx.stroke();
+    const rows=[
+      ['\u7c43\u7344\u5370\u8a18',rec.marks,'#d5a6ff'],
+      ['Boss \u64ca\u6557',rec.clears,'#ff8a76'],
+      ['\u719f\u5ea6',rec.heat,'#ffe070'],
+      ['\u6838\u5fc3',m.core,m.tone],
+      ['\u7cbe\u9b44\u8056\u7269',m.relic,'#d8ff44']
+    ];
+    for(let i=0;i<rows.length;i++){
+      const yy=Y(462+i*34);
+      label(g,rows[i][0],X(38),yy,D(18),'#b9aa87',{baseline:'middle',weight:'900'});
+      label(g,String(rows[i][1]),X(284),yy,i<3?D(24):D(18),locked?'rgba(235,220,184,0.46)':rows[i][2],{align:'right',baseline:'middle',weight:'900',glow:i<3&&!locked?D(5):0});
+    }
+    const bottom=locked?'\u901a\u95dc\u524d\u5e55 Boss \u89e3\u9396':'\u9ede\u5361\u7247\u9078\u5e55\uff0c\u6309\u767c\u5149\u7c43\u7403\u51fa\u6230';
+    label(g,bottom,X(163),Y(578),D(20),locked?'rgba(255,224,160,0.58)':'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:locked?0:D(7)});
+    ctx.restore();
+  };
+  const DEFAULT_ATLAS_GROUPS={
+    version:1,
+    base:{w:1704,h:786},
+    selectedScale:1.22,
+    selectedDy:-18,
+    cards:{
+      act1:{x:145,y:230,w:245,h:375},
+      act2:{x:405,y:235,w:235,h:360},
+      act3:{x:635,y:235,w:235,h:360},
+      act4:{x:865,y:235,w:235,h:360},
+      act5:{x:1095,y:235,w:235,h:360}
+    },
+    side:{x:1322,y:118,w:326,h:612},
+    ball:{size:132,dy:34}
+  };
+  function cloneGroups(src){
+    try{ return JSON.parse(JSON.stringify(src||DEFAULT_ATLAS_GROUPS)); }catch(e){ return DEFAULT_ATLAS_GROUPS; }
+  }
+  function groupRect(layout,id){
+    const cards=(layout&&layout.cards)||DEFAULT_ATLAS_GROUPS.cards;
+    return (id==='side'?(layout&&layout.side):cards['act'+id])||DEFAULT_ATLAS_GROUPS.cards['act'+id]||DEFAULT_ATLAS_GROUPS.side;
+  }
+  function atlasGroupLayout(g){
+    if(g._hbAtlasGroupLayout===undefined){
+      g._hbAtlasGroupLayout=null;
+      try{
+        fetch('./assets/atlas_v2/group_layout.json?v=20260630_atlas_groups',{cache:'no-store'})
+          .then(r=>r.ok?r.json():null)
+          .then(data=>{ g._hbAtlasGroupLayout=data||false; if(g.screen==='atlas'&&g.render)g.render(); })
+          .catch(()=>{ g._hbAtlasGroupLayout=false; });
+      }catch(e){ g._hbAtlasGroupLayout=false; }
+    }
+    return g._hbAtlasGroupLayout||DEFAULT_ATLAS_GROUPS;
+  }
+  function mapGroupRect(layout,raw,selected){
+    const base=(layout&&layout.base)||DEFAULT_ATLAS_GROUPS.base;
+    const u=BH/(Number(base.h)||786);
+    const ox=(BW-(Number(base.w)||1704)*u)/2;
+    let r={x:ox+(Number(raw.x)||0)*u,y:(Number(raw.y)||0)*u,w:(Number(raw.w)||1)*u,h:(Number(raw.h)||1)*u};
+    if(selected){
+      const sc=Number(layout.selectedScale)||1, dy=(Number(layout.selectedDy)||0)*u;
+      const cx=r.x+r.w/2, cy=r.y+r.h/2;
+      r={x:cx-r.w*sc/2,y:cy-r.h*sc/2+dy,w:r.w*sc,h:r.h*sc};
+    }
+    return r;
+  }
   Game.prototype.drawAtlas=function(){
     const ctx=this.ctx, maxAct=5, unlocked=Math.max(1,Math.min(maxAct,this._unlockedActs?this._unlockedActs():1));
     this._selAct=Math.max(1,Math.min(maxAct,Number(this._selAct)||1));
@@ -17178,21 +17290,45 @@ Object.assign(Game.prototype,{
     this.btn(safeL+54,safeT+42,210,76,'atlas_gate_back',()=>this.go('hub'));
     label(this,'籃獄圖譜',BW/2,82,72,'#f8d978',{align:'center',baseline:'middle',glow:14});
     label(this,'點選戰幕，擊破籃獄核心',BW/2,142,28,'#f5d989',{align:'center',baseline:'middle',weight:'900',glow:6});
-    const rightW=Math.min(430,Math.max(360,BW*0.18)), rightX=BW-safeR-rightW-54;
-    const areaX=safeL+128, areaRight=rightX-56, areaW=Math.max(980,areaRight-areaX);
-    const centers=[];
-    for(let i=0;i<maxAct;i++) centers.push(areaX+areaW*(0.06+i*0.218));
+    const layout=atlasGroupLayout(this);
     const selectedRects={};
     for(let i=0;i<maxAct;i++){
       const m=pickMeta(i+1), selected=m.id===this._selAct, locked=m.id>unlocked;
-      const w=selected?350:244, h=selected?585:446;
-      const r={x:centers[i]-w/2,y:selected?236:326,w,h};
+      const r=mapGroupRect(layout,groupRect(layout,m.id),selected);
       selectedRects[m.id]=r;
       drawGate(this,m,r,selected,locked,unlocked);
     }
     const m=pickMeta(this._selAct), sr=selectedRects[this._selAct], locked=this._selAct>unlocked;
-    drawBallButton(this,{x:sr.x+sr.w/2-88,y:sr.y+sr.h+28,w:176,h:176},m,locked);
-    drawRightPanel(this,this._selAct,unlocked);
+    const base=(layout&&layout.base)||DEFAULT_ATLAS_GROUPS.base, u=BH/(Number(base.h)||786);
+    const ball=(layout&&layout.ball)||DEFAULT_ATLAS_GROUPS.ball, ballSize=(Number(ball.size)||132)*u, ballDy=(Number(ball.dy)||34)*u;
+    drawBallButton(this,{x:sr.x+sr.w/2-ballSize/2,y:sr.y+sr.h+ballDy,w:ballSize,h:ballSize},m,locked);
+    drawRightPanel(this,this._selAct,unlocked,mapGroupRect(layout,groupRect(layout,'side'),false));
     try{ window.__HB_ATLAS_SCENE_GATES__='v1-five-node-bean-side-panel'; }catch(e){}
   };
+})();
+
+// ---- Atlas v2 art participates in the login/entry loading pass ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const ATLAS_V2_PRELOAD=[
+    '/assets/atlas_v2/bg_war_gates.png',
+    '/assets/atlas_v2/card_frame.png',
+    '/assets/atlas_v2/enter_ball.png',
+    '/assets/atlas_v2/node_token.png',
+    '/assets/atlas_v2/boss_node.png',
+    '/assets/atlas_v2/small_button.png'
+  ];
+  const prevFull=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=prevFull?prevFull.call(this):[];
+    const seen={}, out=[];
+    for(const src of base.concat(ATLAS_V2_PRELOAD)){
+      const s=String(src||'').trim();
+      if(!s||seen[s]) continue;
+      seen[s]=1;
+      out.push(s);
+    }
+    return out;
+  };
+  try{ window.__HB_ATLAS_PRELOAD_FINAL__='v46-atlas-v2-art-loading'; }catch(e){}
 })();

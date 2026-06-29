@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hoopbreaker Atlas Layout Admin</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #050306; color: #f5e7c8; font-family: "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif; }
+    body { display: grid; grid-template-columns: minmax(0, 1fr) 390px; }
+    .work { display: grid; place-items: center; padding: 10px; background: radial-gradient(circle at 50% 0%, rgba(160,70,255,.18), transparent 34%), #040205; }
+    .shell { position: relative; width: min(calc(100vw - 410px), calc((100vh - 20px) * 1704 / 786)); aspect-ratio: 1704 / 786; }
+    #stage { position: absolute; inset: 0; width: 1704px; height: 786px; transform-origin: top left; overflow: hidden; background: url("assets/atlas_v2/bg_war_gates.png") center / cover no-repeat; box-shadow: 0 18px 70px rgba(0,0,0,.75); }
+    .group { position: absolute; cursor: move; border: 2px solid rgba(216,255,68,.52); border-radius: 12px; box-shadow: 0 0 18px rgba(216,255,68,.16); background: rgba(5,4,3,.22); overflow: visible; }
+    .group.selected { border-color: #d8ff44; box-shadow: 0 0 0 2px rgba(0,0,0,.6), 0 0 26px rgba(216,255,68,.5); }
+    .group .name { position: absolute; left: 0; top: -28px; padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,.76); color: #eaff9e; font-size: 13px; font-weight: 900; pointer-events: none; }
+    .card { position: absolute; inset: 0; background: url("assets/atlas_v2/card_frame.png") center / 116% 116% no-repeat; }
+    .card .title { position: absolute; left: 13%; right: 13%; top: 14%; text-align: center; color: #fff0c8; font-weight: 900; font-size: 22px; text-shadow: 0 3px 8px #000, 0 0 10px #ffe37a; }
+    .card .art { position: absolute; left: 17%; right: 17%; top: 39%; height: 30%; border: 1px solid rgba(255,229,116,.65); border-radius: 8px; overflow: hidden; background: rgba(0,0,0,.5); }
+    .card .art img { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.08) contrast(1.05); }
+    .card .nodes { position: absolute; left: 17%; right: 17%; bottom: 13%; display: flex; justify-content: space-between; align-items: center; }
+    .card .nodes img { width: 18%; aspect-ratio: 1; object-fit: contain; filter: drop-shadow(0 0 7px rgba(255,225,80,.65)); }
+    .sideCard { position: absolute; inset: 0; border: 3px solid rgba(218,167,65,.86); border-radius: 18px; background: rgba(8,7,7,.94); box-shadow: inset 0 0 24px rgba(255,217,86,.08); padding: 36px 32px; overflow: hidden; }
+    .sideCard::after { content: ""; position: absolute; inset: 10px; border: 1px solid rgba(255,232,153,.08); border-radius: 14px; pointer-events: none; }
+    .sideCard .act { color: #ffe66f; font-size: 23px; font-weight: 900; }
+    .sideCard .title { margin-top: 16px; color: #fff1d6; font-size: 39px; line-height: 1; font-weight: 900; text-shadow: 0 0 8px #fff1d6; }
+    .sideCard .boss { margin-top: 23px; color: #e8c88a; font-size: 23px; font-weight: 900; }
+    .sideCard .bossArt { margin-top: 18px; width: 100%; height: 172px; border: 3px solid #b8ff39; border-radius: 9px; background: rgba(6,5,6,.78); display: grid; place-items: center; }
+    .sideCard .bossArt img { max-width: 92%; max-height: 92%; object-fit: contain; filter: drop-shadow(0 0 18px rgba(184,255,57,.65)); }
+    .sideCard .progress { margin-top: 24px; display: flex; justify-content: space-between; align-items: center; color: #cbb88e; font-size: 21px; font-weight: 900; }
+    .sideCard .progress b { color: #fff0b6; font-size: 30px; }
+    .sideCard hr { border: 0; border-top: 2px solid rgba(226,176,74,.32); margin: 20px 0 18px; }
+    .sideCard .row { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0; color: #b9aa87; font-size: 18px; font-weight: 900; }
+    .sideCard .row b { color: #d8ff44; text-align: right; }
+    .sideCard .hint { position: absolute; left: 0; right: 0; bottom: 24px; color: #d8ff44; font-size: 20px; font-weight: 900; text-align: center; text-shadow: 0 0 7px #d8ff44; }
+    .panel { border-left: 1px solid rgba(244,207,114,.28); background: linear-gradient(180deg,#17110d,#070607); overflow: auto; padding: 14px; }
+    h1 { margin: 0 0 6px; color: #f4cf72; font-size: 20px; }
+    p { margin: 0 0 12px; color: #c8b894; line-height: 1.55; font-size: 13px; }
+    button, input, select, textarea { width: 100%; border: 1px solid rgba(244,207,114,.34); border-radius: 8px; background: rgba(9,7,6,.86); color: #f5e7c8; padding: 8px; font: 13px/1.4 ui-monospace, Consolas, "Microsoft JhengHei", monospace; }
+    button { cursor: pointer; font-family: "Microsoft JhengHei", system-ui, sans-serif; font-weight: 900; }
+    .primary { border-color: rgba(216,255,68,.52); background: rgba(45,60,12,.82); color: #eaff9e; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    label { display: block; margin: 10px 0 5px; color: #e8d39f; font-size: 12px; font-weight: 900; }
+    textarea { min-height: 170px; resize: vertical; }
+    .msg { min-height: 22px; margin-top: 10px; color: #d8ff44; font-size: 13px; font-weight: 900; }
+  </style>
+</head>
+<body>
+  <div class="work"><div class="shell"><div id="stage"></div></div></div>
+  <aside class="panel">
+    <h1>籃獄圖譜群組後台</h1>
+    <p>拖曳 5 個章節卡與右側提示卡。儲存後會寫入 <b>assets/atlas_v2/group_layout.json</b>。</p>
+    <label>調整群組</label>
+    <select id="target"></select>
+    <div class="row2">
+      <div><label>X</label><input id="x" type="number" step="1"></div>
+      <div><label>Y</label><input id="y" type="number" step="1"></div>
+    </div>
+    <div class="row2">
+      <div><label>W</label><input id="w" type="number" step="1"></div>
+      <div><label>H</label><input id="h" type="number" step="1"></div>
+    </div>
+    <div class="row2">
+      <div><label>選取放大</label><input id="selectedScale" type="number" min="1" max="1.8" step="0.01"></div>
+      <div><label>選取垂直位移</label><input id="selectedDy" type="number" step="1"></div>
+    </div>
+    <label>預覽選取章節</label>
+    <select id="previewAct"></select>
+    <div class="row3" style="margin-top:10px">
+      <button id="nudgeL">左</button>
+      <button id="nudgeU">上</button>
+      <button id="nudgeR">右</button>
+      <button id="nudgeD">下</button>
+      <button id="reset">重設</button>
+      <button id="save" class="primary">儲存</button>
+    </div>
+    <label>JSON</label>
+    <textarea id="json"></textarea>
+    <div class="row2" style="margin-top:8px">
+      <button id="apply">套用 JSON</button>
+      <button id="download">下載 JSON</button>
+    </div>
+    <div id="msg" class="msg"></div>
+  </aside>
+  <script>
+    const DEFAULT = {
+      version: 1,
+      base: { w: 1704, h: 786 },
+      selectedScale: 1.22,
+      selectedDy: -18,
+      cardFramePad: 0.14,
+      cards: {
+        act1: { x: 55, y: 230, w: 245, h: 375 },
+        act2: { x: 340, y: 235, w: 235, h: 360 },
+        act3: { x: 580, y: 235, w: 235, h: 360 },
+        act4: { x: 825, y: 235, w: 235, h: 360 },
+        act5: { x: 1070, y: 235, w: 235, h: 360 }
+      },
+      side: { x: 1352, y: 118, w: 326, h: 612 },
+      ball: { size: 132, dy: 34 }
+    };
+    const META = {
+      act1: { short: "第 1 幕", name: "灰哨修院", sub: "Ashen Whistle Abbey", boss: "痛苦院長", scene: "修院餘燼", core: "哨音裂核", relic: "修院餘燼" },
+      act2: { short: "第 2 幕", name: "鐵籃貧民窟", sub: "Iron Rim Slums", boss: "鐵籃收租王", scene: "腐鐵巷籃", core: "鐵籃債印", relic: "貫穿球核" },
+      act3: { short: "第 3 幕", name: "冷焰球具塔", sub: "Coldflame Tower", boss: "冷焰記分員", scene: "冷焰高塔", core: "冷焰記分", relic: "城邦電瓶" },
+      act4: { short: "第 4 幕", name: "雷骨看台", sub: "Thunderbone Stands", boss: "雷骨裁判長", scene: "雷骨穹席", core: "雷骨哨令", relic: "迴旋球核" },
+      act5: { short: "第 5 幕", name: "終焉籃堂", sub: "Final Court", boss: "籃框宿主本尊", scene: "終焉籃心", core: "終焉深籃", relic: "終場寒核" },
+      side: { short: "右側", name: "提示卡" }
+    };
+    let layout = structuredClone(DEFAULT);
+    let target = "act1";
+    let previewAct = "act1";
+    const stage = document.getElementById("stage");
+    const shell = document.querySelector(".shell");
+    const ids = ["act1","act2","act3","act4","act5","side"];
+    const targetSel = document.getElementById("target");
+    const previewActSel = document.getElementById("previewAct");
+
+    function fit() {
+      const r = shell.getBoundingClientRect();
+      stage.style.transform = `scale(${r.width / 1704})`;
+    }
+    addEventListener("resize", fit);
+    function groupRect(id) { return id === "side" ? layout.side : layout.cards[id]; }
+    function setMsg(text) { document.getElementById("msg").textContent = text || ""; }
+    function syncForm() {
+      const r = groupRect(target);
+      x.value = Math.round(r.x); y.value = Math.round(r.y); w.value = Math.round(r.w); h.value = Math.round(r.h);
+      selectedScale.value = layout.selectedScale; selectedDy.value = layout.selectedDy;
+      json.value = JSON.stringify(layout, null, 2);
+    }
+    function draw() {
+      stage.innerHTML = "";
+      ids.forEach(id => {
+        const r = groupRect(id);
+        const el = document.createElement("div");
+        el.className = "group" + (id === target ? " selected" : "");
+        el.dataset.id = id;
+        el.style.left = r.x + "px"; el.style.top = r.y + "px"; el.style.width = r.w + "px"; el.style.height = r.h + "px";
+        if (id === previewAct) {
+          el.style.transform = `translateY(${layout.selectedDy}px) scale(${layout.selectedScale})`;
+          el.style.zIndex = 5;
+        }
+        const name = document.createElement("div");
+        name.className = "name"; name.textContent = `${META[id].short} ${META[id].name}`;
+        el.appendChild(name);
+        if (id === "side") {
+          const m = META[previewAct];
+          el.innerHTML += `<div class="sideCard">
+            <div class="act">${m.short}</div>
+            <div class="title">${m.name}</div>
+            <div class="boss">Boss　${m.boss}</div>
+            <div class="bossArt"><img src="assets/mob/bosses/act${previewAct.slice(3)}.png"></div>
+            <div class="progress"><span>進度</span><b>5 / 5</b></div>
+            <hr>
+            <div class="row"><span>籃獄印記</span><b style="color:#d5a6ff">2</b></div>
+            <div class="row"><span>Boss 擊敗</span><b style="color:#ff8a76">1</b></div>
+            <div class="row"><span>熟度</span><b style="color:#ffe070">1</b></div>
+            <div class="row"><span>核心</span><b>${m.core}</b></div>
+            <div class="row"><span>精魄聖物</span><b>${m.relic}</b></div>
+            <div class="hint">點卡片選幕，按發光籃球出戰</div>
+          </div>`;
+        } else {
+          const n = id.slice(3);
+          el.innerHTML += `<div class="card"><div class="title">${META[id].short}<br>${META[id].name}</div><div class="art"><img src="assets/atlas_v2/bg_war_gates.png"></div><div class="nodes"><img src="assets/atlas_v2/node_token.png"><img src="assets/atlas_v2/node_token.png"><img src="assets/atlas_v2/node_token.png"><img src="assets/atlas_v2/node_token.png"><img src="assets/atlas_v2/boss_node.png"></div></div>`;
+        }
+        stage.appendChild(el);
+      });
+      bindDrag();
+      syncForm();
+    }
+    function bindDrag() {
+      document.querySelectorAll(".group").forEach(el => {
+        el.onpointerdown = ev => {
+          ev.preventDefault();
+          target = el.dataset.id;
+          targetSel.value = target;
+          const start = { x: ev.clientX, y: ev.clientY };
+          const rect = groupRect(target);
+          const original = { x: rect.x, y: rect.y };
+          const scale = shell.getBoundingClientRect().width / 1704;
+          el.setPointerCapture(ev.pointerId);
+          const moveHandler = move => {
+            rect.x = Math.round(original.x + (move.clientX - start.x) / scale);
+            rect.y = Math.round(original.y + (move.clientY - start.y) / scale);
+            el.style.left = rect.x + "px";
+            el.style.top = rect.y + "px";
+            syncForm();
+          };
+          const upHandler = () => {
+            el.releasePointerCapture && el.releasePointerCapture(ev.pointerId);
+            el.removeEventListener("pointermove", moveHandler);
+            el.removeEventListener("pointerup", upHandler);
+            draw();
+          };
+          el.addEventListener("pointermove", moveHandler);
+          el.addEventListener("pointerup", upHandler);
+          draw();
+        };
+      });
+    }
+    function updateField() {
+      const r = groupRect(target);
+      r.x = Number(x.value) || 0; r.y = Number(y.value) || 0; r.w = Number(w.value) || 1; r.h = Number(h.value) || 1;
+      layout.selectedScale = Number(selectedScale.value) || 1;
+      layout.selectedDy = Number(selectedDy.value) || 0;
+      draw();
+    }
+    async function load() {
+      try {
+        const res = await fetch("assets/atlas_v2/group_layout.json?ts=" + Date.now(), { cache: "no-store" });
+        if (res.ok) layout = Object.assign(structuredClone(DEFAULT), await res.json());
+      } catch (e) {}
+      draw();
+      fit();
+    }
+    ids.forEach(id => targetSel.add(new Option(`${META[id].short} ${META[id].name}`, id)));
+    ["act1","act2","act3","act4","act5"].forEach(id => previewActSel.add(new Option(`${META[id].short} ${META[id].name}`, id)));
+    targetSel.onchange = () => { target = targetSel.value; draw(); };
+    previewActSel.onchange = () => { previewAct = previewActSel.value; draw(); };
+    [x,y,w,h,selectedScale,selectedDy].forEach(input => input.oninput = updateField);
+    nudgeL.onclick = () => { groupRect(target).x -= 5; draw(); };
+    nudgeR.onclick = () => { groupRect(target).x += 5; draw(); };
+    nudgeU.onclick = () => { groupRect(target).y -= 5; draw(); };
+    nudgeD.onclick = () => { groupRect(target).y += 5; draw(); };
+    reset.onclick = () => { layout = structuredClone(DEFAULT); draw(); };
+    apply.onclick = () => { try { layout = Object.assign(structuredClone(DEFAULT), JSON.parse(json.value)); draw(); setMsg("已套用 JSON"); } catch (e) { setMsg("JSON 格式錯誤：" + e.message); } };
+    download.onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(layout, null, 2)], { type:"application/json" }));
+      a.download = "group_layout.json"; a.click(); URL.revokeObjectURL(a.href);
+    };
+    save.onclick = async () => {
+      try {
+        const res = await fetch("/api/atlas-layout", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(layout) });
+        const data = await res.json();
+        setMsg(data.ok ? "已儲存到專案" : ("儲存失敗：" + data.error));
+      } catch (e) { setMsg("儲存失敗：請確認 atlas-layout-server.js 正在執行"); }
+    };
+    load();
+  </script>
+</body>
+</html>
