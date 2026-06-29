@@ -15691,3 +15691,218 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_CAMPAIGN_DEFEAT_FINAL__='v41-shared-defeat'; }catch(e){}
 })();
+
+// === final activation v42: special boss victory art and tense speed timer ===
+(function(){
+  if(typeof Game==='undefined') return;
+  const SPECIAL_BOSS_ASSETS={
+    corrupt:'/assets/boss_defeat/corrupt.png?v=20260629_v1',
+    endless:'/assets/boss_defeat/endless.png?v=20260629_v1'
+  };
+  const uniq=a=>{ const seen=new Set(), out=[]; for(const x of a||[]){ if(x&&!seen.has(x)){ seen.add(x); out.push(x); } } return out; };
+  const smooth=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); };
+  const label={
+    victory:'VICTORY',
+    boss:'BOSS DEFEATED',
+    corrupt:'CORRUPTION CLEANSED',
+    endless:'ABYSS BOSS DEFEATED',
+    act:'\u7b2c ',
+    act2:' \u5e55\u901a\u95dc',
+    endlessDepth:'\u7121\u76e1\u6df1\u6df5',
+    next:'\u4e0b\u4e00\u6b65',
+    speed:'\u901f\u6295',
+    shotClock:'SHOT CLOCK',
+    throwNow:'\u7acb\u5373\u51fa\u624b',
+    countdown:'\u51fa\u624b\u5012\u6578',
+    sec:'\u79d2',
+    chances:'\u5269\u9918\u6a5f\u6703'
+  };
+
+  const prevFullPreload=Game.prototype._hbFullPreloadImages;
+  Game.prototype._hbFullPreloadImages=function(){
+    const base=prevFullPreload?prevFullPreload.call(this):[];
+    return uniq(base.concat(Object.values(SPECIAL_BOSS_ASSETS)));
+  };
+
+  Game.prototype._hbSpecialBossDefeatImage=function(src){
+    this._hbSpecialBossDefeatImgs=this._hbSpecialBossDefeatImgs||{};
+    if(this._hbSpecialBossDefeatImgs[src]===undefined){
+      try{
+        const im=new Image();
+        im.onerror=()=>{ im._err=true; };
+        im.onload=()=>{ try{ if(this.screen==='bossVictory') this.render(); }catch(e){} };
+        im.src=src;
+        this._hbSpecialBossDefeatImgs[src]=im;
+      }catch(e){ this._hbSpecialBossDefeatImgs[src]=null; }
+    }
+    return this._hbSpecialBossDefeatImgs[src];
+  };
+
+  function cover(g,img,x,y,w,h){
+    if(g._hbDrawCoverImage&&g._hbDrawCoverImage(img,x,y,w,h)) return true;
+    if(!img||!img.complete||!img.naturalWidth||img._err) return false;
+    const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+    const sc=Math.max(w/iw,h/ih), dw=iw*sc, dh=ih*sc;
+    g.ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    return true;
+  }
+
+  function assetFor(cut){
+    if(cut&&(cut.endless||cut.route==='endless'||(cut.run&&cut.run.endless))) return SPECIAL_BOSS_ASSETS.endless;
+    if(cut&&(cut.corrupt||cut.route==='corrupt'||(cut.run&&cut.run.corrupt))) return SPECIAL_BOSS_ASSETS.corrupt;
+    return null;
+  }
+
+  const prevFinishRun=Game.prototype.finishRun;
+  Game.prototype.finishRun=function(won){
+    const run=this.run;
+    const shouldEndlessCut=!!(won&&run&&run.endless&&run.stage&&run.stage.boss&&!run.speed&&!run._hbBossVictorySeen&&!this._hbVictoryContinuing);
+    if(shouldEndlessCut){
+      run._hbBossVictorySeen=true;
+      const depth=run.endlessDepth||run.reached||1;
+      this._hbBossVictory={
+        run,won:true,act:run.act||5,
+        actName:label.endlessDepth+' · '+depth,
+        bossName:(run.stage&&run.stage.name)||(run.stage&&run.stage.host)||'ABYSS BOSS',
+        route:'endless',endless:true,depth,
+        start:this.t||0,closing:false,closeStart:0
+      };
+      this.screen='bossVictory';
+      this._paused=false; this._detailOpen=false; this._confirm=null; this._toast=null;
+      this.particles.length=0; this.floaters.length=0;
+      this.audio&&this.audio.sfx&&this.audio.sfx('win');
+      this.audio&&this.audio.sfx&&this.audio.sfx('whistle');
+      this.render&&this.render();
+      return;
+    }
+    return prevFinishRun?prevFinishRun.apply(this,arguments):undefined;
+  };
+
+  const prevBossImage=Game.prototype._hbBossDefeatImage;
+  Game.prototype.drawBossVictory=function(){
+    const ctx=this.ctx, cut=this._hbBossVictory;
+    if(!cut){ this.go('hub'); return; }
+    const t=this.t||0, elapsed=Math.max(0,t-cut.start);
+    const imgAlpha=smooth((elapsed-0.08)/0.72);
+    const textAlpha=smooth((elapsed-0.58)/0.55);
+    const btnAlpha=smooth((elapsed-1.0)/0.42);
+    const closeAlpha=cut.closing?smooth((t-cut.closeStart)/0.48):0;
+    const alphaMul=1-closeAlpha;
+    const special=assetFor(cut);
+    const img=special?this._hbSpecialBossDefeatImage(special):(prevBossImage?prevBossImage.call(this,cut.act):null);
+    const isCorrupt=cut.route==='corrupt'||cut.corrupt||(cut.run&&cut.run.corrupt);
+    const isEndless=cut.route==='endless'||cut.endless||(cut.run&&cut.run.endless);
+    const accent=isEndless?'#67d9ff':(isCorrupt?'#ff5d50':'#d8ff44');
+    const sub=isEndless?label.endless:(isCorrupt?label.corrupt:label.boss);
+    const actLine=isEndless?(label.endlessDepth+' · '+(cut.depth||'?')):('ACT '+(cut.act||1)+' CLEARED · '+(cut.actName||''));
+
+    ctx.save();
+    ctx.fillStyle='#030205';
+    ctx.fillRect(0,0,BW,BH);
+    ctx.globalAlpha=imgAlpha*alphaMul;
+    if(!cover(this,img,0,0,BW,BH)){
+      const bg=ctx.createLinearGradient(0,0,0,BH);
+      bg.addColorStop(0,isCorrupt?'#22070b':isEndless?'#070a22':'#160b18');
+      bg.addColorStop(0.52,'#08060b');
+      bg.addColorStop(1,'#1c1007');
+      ctx.fillStyle=bg; ctx.fillRect(0,0,BW,BH);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha=(0.28+0.36*textAlpha)*alphaMul;
+    const shade=ctx.createLinearGradient(0,0,0,BH);
+    shade.addColorStop(0,'rgba(0,0,0,0.58)');
+    shade.addColorStop(0.30,'rgba(0,0,0,0.18)');
+    shade.addColorStop(0.72,'rgba(0,0,0,0.06)');
+    shade.addColorStop(1,'rgba(0,0,0,0.54)');
+    ctx.fillStyle=shade; ctx.fillRect(0,0,BW,BH);
+    ctx.restore();
+
+    const titleY=Math.max(108,(this.insT||0)+92);
+    ctx.save();
+    ctx.globalAlpha=textAlpha*alphaMul;
+    this.text(label.victory,BW/2,titleY,86,'#ffe7a6',{align:'center',baseline:'middle',weight:'900',glow:24,font:'Georgia,serif'});
+    this.text(sub,BW/2,titleY+70,30,accent,{align:'center',baseline:'middle',weight:'900',glow:12});
+    this.text(actLine,BW/2,titleY+112,25,'#efe3ca',{align:'center',baseline:'middle',weight:'900'});
+    this.text(cut.bossName||'BOSS',BW/2,titleY+148,25,'#c8b894',{align:'center',baseline:'middle',weight:'800'});
+    ctx.restore();
+
+    const bw=420,bh=72,bx=BW/2-bw/2,by=BH-(this.insB||0)-128;
+    if(btnAlpha>0.02&&!cut.closing){
+      ctx.save(); ctx.globalAlpha=btnAlpha;
+      this.button(bx,by,bw,bh,label.next,'boss_victory_next',()=>this._hbCompleteBossVictory(),{primary:true,size:30,weight:'900'});
+      ctx.restore();
+    }
+
+    if(closeAlpha>0){
+      ctx.save(); ctx.globalAlpha=closeAlpha; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    }else if(imgAlpha<1){
+      ctx.save(); ctx.globalAlpha=1-imgAlpha; ctx.fillStyle='#000'; ctx.fillRect(0,0,BW,BH); ctx.restore();
+    }
+  };
+
+  Game.prototype.drawSpeedHUD=function(){
+    const ctx=this.ctx, run=this.run;
+    if(!run||!run.speed) return;
+    const mx=run.shotClockMax||10;
+    const left=Math.max(0,Number(run.shotClock)||0);
+    const frac=clamp(left/mx,0,1);
+    const low=left<=3;
+    const critical=left<=1.35;
+    const pulse=low?(0.5+0.5*Math.sin((this.t||0)*18)):0;
+    const chance=Math.max(0,Math.ceil((run.hp||0)/Math.max(1,Math.ceil((run.maxhp||1)/5))));
+    const bannerOffset=(run.banner&&run.banner.t>0.08)?88:0;
+    const w=Math.min(650,Math.max(520,BW*0.36)), h=126;
+    const x=BW/2-w/2, y=(this.insT||0)+28+bannerOffset;
+
+    ctx.save();
+    ctx.shadowBlur=low?(22+18*pulse):10;
+    ctx.shadowColor=low?'#ff2b1d':'rgba(255,210,90,0.65)';
+    this.rr(x,y,w,h,18);
+    const bg=ctx.createLinearGradient(x,y,x,y+h);
+    bg.addColorStop(0,low?'rgba(62,10,8,0.96)':'rgba(30,18,10,0.92)');
+    bg.addColorStop(0.55,'rgba(7,5,8,0.94)');
+    bg.addColorStop(1,'rgba(0,0,0,0.96)');
+    ctx.fillStyle=bg; ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.lineWidth=low?4:2.5;
+    ctx.strokeStyle=low?`rgba(255,65,45,${0.78+0.22*pulse})`:'rgba(230,192,104,0.58)';
+    this.rr(x,y,w,h,18); ctx.stroke();
+    ctx.restore();
+
+    const titleCol=low?'#ff6a4a':'#ffe7a6';
+    this.text(label.speed+' '+(run.speedScore||0)+' \u7403',x+28,y+29,22,'#ffe7b0',{baseline:'middle',weight:'900'});
+    this.text(label.shotClock,x+w-28,y+28,17,low?'#ff9a70':'#c8b894',{align:'right',baseline:'middle',weight:'900',glow:low?6:0});
+    this.text(low?label.throwNow:label.countdown,x+28,y+66,24,titleCol,{baseline:'middle',weight:'900',glow:low?8:0});
+    this.text(left.toFixed(1),x+w/2+36,y+67,critical?58:52,critical?'#ff3322':(low?'#ff6a4a':'#fff4dc'),{align:'center',baseline:'middle',weight:'900',glow:critical?22:(low?12:4),font:'Georgia,serif'});
+    this.text(label.sec,x+w/2+126,y+70,20,low?'#ffb08a':'#c8b894',{baseline:'middle',weight:'900'});
+    this.text(label.chances+' '+chance,x+w-28,y+66,21,chance<=1?'#ff6a4a':'#d8ff44',{align:'right',baseline:'middle',weight:'900'});
+
+    const bx=x+28, by=y+h-31, bw=w-56, bh=15;
+    this.rr(bx,by,bw,bh,8);
+    ctx.fillStyle='rgba(0,0,0,0.64)'; ctx.fill();
+    if(frac>0){
+      this.rr(bx,by,bw*frac,bh,8);
+      const fg=ctx.createLinearGradient(bx,by,bx+bw,by);
+      fg.addColorStop(0,low?'#ff241a':(frac<0.5?'#ffb23c':'#a6e83a'));
+      fg.addColorStop(1,low?'#ffd14a':(frac<0.5?'#ffe14d':'#d8ff44'));
+      ctx.fillStyle=fg; ctx.fill();
+    }
+    if(low){
+      ctx.save();
+      ctx.globalAlpha=0.28+0.22*pulse;
+      ctx.strokeStyle='#ff5a3d';
+      ctx.lineWidth=2;
+      for(let sx=bx;sx<bx+bw;sx+=28){
+        ctx.beginPath(); ctx.moveTo(sx,by+bh+4); ctx.lineTo(sx+16,by+bh+4); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.lineWidth=2;
+    ctx.strokeStyle=low?'rgba(255,120,74,0.95)':'rgba(255,231,166,0.48)';
+    this.rr(bx,by,bw,bh,8); ctx.stroke();
+  };
+
+  try{ window.__HB_BOSS_SPEED_FINAL__='v42-special-boss-speed'; }catch(e){}
+})();
