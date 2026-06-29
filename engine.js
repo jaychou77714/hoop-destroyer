@@ -12223,3 +12223,241 @@ Object.assign(Game.prototype,{
     this.text('力道 '+pp+'%　弧線 '+arc+'　軌跡 '+ap+'%',BW/2,BH-70,27,'#fff2b4',{align:'center',weight:'900',glow:true});
   };
 })();
+
+// === final activation v29: typed monster attack effects ===
+(function(){
+  if(typeof Game==='undefined') return;
+
+  const STYLE={
+    skel:{label:'骨刺投擲',icon:'☠',color:'#eadfc4',core:'#fff3d7',trail:'#b9a888',shape:'bone',burst:'shard'},
+    shield:{label:'盾骨衝擊',icon:'◆',color:'#d7c7aa',core:'#fff0bd',trail:'#9e8d74',shape:'shield',burst:'shard'},
+    slime:{label:'黏液飛濺',icon:'●',color:'#9fe024',core:'#dcff79',trail:'#5fa832',shape:'slime',burst:'splat'},
+    mummy:{label:'繃帶抽擊',icon:'⌁',color:'#d8c9a0',core:'#fff2cb',trail:'#a98f63',shape:'wrap',burst:'ribbon'},
+    spider:{label:'蛛網束縛',icon:'✣',color:'#b980ff',core:'#f2d5ff',trail:'#7446c8',shape:'web',burst:'web'},
+    chain:{label:'鐵鍊重砸',icon:'⛓',color:'#c8b894',core:'#fff0b8',trail:'#7f746a',shape:'chain',burst:'chain'},
+    bat:{label:'迷霧撕咬',icon:'🌫',color:'#9d8cff',core:'#e3ddff',trail:'#5c4ad2',shape:'fog',burst:'fog'},
+    zombie:{label:'油手黏擊',icon:'✋',color:'#9fe024',core:'#dfff7a',trail:'#4f8f32',shape:'oil',burst:'splat'},
+    frost:{label:'寒霜法球',icon:'❄',color:'#6fd8ff',core:'#e7fbff',trail:'#238ec9',shape:'ice',burst:'ice'},
+    eye:{label:'詛咒凝視',icon:'◉',color:'#ff6a4a',core:'#ffe0c7',trail:'#9b2dff',shape:'eye',burst:'curse'},
+    drummer:{label:'戰鼓震波',icon:'♪',color:'#ff9a4a',core:'#ffe7a6',trail:'#c46a3a',shape:'drum',burst:'ring'},
+    boss:{label:'Boss 制裁',icon:'⚠',color:'#ff5c37',core:'#ffe7a6',trail:'#8f2dff',shape:'boss',burst:'boss'},
+    act1:{label:'鐘聲審判',icon:'🔔',color:'#ffb34d',core:'#fff2ba',trail:'#7a4a1a',shape:'bell',burst:'ring'},
+    act2:{label:'收租鐵鏈',icon:'⛓',color:'#f0c86a',core:'#fff4c2',trail:'#8b7042',shape:'chain',burst:'chain'},
+    act3:{label:'記分冷焰',icon:'▣',color:'#9fe024',core:'#e8ffb0',trail:'#5cc878',shape:'board',burst:'curse'},
+    act4:{label:'雷骨判罰',icon:'⚡',color:'#ffe14d',core:'#fff7bf',trail:'#6fd8ff',shape:'bolt',burst:'bolt'},
+    act5:{label:'終焉壓迫',icon:'☄',color:'#c89bff',core:'#fff0ff',trail:'#6b35d9',shape:'void',burst:'boss'}
+  };
+  const EFF_STYLE={
+    grav:'chain',fog:'bat',grip:'zombie',freeze:'frost',gaze:'eye',drum:'drummer',
+    slam:'shield',rush:'skel',shot:'eye'
+  };
+  const pickAttackSource=run=>{
+    const live=(run&&run.guards||[]).filter(g=>g&&!g.dead&&!g.sandbag);
+    if(!live.length) return null;
+    return live.find(g=>g.casting)||live.find(g=>g.eliteMove)||live.slice().sort((a,b)=>(b.r||0)-(a.r||0))[0];
+  };
+  const styleFor=(g,run,kind)=>{
+    if(kind==='boss'){
+      const act=Math.max(1,Math.min(5,Number(run&&run.act)||1));
+      return STYLE['act'+act]||STYLE.boss;
+    }
+    if(g&&g.eliteEff&&STYLE[EFF_STYLE[g.eliteEff]]) return STYLE[EFF_STYLE[g.eliteEff]];
+    return STYLE[(g&&g.type)||'']||STYLE.boss;
+  };
+  const heroAnchor=function(){
+    return {x:(this.save&&this.save.settings&&this.save.settings.lefty)?BW-210:210,y:BH-150};
+  };
+  Game.prototype._hbAttackFx=function(src,style,opts){
+    const run=this.run; if(!run) return;
+    style=style||STYLE.boss; opts=opts||{};
+    const sx=opts.x!=null?opts.x:(src&&src.x!=null?src.x:BW*0.62);
+    const sy=opts.y!=null?opts.y:(src&&src.y!=null?src.y-(src.r||32)*0.48:BH*0.48);
+    const ha=heroAnchor.call(this);
+    run.fx=run.fx||[];
+    run.fx.push({kind:'hbAtkTele',x:sx,y:sy,hx:ha.x,hy:ha.y,t:opts.t||0.42,max:opts.t||0.42,style,seed:Math.random()*TAU});
+    this.floater&&this.floater(sx,sy-34,style.icon+' '+style.label,style.color,22,{crit:true,vy:-26,t:0.75});
+    this.burst&&this.burst(sx,sy,opts.burst||14,style.color,260,0.45,{r:4,glow:true,kind:style.burst==='splat'?'smoke':'shard'});
+    if(style.shape==='drum'||style.burst==='ring'){
+      this.ringFx&&this.ringFx(sx,sy,style.color,0.34,{r0:18,r1:170,width:8});
+    } else if(style.shape==='eye'||style.shape==='board'||style.shape==='void'){
+      this.ringFx&&this.ringFx(sx,sy,style.color,0.28,{r0:8,r1:120,width:6});
+    }
+  };
+  const tagProjectiles=(run,fromLen,style,src)=>{
+    if(!run||!run.projectiles) return;
+    for(let i=fromLen;i<run.projectiles.length;i++){
+      const p=run.projectiles[i];
+      if(p&&p.kind==='enemyShot'){
+        p.hbStyle=style;
+        p.hbShape=style.shape;
+        p.hbSeed=Math.random()*TAU;
+        p.hbSourceType=src&&src.type;
+        p.hbWide=(src&&src.elite)||style.shape==='boss'||style.shape==='void'||style.shape==='bolt';
+      }
+    }
+  };
+
+  const oldEnemyStrike=Game.prototype._enemyStrike;
+  Game.prototype._enemyStrike=function(dmg){
+    const run=this.run, src=pickAttackSource(run), st=styleFor(src,run,'normal'), before=run&&run.projectiles?run.projectiles.length:0;
+    if(src){ src._lunge=0.36; this._hbAttackFx(src,st,{burst:src.elite?18:13}); }
+    else this._hbAttackFx(null,st,{x:BW*0.62,y:BH*0.46,burst:12});
+    const r=oldEnemyStrike?oldEnemyStrike.apply(this,arguments):undefined;
+    tagProjectiles(run,before,st,src);
+    return r;
+  };
+
+  const oldEliteCast=Game.prototype.eliteCast;
+  Game.prototype.eliteCast=function(g){
+    const st=styleFor(g,this.run,'elite');
+    this._hbAttackFx(g,st,{t:0.56,burst:20});
+    return oldEliteCast?oldEliteCast.apply(this,arguments):undefined;
+  };
+
+  const oldEliteStrike=Game.prototype._eliteStrike;
+  Game.prototype._eliteStrike=function(g,dmg){
+    const run=this.run, st=styleFor(g,run,'elite'), before=run&&run.projectiles?run.projectiles.length:0;
+    this._hbAttackFx(g,st,{t:0.46,burst:18});
+    const r=oldEliteStrike?oldEliteStrike.apply(this,arguments):undefined;
+    tagProjectiles(run,before,st,g);
+    return r;
+  };
+
+  const oldGuardCast=Game.prototype.guardCast;
+  Game.prototype.guardCast=function(g){
+    const st=styleFor(g,this.run,'guard');
+    this._hbAttackFx(g,st,{t:0.62,burst:16});
+    return oldGuardCast?oldGuardCast.apply(this,arguments):undefined;
+  };
+
+  const oldBossStrike=Game.prototype._bossStrike;
+  Game.prototype._bossStrike=function(dmg){
+    const run=this.run, st=styleFor(null,run,'boss'), before=run&&run.projectiles?run.projectiles.length:0;
+    const host=run&&run.host;
+    this._hbAttackFx(host||null,st,{x:host&&host.x,y:host&&host.baseY?host.baseY-(run&&run.stage&&run.stage.boss?180:80):undefined,t:0.62,burst:26});
+    const r=oldBossStrike?oldBossStrike.apply(this,arguments):undefined;
+    tagProjectiles(run,before,st,{type:'boss',elite:true});
+    return r;
+  };
+
+  const oldUpdateProjectiles=Game.prototype.updateProjectiles;
+  Game.prototype.updateProjectiles=function(dt){
+    const run=this.run;
+    if(run&&run.projectiles){
+      for(const p of run.projectiles){
+        if(!p||p.kind!=='enemyShot'||!p.hbStyle) continue;
+        const st=p.hbStyle;
+        const n=p.hbWide?2:1;
+        for(let i=0;i<n;i++){
+          this.spawn&&this.spawn(p.x+rand(-12,12),p.y+rand(-12,12),rand(-70,70),rand(-70,70),0.22+Math.random()*0.16,p.hbWide?5:3,st.trail||st.color,{glow:true,g:-20,drag:0.95});
+        }
+        if(p.hbShape==='ice'&&chance(0.35)) this.spawn(p.x,p.y,rand(-30,30),rand(-30,30),0.36,4,'#e7fbff',{kind:'shard',glow:true,g:10});
+        if((p.hbShape==='chain'||p.hbShape==='bolt')&&chance(0.30)) this.arc&&this.arc(p.x-rand(20,48),p.y-rand(16,38),p.x+rand(20,48),p.y+rand(16,38));
+      }
+    }
+    return oldUpdateProjectiles?oldUpdateProjectiles.apply(this,arguments):undefined;
+  };
+
+  const oldDrawBattleFx=Game.prototype.drawBattleFx;
+  Game.prototype.drawBattleFx=function(){
+    if(oldDrawBattleFx) oldDrawBattleFx.apply(this,arguments);
+    const ctx=this.ctx, run=this.run; if(!run) return;
+    ctx.save();
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    for(const m of (run.fx||[])){
+      if(!m||m.kind!=='hbAtkTele') continue;
+      const st=m.style||STYLE.boss, k=clamp(m.t/m.max,0,1), p=1-k;
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=0.18+0.42*k;
+      ctx.strokeStyle=st.color;
+      ctx.lineWidth=12+10*k;
+      ctx.shadowBlur=18;
+      ctx.shadowColor=st.color;
+      ctx.beginPath();
+      const mx=(m.x+m.hx)/2+Math.sin(m.seed+p*5)*90, my=(m.y+m.hy)/2-80-Math.cos(m.seed)*40;
+      ctx.moveTo(m.x,m.y);
+      ctx.quadraticCurveTo(mx,my,m.hx,m.hy);
+      ctx.stroke();
+      ctx.globalAlpha=0.65*k;
+      ctx.lineWidth=3.5;
+      ctx.strokeStyle=st.core||'#fff';
+      ctx.beginPath();
+      ctx.moveTo(m.x,m.y);
+      ctx.quadraticCurveTo(mx,my,m.hx,m.hy);
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(m.x,m.y);
+      const pulse=1+Math.sin(p*Math.PI)*0.28;
+      ctx.scale(pulse,pulse);
+      ctx.globalAlpha=0.88*k;
+      ctx.font='900 34px "Microsoft JhengHei","PingFang TC",serif';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.lineWidth=7;
+      ctx.strokeStyle='rgba(0,0,0,0.88)';
+      ctx.strokeText(st.icon||'!',0,-8);
+      ctx.fillStyle=st.core||st.color;
+      ctx.shadowBlur=12;
+      ctx.shadowColor=st.color;
+      ctx.fillText(st.icon||'!',0,-8);
+      ctx.restore();
+    }
+
+    for(const p of (run.projectiles||[])){
+      if(!p||p.kind!=='enemyShot'||!p.hbStyle) continue;
+      const st=p.hbStyle, trail=p.trail||[];
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      if(trail.length>1){
+        for(let i=1;i<trail.length;i++){
+          const a=i/(trail.length-1), q=trail[i], q0=trail[i-1];
+          ctx.globalAlpha=a*0.62;
+          ctx.strokeStyle=st.trail||st.color;
+          ctx.lineWidth=(p.hbWide?18:12)*a+3;
+          ctx.shadowBlur=16;
+          ctx.shadowColor=st.color;
+          ctx.beginPath();
+          ctx.moveTo(q0[0],q0[1]);
+          ctx.lineTo(q[0],q[1]);
+          ctx.stroke();
+        }
+      }
+      ctx.translate(p.x,p.y);
+      const ang=Math.atan2(p.vy||0,p.vx||1);
+      ctx.rotate(ang);
+      ctx.globalAlpha=1;
+      ctx.shadowBlur=24;
+      ctx.shadowColor=st.color;
+      const r=p.hbWide?23:17;
+      if(st.shape==='chain'){
+        ctx.strokeStyle=st.core; ctx.lineWidth=5; for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.ellipse(i*12,0,8,5,0,0,TAU); ctx.stroke(); }
+      } else if(st.shape==='web'){
+        ctx.strokeStyle=st.core; ctx.lineWidth=3; for(let i=0;i<6;i++){ const a=i/6*TAU; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*r*1.4,Math.sin(a)*r*1.4); ctx.stroke(); } ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.stroke();
+      } else if(st.shape==='ice'){
+        ctx.fillStyle=st.core; ctx.beginPath(); ctx.moveTo(r*1.35,0); ctx.lineTo(-r*0.4,-r*0.72); ctx.lineTo(-r*0.95,0); ctx.lineTo(-r*0.4,r*0.72); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#0e5678'; ctx.lineWidth=2; ctx.stroke();
+      } else if(st.shape==='eye'){
+        ctx.fillStyle=st.color; ctx.beginPath(); ctx.ellipse(0,0,r*1.25,r*0.76,0,0,TAU); ctx.fill(); ctx.fillStyle=st.core; ctx.beginPath(); ctx.arc(0,0,r*0.45,0,TAU); ctx.fill();
+      } else if(st.shape==='bolt'){
+        ctx.fillStyle=st.core; ctx.beginPath(); ctx.moveTo(r*1.2,-r*0.85); ctx.lineTo(0,-r*0.15); ctx.lineTo(r*0.28,0); ctx.lineTo(-r*1.0,r*0.9); ctx.lineTo(-r*0.25,r*0.10); ctx.lineTo(-r*0.52,-r*0.05); ctx.closePath(); ctx.fill();
+      } else if(st.shape==='drum'){
+        ctx.strokeStyle=st.core; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-r*1.3,0); ctx.lineTo(r*1.3,0); ctx.stroke();
+      } else if(st.shape==='slime'||st.shape==='oil'){
+        ctx.fillStyle=st.color; ctx.beginPath(); ctx.ellipse(0,0,r*1.18,r*0.86,Math.sin((this.t||0)*7)*0.2,0,TAU); ctx.fill(); ctx.fillStyle=st.core; ctx.globalAlpha=0.78; ctx.beginPath(); ctx.arc(-r*0.3,-r*0.25,r*0.25,0,TAU); ctx.fill();
+      } else {
+        const g=ctx.createRadialGradient(-r*0.3,-r*0.3,2,0,0,r*1.25);
+        g.addColorStop(0,st.core||'#fff');
+        g.addColorStop(0.48,st.color);
+        g.addColorStop(1,'rgba(0,0,0,0.3)');
+        ctx.fillStyle=g;
+        ctx.beginPath();
+        ctx.arc(0,0,r,0,TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  };
+})();
