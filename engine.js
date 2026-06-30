@@ -17895,3 +17895,82 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_ENDLESS_RARE_FORGE_FINAL__='v49-ten-depth-socket'; }catch(e){}
 })();
+
+// ---- Relic fusion metadata guard: equipped relics must not be rerolled ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const clone=o=>{ try{return o==null?o:JSON.parse(JSON.stringify(o));}catch(e){return o;} };
+  const same=(a,b)=>{
+    try{ return JSON.stringify(a)===JSON.stringify(b); }
+    catch(e){ return a===b; }
+  };
+  const ensure=s=>{
+    if(!s||typeof s!=='object') return;
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    while(s.loadout.length<5) s.loadout.push(null);
+    if(!Array.isArray(s.library)) s.library=[];
+  };
+  const itemName=(g,id)=>{
+    try{
+      const it=g&&g._hbRelicDisplay?g._hbRelicDisplay(id):(typeof RELICS!=='undefined'?RELICS[id]:null);
+      return (it&&it.name)||(typeof RELICS!=='undefined'&&RELICS[id]&&RELICS[id].name)||id;
+    }catch(e){ return id; }
+  };
+
+  Game.prototype._hbRollFusionResult=function(a,b){
+    const s=this.save||{};
+    ensure(s);
+    const equipped=new Set((s.loadout||[]).filter(Boolean));
+    const all=(typeof RELICS==='undefined')?[]:Object.keys(RELICS).filter(id=>RELICS[id]);
+    const ownedAfter=new Set((s.loadout||[]).filter(Boolean).concat((s.library||[]).filter(id=>id!==a&&id!==b)));
+    let pool=all.filter(id=>!ownedAfter.has(id)&&!equipped.has(id));
+    if(!pool.length) pool=[a,b].filter(id=>id&&typeof RELICS!=='undefined'&&RELICS[id]&&!equipped.has(id));
+    if(pool.length) return pool[Math.floor(Math.random()*pool.length)];
+    return null;
+  };
+
+  const previousFuse=Game.prototype._hbFuseRelics;
+  Game.prototype._hbFuseRelics=function(a,b){
+    const s=this.save||{};
+    ensure(s);
+    const equippedIds=(s.loadout||[]).filter(Boolean);
+    const equipped=new Set(equippedIds);
+    if(equipped.has(a)||equipped.has(b)){
+      this.toast&&this.toast('請先卸下同名聖物','已裝備中的聖物素質會共用，不能當合成材料');
+      this._hbFuseBase=null;
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+
+    const beforeProfile=this._loadProfile?this._loadProfile():null;
+    const keep={};
+    if(beforeProfile&&beforeProfile.relicMeta){
+      for(const id of equippedIds){
+        if(beforeProfile.relicMeta[id]) keep[id]=clone(beforeProfile.relicMeta[id]);
+      }
+    }
+
+    const ret=previousFuse?previousFuse.apply(this,arguments):undefined;
+
+    const afterProfile=this._loadProfile?this._loadProfile():null;
+    let restored=false;
+    if(afterProfile&&afterProfile.relicMeta){
+      for(const id of Object.keys(keep)){
+        if(!same(afterProfile.relicMeta[id],keep[id])){
+          afterProfile.relicMeta[id]=clone(keep[id]);
+          restored=true;
+        }
+      }
+      if(restored){
+        this._saveProfile&&this._saveProfile();
+        try{ this._scheduleCloudProgressSync&&this._scheduleCloudProgressSync(false); }catch(e){}
+        this.toast&&this.toast('已保護裝備素質',itemName(this,Object.keys(keep)[0]));
+        this.render&&this.render();
+      }
+    }
+    return ret;
+  };
+
+  try{ window.__HB_RELIC_FUSION_META_GUARD__='v50-equipped-meta-protect'; }catch(e){}
+})();
