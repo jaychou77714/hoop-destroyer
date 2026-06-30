@@ -5397,7 +5397,7 @@ Object.assign(Game.prototype,{
         allDmgMul:1, flatExtraHit:0, enchLightning:0, enchFire:0, enchIce:0 }, modStacks:{}, rewardChoices:[],
     };
     // Phase 6.1: 載入該英雄永久等級 (遊戲內等級 = 選單等級 = 同一個，不歸零)
-    { const _pr=this._heroProg(heroId); this.run.level=_pr.level; this.run.xp=_pr.xp; this.run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,this.run.level-1))); }
+    { const _pr=this._heroProg(heroId); this.run.level=Math.max(1,Math.min(100,Math.floor(Number(_pr.level)||1))); this.run.xp=this.run.level>=100?0:Math.max(0,Number(_pr.xp)||0); this.run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,this.run.level-1))); }
     this._applyTalentEffectsToRun(this.run);
     // sessionStats: 跨幕遠征累計 (act1 重啟一段新遠征)
     if(actId===1 || !this.sessionStats) this.sessionStats={ score:0, kills:0, gold:0, coins:0, shots:0, makes:0, swishes:0, banks:0, bestCombo:0, acts:0 };
@@ -5721,8 +5721,11 @@ Object.assign(Game.prototype,{
   _nearestGuardExcept(ex){ const run=this.run; let best=null,bd=1e9; for(const g of run.guards){ if(g===ex)continue; const d=dist(ex.x,ex.y,g.x,g.y); if(d<bd){bd=d;best=g;} } return best; },
 
   // ----- XP / level -----
-  gainXP(n){ const run=this.run; if(run.speed) return; n=Math.round(n*(1+(run.mods&&run.mods.xpMul?run.mods.xpMul:0))); run.xp+=n; let leveled=false;
-    while(run.xp>=run.xpNext){ run.xp-=run.xpNext; run.level++; run.levelUpsPending++; leveled=true; run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,run.level-1))); }
+  gainXP(n){ const run=this.run; if(run.speed) return; const maxLevel=100; run.level=Math.max(1,Math.min(maxLevel,Math.floor(Number(run.level)||1)));
+    if(run.level>=maxLevel){ run.level=maxLevel; run.xp=0; run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,run.level-1))); if(!this.save.admin){ const pr=this._heroProg(run.heroId); pr.level=maxLevel; pr.xp=0; this._saveProfile(); } return; }
+    n=Math.round(n*(1+(run.mods&&run.mods.xpMul?run.mods.xpMul:0))); run.xp+=n; let leveled=false;
+    while(run.level<maxLevel && run.xp>=run.xpNext){ run.xp-=run.xpNext; run.level++; run.levelUpsPending++; leveled=true; run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,run.level-1))); }
+    if(run.level>=maxLevel){ run.level=maxLevel; run.xp=0; run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,run.level-1))); }
     if(!this.save.admin){ const pr=this._heroProg(run.heroId); pr.level=run.level; pr.xp=run.xp; if(leveled) this._saveProfile(); }
     if(run.levelUpsPending>0 && !run.modal && !run._stageClearing && (!run.ball||!run.ball.live)) this.openLevelUp(); }
   ,
@@ -5958,7 +5961,7 @@ Object.assign(Game.prototype,{
         const fmp=this._mp('fast'); if((run.speedScore||0)>=15 && run.act>=fmp.acts && run.act<5){ fmp.acts=run.act+1; } }
       persist(s);
       // Phase 6.1: 永久等級存檔
-      { const pr=this._heroProg(run.heroId); pr.level=run.level; pr.xp=run.xp; this._saveProfile(); }
+      { const pr=this._heroProg(run.heroId), lv=Math.max(1,Math.min(100,Math.floor(Number(run.level)||1))); pr.level=lv; pr.xp=lv>=100?0:Math.max(0,Number(run.xp)||0); this._saveProfile(); }
     }
     const _ptsAvail=this._talentPtsAvail(run.heroId), _ptsEarned=this._talentPtsEarned(run.heroId);
     // sessionStats 跨幕累計
@@ -8150,7 +8153,8 @@ const QUAL_NAME=['普通','精良','稀有'], QUAL_COL=['#cfc6b0','#6b9fe8','#e6
 // ---- profile (永久存檔, localStorage) ----
 const PROFILE_KEY='hb_profile_v2';
 function defaultProfile(){ return { heroes:{}, relicMeta:{}, heroDay:{key:'',stats:{}} }; }
-function loadProfileRaw(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); if(p&&typeof p==='object'){ if(!p.heroes)p.heroes={}; if(!p.relicMeta)p.relicMeta={}; if(!p.heroDay||typeof p.heroDay!=='object')p.heroDay={key:'',stats:{}}; if(!p.heroDay.stats)p.heroDay.stats={}; return p; } }catch(e){} return defaultProfile(); }
+function normalizeProfileRaw(p){ if(!p||typeof p!=='object')p=defaultProfile(); if(!p.heroes)p.heroes={}; if(!p.relicMeta)p.relicMeta={}; if(!p.heroDay||typeof p.heroDay!=='object')p.heroDay={key:'',stats:{}}; if(!p.heroDay.stats)p.heroDay.stats={}; for(const id in p.heroes){ const h=p.heroes[id]||{}; h.level=Math.max(1,Math.min(100,Math.floor(Number(h.level)||1))); if(h.level>=100)h.xp=0; else h.xp=Math.max(0,Number(h.xp)||0); if(!h.talents||typeof h.talents!=='object')h.talents={}; p.heroes[id]=h; } return p; }
+function loadProfileRaw(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); if(p&&typeof p==='object') return normalizeProfileRaw(p); }catch(e){} return normalizeProfileRaw(defaultProfile()); }
 function saveProfileRaw(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
 
 Object.assign(Game.prototype,{
@@ -8208,7 +8212,7 @@ Object.assign(Game.prototype,{
     const fns=[['匯出版位','#9ac63f','#15210a',()=>this._layExport()],['重設本頁','#3a2d1c','#e9dfc9',()=>this._layReset()],['離開','#5a2418','#f0d0c0',()=>{ this.save.layoutMode=false; persist(this.save); this._laySel=null; this.toast('已離開排版模式'); this.render(); }]];
     const fw=190; for(let i=0;i<3;i++){ const fx=BW-fw-20, fy=y0+16+i*50; const [lbl,bg,fg,fn]=fns[i]; this.rr(fx,fy,fw,44,9); ctx.fillStyle=bg; ctx.fill(); this.text(lbl,fx+fw/2,fy+22,22,fg,{align:'center',baseline:'middle',weight:'800'}); this.btn(fx,fy,fw,44,'lfn'+i,fn); }
   },
-  _heroProg(id){ const p=this._loadProfile(); if(!p.heroes[id]) p.heroes[id]={level:1,xp:0,talents:{}}; const h=p.heroes[id]; if(typeof h.level!=='number')h.level=1; if(typeof h.xp!=='number')h.xp=0; if(!h.talents)h.talents={}; if(typeof h.shots!=='number')h.shots=0; if(typeof h.swishes!=='number')h.swishes=0; if(typeof h.banks!=='number')h.banks=0; if(typeof h.misses!=='number')h.misses=0; return h; },
+  _heroProg(id){ const p=this._loadProfile(); if(!p.heroes[id]) p.heroes[id]={level:1,xp:0,talents:{}}; const h=p.heroes[id]; let changed=false; if(typeof h.level!=='number'){ h.level=1; changed=true; } if(typeof h.xp!=='number'){ h.xp=0; changed=true; } const lv=Math.max(1,Math.min(100,Math.floor(Number(h.level)||1))); if(lv!==h.level){ h.level=lv; changed=true; } if(h.level>=100&&h.xp!==0){ h.xp=0; changed=true; } if(!h.talents){ h.talents={}; changed=true; } if(typeof h.shots!=='number')h.shots=0; if(typeof h.swishes!=='number')h.swishes=0; if(typeof h.banks!=='number')h.banks=0; if(typeof h.misses!=='number')h.misses=0; if(changed)this._saveProfile(); return h; },
   // ----- 天賦點 (每 10 等 1 點) -----
   _talentPtsEarned(id){ return Math.min(10, Math.floor(this._heroProg(id).level/10)); },
   _talentPtsSpent(id){ const t=this._heroProg(id).talents; return Object.keys(t).filter(k=>t[k]).length; },
@@ -8925,6 +8929,49 @@ Object.assign(Game.prototype,{
     if(/profile_json/i.test(s)) return 'profile_json column missing';
     return s.slice(0,160);
   };
+  const HERO_MAX_LEVEL=100;
+  const clampHeroLevel=v=>Math.max(1,Math.min(HERO_MAX_LEVEL,Math.floor(Number(v)||1)));
+  const mergeProgressProfile=(local,remote)=>{
+    const out=deepClone(local&&typeof local==='object'?local:{})||{};
+    const rp=remote&&typeof remote==='object'?remote:{};
+    out.heroes=out.heroes&&typeof out.heroes==='object'?out.heroes:{};
+    const rhs=rp.heroes&&typeof rp.heroes==='object'?rp.heroes:{};
+    const ids=new Set(Object.keys(out.heroes).concat(Object.keys(rhs)));
+    for(const id of ids){
+      const lh=out.heroes[id]&&typeof out.heroes[id]==='object'?out.heroes[id]:{};
+      const rh=rhs[id]&&typeof rhs[id]==='object'?rhs[id]:{};
+      const level=clampHeroLevel(Math.max(Number(lh.level)||1,Number(rh.level)||1));
+      const xp=level>=HERO_MAX_LEVEL?0:(Number(lh.level)>Number(rh.level)?Number(lh.xp)||0:Number(rh.level)>Number(lh.level)?Number(rh.xp)||0:Math.max(Number(lh.xp)||0,Number(rh.xp)||0));
+      out.heroes[id]=Object.assign({},rh,lh,{
+        level,
+        xp,
+        talents:Object.assign({},rh.talents||{},lh.talents||{}),
+        shots:Math.max(Number(lh.shots)||0,Number(rh.shots)||0),
+        swishes:Math.max(Number(lh.swishes)||0,Number(rh.swishes)||0),
+        banks:Math.max(Number(lh.banks)||0,Number(rh.banks)||0),
+        misses:Math.max(Number(lh.misses)||0,Number(rh.misses)||0)
+      });
+    }
+    out.relicMeta=Object.assign({},rp.relicMeta||{},out.relicMeta||{});
+    if(rp.coins!=null) out.coins=Math.max(Number(out.coins)||0,Number(rp.coins)||0);
+    if(rp.heroDay&&rp.heroDay.key){
+      out.heroDay=out.heroDay&&typeof out.heroDay==='object'?out.heroDay:{key:'',stats:{}};
+      if(!out.heroDay.key||out.heroDay.key===rp.heroDay.key){
+        out.heroDay.key=rp.heroDay.key;
+        out.heroDay.stats=out.heroDay.stats&&typeof out.heroDay.stats==='object'?out.heroDay.stats:{};
+        const rst=rp.heroDay.stats&&typeof rp.heroDay.stats==='object'?rp.heroDay.stats:{};
+        for(const id of Object.keys(rst)){
+          const ld=out.heroDay.stats[id]||(out.heroDay.stats[id]={});
+          const rd=rst[id]||{};
+          for(const k of ['shots','makes','swishes','banks','luckies']) ld[k]=Math.max(Number(ld[k])||0,Number(rd[k])||0);
+        }
+      }
+    }
+    if(!out.relicMeta) out.relicMeta={};
+    if(!out.heroDay) out.heroDay={key:'',stats:{}};
+    if(!out.heroDay.stats) out.heroDay.stats={};
+    return out;
+  };
   const uuid=()=>('10000000-1000-4000-8000-100000000000').replace(/[018]/g,c=>
     (Number(c) ^ ((crypto.getRandomValues(new Uint8Array(1))[0]) & (15 >> (Number(c)/4)))).toString(16)
   );
@@ -8997,7 +9044,8 @@ Object.assign(Game.prototype,{
       persist(this.save);
     }
     if(remote.profile&&typeof remote.profile==='object'){
-      this.profile=deepClone(remote.profile);
+      const local=this._loadProfile?this._loadProfile():this.profile;
+      this.profile=mergeProgressProfile(local,remote.profile);
       try{ saveProfileRaw(this.profile); }catch(e){}
       changed=true;
     }
@@ -10619,8 +10667,9 @@ Object.assign(Game.prototype,{
       persist(s);
       const pr=this._heroProg&&this._heroProg(run.heroId);
       if(pr){
-        pr.level=run.level;
-        pr.xp=run.xp;
+        const lv=Math.max(1,Math.min(100,Math.floor(Number(run.level)||1)));
+        pr.level=lv;
+        pr.xp=lv>=100?0:Math.max(0,Number(run.xp)||0);
         this._saveProfile&&this._saveProfile();
       }
     }
@@ -11810,6 +11859,9 @@ Object.assign(Game.prototype,{
       if(['stageBoss','stageName','host','hoop','boss','ball','guards','intf','projectiles','fx'].includes(k)) continue;
       run[k]=clone(data[k]);
     }
+    run.level=Math.max(1,Math.min(100,Math.floor(Number(run.level)||1)));
+    if(run.level>=100) run.xp=0;
+    run.xpNext=Math.min(180,Math.round(100*Math.pow(1.15,run.level-1)));
     run.host=clone(data.host||run.host);
     run.hoop=clone(data.hoop||run.hoop);
     run.boss=clone(data.boss||run.boss);
@@ -17164,8 +17216,6 @@ Object.assign(Game.prototype,{
     }
     if(locked){
       label(g,'擊破前一幕 Boss 後開放',x+w/2,y+h-44,22,'rgba(255,224,160,0.58)',{align:'center',baseline:'middle',weight:'900'});
-    } else {
-      label(g,'點卡片選幕，按發光籃球出戰',x+w/2,y+h-44,22,'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:8});
     }
   }
   drawRightPanel=function(g,sel,unlocked,box){
@@ -17230,8 +17280,7 @@ Object.assign(Game.prototype,{
       label(g,rows[i][0],X(38),yy,D(18),'#b9aa87',{baseline:'middle',weight:'900'});
       label(g,String(rows[i][1]),X(284),yy,i<3?D(24):D(18),locked?'rgba(235,220,184,0.46)':rows[i][2],{align:'right',baseline:'middle',weight:'900',glow:i<3&&!locked?D(5):0});
     }
-    const bottom=locked?'\u901a\u95dc\u524d\u5e55 Boss \u89e3\u9396':'\u9ede\u5361\u7247\u9078\u5e55\uff0c\u6309\u767c\u5149\u7c43\u7403\u51fa\u6230';
-    label(g,bottom,X(163),Y(578),D(20),locked?'rgba(255,224,160,0.58)':'#d8ff44',{align:'center',baseline:'middle',weight:'900',glow:locked?0:D(7)});
+    if(locked) label(g,'\u901a\u95dc\u524d\u5e55 Boss \u89e3\u9396',X(163),Y(578),D(20),'rgba(255,224,160,0.58)',{align:'center',baseline:'middle',weight:'900'});
     ctx.restore();
   };
   const DEFAULT_ATLAS_GROUPS={
