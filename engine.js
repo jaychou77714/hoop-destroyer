@@ -17974,3 +17974,591 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_RELIC_FUSION_META_GUARD__='v50-equipped-meta-protect'; }catch(e){}
 })();
+
+// ---- Relic backpack healthcheck: counted duplicates, NEW badges, fusion reveal ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const MARK='__HB_BACKPACK_HEALTHCHECK_FINAL__';
+  const CAP=40, BALL_SLOT=2, SIDE_SLOTS=[0,1,3,4];
+  const BAG_CAL={slots:{x:280,y:64,w:101,h:83,gap:54},main:{x:151,y:165,w:1008,h:410},tabs:{x:7,y:166,w:138,h:35,gap:10},grid:{x:166,y:180,w:563,h:379},detail:{x:744,y:178,w:401,h:379}};
+  const TYPE_ORDER={ball:0,wrist:1,shoes:2,charm:3,mask:4,hoop:5};
+  const BAG_KEY='::bag:';
+  const baseId=id=>typeof id==='string'&&id.includes(BAG_KEY)?id.slice(0,id.indexOf(BAG_KEY)):id;
+  const bagKey=(id,seq)=>String(id)+BAG_KEY+seq;
+  const isBagKey=id=>typeof id==='string'&&id.includes(BAG_KEY);
+  const isRelic=id=>!!(baseId(id)&&typeof RELICS!=='undefined'&&RELICS[baseId(id)]);
+  const validSlot=i=>Number.isInteger(i)&&i>=0&&i<5;
+  const num=n=>Math.max(0,Math.floor(Number(n)||0));
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+  function clone(o){ try{return o==null?o:JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function scale(){
+    const sx=BW/1280, sy=BH/590, S=Math.min(sx,sy);
+    return {sx,sy,S,X:v=>v*sx,Y:v=>v*sy,W:v=>v*sx,H:v=>v*sy};
+  }
+  function rbox(r,sc){ return {x:sc.X(r.x),y:sc.Y(r.y),w:sc.W(r.w),h:sc.H(r.h),gap:sc.W(r.gap||0)}; }
+  function rebuildLibrary(s,orderHint){
+    const counts=s&&s.hbRelicCounts||{}, order=[], seen=new Set();
+    function add(id){
+      id=baseId(id);
+      if(isRelic(id)&&!seen.has(id)&&num(counts[id])>0){ seen.add(id); order.push(id); }
+    }
+    (orderHint||[]).forEach(add);
+    (Array.isArray(s.library)?s.library:[]).forEach(add);
+    Object.keys(counts).forEach(add);
+    const lib=[];
+    for(const id of order){
+      const n=Math.min(num(counts[id]),CAP-lib.length);
+      for(let i=0;i<n;i++) lib.push(id);
+      if(lib.length>=CAP) break;
+    }
+    s.library=lib;
+  }
+  function ensureBag(s){
+    if(!s||typeof s!=='object') return s;
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    s.loadout=s.loadout.slice(0,5); while(s.loadout.length<5) s.loadout.push(null);
+    if(!Array.isArray(s.library)) s.library=[];
+    const lib=s.library.map(baseId).filter(isRelic);
+    s.library=lib;
+    const hadCounts=s.hbRelicCounts&&typeof s.hbRelicCounts==='object'&&!Array.isArray(s.hbRelicCounts);
+    const counts=hadCounts?Object.assign({},s.hbRelicCounts):{};
+    if(hadCounts){
+      const libSeen={};
+      for(const id of lib) libSeen[id]=(libSeen[id]||0)+1;
+      for(const id of Object.keys(libSeen)) counts[id]=Math.max(num(counts[id]),libSeen[id]);
+    }else{
+      for(const id of lib) counts[id]=(counts[id]||0)+1;
+    }
+    const merged={};
+    for(const rawId of Object.keys(counts)){
+      const id=baseId(rawId);
+      if(!isRelic(id)) continue;
+      merged[id]=(merged[id]||0)+num(counts[rawId]);
+    }
+    const clean={}; let total=0;
+    for(const id of Object.keys(merged)){
+      let n=num(merged[id]);
+      if(total+n>CAP) n=CAP-total;
+      if(n>0){ clean[id]=(clean[id]||0)+n; total+=n; }
+      if(total>=CAP) break;
+    }
+    s.hbRelicCounts=clean;
+    if(!s.hbRelicNew||typeof s.hbRelicNew!=='object'||Array.isArray(s.hbRelicNew)) s.hbRelicNew={};
+    for(const id of Object.keys(s.hbRelicNew)){
+      const n=Math.min(num(s.hbRelicNew[id]),clean[id]||0);
+      if(n>0) s.hbRelicNew[id]=n; else delete s.hbRelicNew[id];
+    }
+    rebuildLibrary(s,lib);
+    s.hbSystems=s.hbSystems&&typeof s.hbSystems==='object'?s.hbSystems:{};
+    s.hbSystems.relicBag='v51-counted-new';
+    return s;
+  }
+  function totalCount(s){ ensureBag(s); return Object.values(s.hbRelicCounts||{}).reduce((a,b)=>a+num(b),0); }
+  function hasCount(s,id,n){ id=baseId(id); ensureBag(s); return isRelic(id)&&(s.hbRelicCounts[id]||0)>=(n||1); }
+  function incCount(s,id,markNew,orderHint){
+    id=baseId(id);
+    ensureBag(s);
+    if(!isRelic(id)||totalCount(s)>=CAP) return false;
+    s.hbRelicCounts[id]=(s.hbRelicCounts[id]||0)+1;
+    if(markNew!==false) s.hbRelicNew[id]=(s.hbRelicNew[id]||0)+1;
+    rebuildLibrary(s,orderHint);
+    return true;
+  }
+  function decCount(s,id,orderHint){
+    id=baseId(id);
+    ensureBag(s);
+    if(!isRelic(id)||!(s.hbRelicCounts[id]>0)) return false;
+    s.hbRelicCounts[id]--;
+    if(s.hbRelicCounts[id]<=0) delete s.hbRelicCounts[id];
+    if(s.hbRelicNew&&s.hbRelicNew[id]!=null){
+      const n=Math.min(num(s.hbRelicNew[id]),s.hbRelicCounts[id]||0);
+      if(n>0) s.hbRelicNew[id]=n; else delete s.hbRelicNew[id];
+    }
+    rebuildLibrary(s,orderHint);
+    return true;
+  }
+  function clearNew(s,id){
+    id=baseId(id);
+    ensureBag(s);
+    if(s.hbRelicNew&&s.hbRelicNew[id]){ delete s.hbRelicNew[id]; rebuildLibrary(s); return true; }
+    return false;
+  }
+  function display(g,id){
+    const bid=baseId(id);
+    if(!isRelic(bid)) return null;
+    try{ return g&&g._hbRelicDisplay?g._hbRelicDisplay(id):Object.assign({id:bid},RELICS[bid]); }
+    catch(e){ return Object.assign({id:bid},RELICS[bid]); }
+  }
+  function typeOf(g,idOrIt){
+    const it=typeof idOrIt==='string'?display(g,idOrIt):idOrIt;
+    return it&&(it.type||it.equipType)||'ball';
+  }
+  function acceptsSlot(g,slot,idOrIt){
+    if(!validSlot(slot)) return false;
+    const t=typeOf(g,idOrIt);
+    return t==='ball'?slot===BALL_SLOT:slot!==BALL_SLOT;
+  }
+  function preferredSlot(g,it){
+    const s=ensureBag(g.save||{}), load=s.loadout||[], t=typeOf(g,it);
+    if(t==='ball') return BALL_SLOT;
+    if(validSlot(g._relicSlotTarget)&&acceptsSlot(g,g._relicSlotTarget,it)) return g._relicSlotTarget;
+    for(const slot of SIDE_SLOTS) if(!load[slot]) return slot;
+    return SIDE_SLOTS[0];
+  }
+  function rarityRank(it){
+    if(!it) return 0;
+    if(typeof it.q==='number') return it.q;
+    if(typeof it.tier==='number') return it.tier;
+    const q=String(it.quality||it.rarity||'').toLowerCase();
+    if(q.includes('legend')||q.includes('神')) return 4;
+    if(q.includes('epic')||q.includes('史詩')) return 3;
+    if(q.includes('rare')||q.includes('稀')) return 2;
+    if(q.includes('fine')||q.includes('精')) return 1;
+    return 0;
+  }
+  function sortItems(g,items){
+    const mode=(g._hbRelicSortMode&&g._hbRelicSortMode())||g._relicSortHero||'rarity';
+    const load=new Set((ensureBag(g.save||{}).loadout||[]).filter(Boolean));
+    items.sort((a,b)=>{
+      if(mode==='equipped'){
+        const ea=load.has(a.id)?1:0, eb=load.has(b.id)?1:0;
+        if(ea!==eb) return eb-ea;
+      }else if(mode==='slot'){
+        const ta=TYPE_ORDER[typeOf(g,a)]??9, tb=TYPE_ORDER[typeOf(g,b)]??9;
+        if(ta!==tb) return ta-tb;
+      }else if(mode==='upgrade'){
+        const ua=(a.lv||a.level||0)<(a.maxLv||a.maxLevel||50)?1:0;
+        const ub=(b.lv||b.level||0)<(b.maxLv||b.maxLevel||50)?1:0;
+        if(ua!==ub) return ub-ua;
+      }
+      const ra=rarityRank(a), rb=rarityRank(b);
+      if(ra!==rb) return rb-ra;
+      const na=(a.name||a.id||''), nb=(b.name||b.id||'');
+      if(na!==nb) return na.localeCompare(nb,'zh-Hant');
+      return (a._hbSeq||0)-(b._hbSeq||0);
+    });
+  }
+  function addLibraryRelic(g,id,opts){
+    opts=opts||{};
+    const bid=baseId(id);
+    const s=ensureBag(g.save||{});
+    if(!incCount(s,bid,opts.markNew!==false)){
+      g.toast&&g.toast('背包已滿','請先丟棄或整理裝備');
+      try{ g.audio&&g.audio.sfx&&g.audio.sfx('hurt'); }catch(e){}
+      return false;
+    }
+    if(opts.select!==false){
+      const idx=(s.library||[]).lastIndexOf(bid);
+      g._bagSel=idx>=0?bagKey(bid,idx):bid;
+    }
+    persist(s); sync(g);
+    return true;
+  }
+  Game.prototype._hbRelicBagEnsure=function(){ return ensureBag(this.save||{}); };
+  Game.prototype._hbAddRelicToLibrary=function(id,opts){ return addLibraryRelic(this,id,opts); };
+  Game.prototype._hbStoreRelic=function(id){
+    return addLibraryRelic(this,id,{markNew:true,select:false});
+  };
+  Game.prototype._hbKeepOwned=function(id){
+    return addLibraryRelic(this,id,{markNew:true,select:false});
+  };
+
+  const prevLoadSave=typeof loadSave==='function'?loadSave:null;
+  if(prevLoadSave){
+    loadSave=function(){
+      const s=prevLoadSave.apply(this,arguments);
+      ensureBag(s);
+      try{ persist(s); }catch(e){}
+      return s;
+    };
+  }
+
+  const prevRelicDisplay=Game.prototype._hbRelicDisplay;
+  Game.prototype._hbRelicDisplay=function(id){
+    const bid=baseId(id);
+    let it=null;
+    try{ it=prevRelicDisplay?prevRelicDisplay.call(this,bid):(isRelic(bid)?Object.assign({id:bid},RELICS[bid]):null); }
+    catch(e){ it=isRelic(bid)?Object.assign({id:bid},RELICS[bid]):null; }
+    if(it&&bid!==id) return Object.assign({},it,{id,_hbBaseId:bid});
+    return it;
+  };
+
+  const prevSubset=Game.prototype._progressSaveSubset;
+  Game.prototype._progressSaveSubset=function(){
+    const out=prevSubset?prevSubset.call(this):{};
+    const s=ensureBag(this.save||{});
+    out.library=(s.library||[]).slice();
+    out.hbRelicCounts=clone(s.hbRelicCounts||{});
+    out.hbRelicNew=clone(s.hbRelicNew||{});
+    return out;
+  };
+
+  const prevApplyCloud=Game.prototype._applyCloudProgressSnapshot;
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    const ret=prevApplyCloud?prevApplyCloud.apply(this,arguments):false;
+    const rs=remote&&(remote.save||remote);
+    if(rs&&rs.hbRelicCounts&&typeof rs.hbRelicCounts==='object'){
+      const s=ensureBag(this.save||{});
+      for(const id of Object.keys(rs.hbRelicCounts||{})){
+        if(isRelic(id)) s.hbRelicCounts[id]=Math.max(num(s.hbRelicCounts[id]),num(rs.hbRelicCounts[id]));
+      }
+      if(rs.hbRelicNew&&typeof rs.hbRelicNew==='object'){
+        for(const id of Object.keys(rs.hbRelicNew)){
+          if(isRelic(id)) s.hbRelicNew[id]=Math.max(num(s.hbRelicNew[id]),Math.min(num(rs.hbRelicNew[id]),num(s.hbRelicCounts[id])));
+        }
+      }
+      ensureBag(s);
+      try{ persist(s); }catch(e){}
+      return true;
+    }
+    return ret;
+  };
+
+  Game.prototype._hbBeanVisibleRelics=function(){
+    const s=ensureBag(this.save||{}), load=s.loadout||[], out=[], tab=this._relicTabHero||'', target=this._relicSlotTarget;
+    const add=(id,src,seq,isNew)=>{
+      const bid=baseId(id);
+      const it=display(this,id); if(!it) return;
+      const t=typeOf(this,it);
+      if(tab&&t!==tab) return;
+      if(validSlot(target)&&src!=='slot'&&!acceptsSlot(this,target,it)) return;
+      const copy=Object.assign({},it,{id,_hbBaseId:bid,_hbSource:src,_hbSeq:seq,_hbNew:!!isNew,_hbCount:s.hbRelicCounts[bid]||0});
+      out.push(copy);
+    };
+    if(validSlot(target)){
+      if(load[target]) add(load[target],'slot',-100,false);
+    }else{
+      const seenLoad=new Set();
+      for(let i=0;i<load.length;i++){
+        const id=load[i];
+        if(isRelic(id)&&!seenLoad.has(id)){ seenLoad.add(id); add(id,'slot',-100+i,false); }
+      }
+    }
+    const newSeen={};
+    for(let i=0;i<(s.library||[]).length;i++){
+      const id=s.library[i];
+      if(!isRelic(id)) continue;
+      newSeen[id]=(newSeen[id]||0)+1;
+      add(bagKey(id,i),'library',i,newSeen[id]<=num(s.hbRelicNew[id]));
+    }
+    sortItems(this,out);
+    return out;
+  };
+
+  Game.prototype._hbEquipRelic=function(rid,slot){
+    const rawRid=rid;
+    rid=baseId(rid);
+    const s=ensureBag(this.save||{}), load=s.loadout||[];
+    if(!isRelic(rid)){ this.toast&&this.toast('裝備不存在','請重新整理背包'); return false; }
+    if(load.includes(rid)){ this.toast&&this.toast('已裝備','此聖物已在欄位中'); return false; }
+    const opt=slot&&typeof slot==='object'?slot:{slot:slot};
+    const it=display(this,rid), target=validSlot(opt.slot)?opt.slot:preferredSlot(this,it);
+    if(!acceptsSlot(this,target,it)){ this.toast&&this.toast('欄位不符','請選擇正確裝備欄位'); return false; }
+    if(!hasCount(s,rid,1)){ this.toast&&this.toast('背包沒有此裝備','可能已被裝備或合成'); return false; }
+    decCount(s,rid);
+    const displaced=[];
+    if(typeOf(this,it)==='ball'){
+      if(load[BALL_SLOT]) displaced.push(load[BALL_SLOT]);
+      load[BALL_SLOT]=rid;
+    }else{
+      if(load[target]) displaced.push(load[target]);
+      load[target]=rid;
+    }
+    let ok=true;
+    for(const old of displaced){
+      if(old&&!incCount(s,old,false)){ ok=false; break; }
+    }
+    if(!ok){
+      // Roll back the one library removal if capacity became invalid.
+      for(let i=0;i<load.length;i++) if(load[i]===rid) load[i]=displaced.shift()||null;
+      incCount(s,rid,false);
+      this.toast&&this.toast('背包已滿','請先整理空間再替換裝備');
+      return false;
+    }
+    clearNew(s,rid);
+    s.loadout=load;
+    ensureBag(s);
+    this._bagSel=rid;
+    persist(s); sync(this);
+    try{ this.audio&&this.audio.sfx&&this.audio.sfx('equip'); }catch(e){}
+    this.render&&this.render();
+    return true;
+  };
+
+  Game.prototype._hbUnequipRelic=function(slot){
+    const s=ensureBag(this.save||{}), load=s.loadout||[];
+    const slotNo=validSlot(slot)?slot:load.indexOf(baseId(slot));
+    if(!validSlot(slotNo)||!load[slotNo]) return false;
+    if(totalCount(s)>=CAP){ this.toast&&this.toast('背包已滿','請先丟棄或合成裝備'); return false; }
+    const id=load[slotNo]; load[slotNo]=null; s.loadout=load;
+    incCount(s,id,false);
+    const idx=(s.library||[]).lastIndexOf(id);
+    this._bagSel=idx>=0?bagKey(id,idx):id;
+    persist(s); sync(this);
+    try{ this.audio&&this.audio.sfx&&this.audio.sfx('equip'); }catch(e){}
+    this.render&&this.render();
+    return true;
+  };
+
+  Game.prototype._hbDiscardRelic=function(rid){
+    const fromBag=isBagKey(rid);
+    rid=baseId(rid);
+    const s=ensureBag(this.save||{});
+    if(!fromBag&&(s.loadout||[]).includes(rid)){ this.toast&&this.toast('已裝備','請先卸下再丟棄'); return false; }
+    if(!hasCount(s,rid,1)){ this.toast&&this.toast('背包沒有此裝備','可能已被移除'); return false; }
+    decCount(s,rid);
+    if(baseId(this._bagSel)===rid&&!hasCount(s,rid,1)) this._bagSel=null;
+    persist(s); sync(this);
+    try{ this.audio&&this.audio.sfx&&this.audio.sfx('trash'); }catch(e){}
+    this.render&&this.render();
+    return true;
+  };
+  Game.prototype._hbConfirmDiscardRelic=function(rid){
+    const it=display(this,rid);
+    const go=()=>this._hbDiscardRelic(rid);
+    if(this.confirm&&it){
+      this.confirm('確定丟棄「'+(it.name||baseId(rid))+'」？這個動作不能復原。',go);
+      try{ this.audio&&this.audio.sfx&&this.audio.sfx('ui'); }catch(e){}
+      this.render&&this.render();
+      return;
+    }
+    return go();
+  };
+
+  Game.prototype.claimLoot=function(id,how){
+    const s=ensureBag(this.save||{}), r=this._endStats||this.run||{};
+    if(how==='library'&&id){
+      if(addLibraryRelic(this,id,{markNew:true,select:true})){
+        if(this._endStats) this._endStats.picked=true;
+      }
+      return;
+    }
+    if(!r.loot||!r.loot.length) return;
+    let changed=false;
+    for(const id of r.loot.slice()){
+      if(totalCount(s)>=CAP){ this.toast&&this.toast('背包已滿','請先丟棄或整理裝備'); break; }
+      if(incCount(s,id,true)) changed=true;
+    }
+    if(changed){
+      r.loot=[];
+      persist(s); sync(this);
+      try{ this.audio&&this.audio.sfx&&this.audio.sfx('select'); }catch(e){}
+    }
+    this.render&&this.render();
+  };
+
+  function drawEndLootOverlay(g){
+    const s=g._endStats||g.run||{};
+    if(!(s.won||s.speed)||!s.loot||!s.loot.length) return;
+    const IT=g.insT||0, N=6, sw=Math.min(BW*0.93,1740), cgap=20, cw=(sw-(N-1)*cgap)/N, ch=168, sy=IT+282;
+    let cy2=sy+ch+58;
+    if(s.words&&s.words.length) cy2+=50;
+    if(s.speed&&(!s.loot||!s.loot.length)) cy2+=48;
+    const ly=cy2+6, lw=448, lg=44, lyy=ly+50, lh=clamp(BH-lyy-46,380,480), tot=s.loot.length*lw+(s.loot.length-1)*lg, lx0=BW/2-tot/2;
+    for(let i=0;i<s.loot.length;i++){
+      const id=s.loot[i], x=lx0+i*(lw+lg), by=lyy+lh-92, bw2=(lw-40)/2;
+      ((id2,idx)=>{
+        g.btn(x+14,by,bw2-6,76,'hb_collect_new_'+idx,()=>{
+          if(addLibraryRelic(g,id2,{markNew:true,select:true})){
+            s.loot.splice(idx,1);
+            try{ g.audio&&g.audio.sfx&&g.audio.sfx('select'); }catch(e){}
+            g.render&&g.render();
+          }
+        },{hidden:true});
+        g.btn(x+14+bw2+12,by,bw2-6,76,'hb_drop_new_'+idx,()=>{
+          s.loot.splice(idx,1);
+          try{ g.audio&&g.audio.sfx&&g.audio.sfx('ui'); }catch(e){}
+          g.render&&g.render();
+        },{hidden:true});
+      })(id,i);
+    }
+  }
+  const prevDrawEnd=Game.prototype.drawEnd;
+  Game.prototype.drawEnd=function(){
+    const ret=prevDrawEnd.apply(this,arguments);
+    drawEndLootOverlay(this);
+    return ret;
+  };
+
+  Game.prototype._hbFusionCandidates=function(exclude){
+    const s=ensureBag(this.save||{}), bad=new Set((exclude||[]).map(baseId)), out=[];
+    for(const id of Object.keys(s.hbRelicCounts||{})){
+      if(!isRelic(id)) continue;
+      const needed=bad.has(id)?2:1;
+      if(hasCount(s,id,needed)) out.push(id);
+    }
+    return out;
+  };
+  Game.prototype._hbStartFuseRelic=function(rid){
+    const rawRid=rid, bid=baseId(rid), fromBag=isBagKey(rid);
+    const s=ensureBag(this.save||{});
+    if(!fromBag&&(s.loadout||[]).includes(bid)){ this.toast&&this.toast('已裝備','請先卸下再合成'); return; }
+    if(!hasCount(s,bid,1)){ this.toast&&this.toast('背包沒有此裝備','可能已被移除'); return; }
+    if(!this._hbFuseBase){
+      if(this._hbFusionCandidates([bid]).length<1){ this.toast&&this.toast('材料不足','至少需要兩件庫存裝備'); return; }
+      this._hbFuseBase=rawRid; this._bagSel=rawRid;
+      this.toast&&this.toast('選擇第二件','再點一件庫存裝備完成合成');
+      this.render&&this.render();
+      return;
+    }
+    const first=this._hbFuseBase;
+    if(first===rawRid){ this._hbFuseBase=null; this.toast&&this.toast('已取消','合成選取已清除'); this.render&&this.render(); return; }
+    this._hbConfirmFuseRelics(first,rawRid);
+  };
+  Game.prototype._hbConfirmFuseRelics=function(a,b){
+    if(!a||!b||a===b) return;
+    this._hbFuseRelics(a,b);
+  };
+  Game.prototype._hbRollFusionResult=function(a,b){
+    a=baseId(a); b=baseId(b);
+    const s=ensureBag(this.save||{}), counts=Object.assign({},s.hbRelicCounts||{});
+    counts[a]=Math.max(0,num(counts[a])-1);
+    counts[b]=Math.max(0,num(counts[b])-1);
+    const owned=new Set((s.loadout||[]).filter(Boolean));
+    for(const id of Object.keys(counts)) if(num(counts[id])>0) owned.add(id);
+    let pool=Object.keys(RELICS||{}).filter(id=>isRelic(id)&&!owned.has(id));
+    if(!pool.length) pool=[a,b].filter(id=>isRelic(id)&&!owned.has(id));
+    if(!pool.length) pool=Object.keys(RELICS||{}).filter(isRelic);
+    return pool[Math.floor(Math.random()*pool.length)]||a;
+  };
+  Game.prototype._hbFuseRelics=function(a,b){
+    const rawA=a, rawB=b, aBag=isBagKey(a), bBag=isBagKey(b);
+    a=baseId(a); b=baseId(b);
+    const s=ensureBag(this.save||{}), load=s.loadout||[];
+    if(!a||!b||rawA===rawB) return false;
+    if((!aBag&&load.includes(a))||(!bBag&&load.includes(b))){ this.toast&&this.toast('已裝備','請先卸下再合成'); return false; }
+    const needA=a===b?2:1;
+    if(!hasCount(s,a,needA)||(!hasCount(s,b,1))){ this.toast&&this.toast('材料不足','請確認兩件裝備都在庫存'); return false; }
+    const result=this._hbRollFusionResult(a,b);
+    if(!isRelic(result)){ this.toast&&this.toast('合成失敗','找不到可生成裝備'); return false; }
+    decCount(s,a); decCount(s,b);
+    incCount(s,result,true);
+    try{ if(typeof this._setRelicMetaBiased==='function') this._setRelicMetaBiased(result,5,50); }catch(e){}
+    ensureBag(s);
+    this._hbFuseBase=null;
+    const idx=(s.library||[]).lastIndexOf(result);
+    this._bagSel=idx>=0?bagKey(result,idx):result;
+    this._hbFusionReveal={id:result,at:this.t||0};
+    persist(s); sync(this);
+    try{ this.audio&&this.audio.sfx&&this.audio.sfx('reward'); }catch(e){}
+    this.toast&&this.toast('合成完成','獲得 '+((display(this,result)||{}).name||result));
+    this.render&&this.render();
+    return true;
+  };
+
+  function drawNewBadges(g){
+    if(!g._bag||g.screen!=='heroes') return;
+    const s=ensureBag(g.save||{}), sc=scale(), gridBox=rbox(BAG_CAL.grid,sc);
+    const allItems=g._hbBeanVisibleRelics?g._hbBeanVisibleRelics():[];
+    const pageSize=12, maxPage=Math.max(0,Math.ceil(allItems.length/pageSize)-1);
+    g._relicPageHero=clamp(g._relicPageHero||0,0,maxPage);
+    const page=g._relicPageHero||0, shown=allItems.slice(page*pageSize,page*pageSize+pageSize);
+    const itemGrid={x:gridBox.x+14*sc.S,y:gridBox.y+45*sc.S,w:gridBox.w-28*sc.S,h:gridBox.h-96*sc.S};
+    const cols=4, cg=10*sc.S, rg=10*sc.S, cellW=(itemGrid.w-(cols-1)*cg)/cols, cellH=(itemGrid.h-2*rg)/3;
+    const dpr=(typeof devicePixelRatio!=='undefined'?devicePixelRatio:1);
+    for(let i=0;i<shown.length;i++){
+      const it=shown[i], col=i%cols, row=Math.floor(i/cols), x=itemGrid.x+col*(cellW+cg), y=itemGrid.y+row*(cellH+rg);
+      const bid=baseId(it.id);
+      g.btn(x,y,cellW,cellH,'hb_grid_overlay_'+page+'_'+i,()=>{
+        g._bagSel=it.id;
+        if(it._hbNew&&clearNew(s,bid)){ persist(s); sync(g); }
+        try{ g.audio&&g.audio.sfx&&g.audio.sfx('ui'); }catch(e){}
+        g.render&&g.render();
+      },{hidden:true});
+      if((s.hbRelicCounts[bid]||0)>1){
+        const bx=x+cellW-46*sc.S, by=y+cellH-24*sc.S, bw=38*sc.S, bh=20*sc.S;
+        g.ctx.save();
+        g.ctx.fillStyle='rgba(5,7,9,.82)'; g.ctx.strokeStyle='rgba(255,229,137,.9)'; g.ctx.lineWidth=Math.max(1,2*sc.S);
+        if(g.ctx.roundRect){ g.ctx.beginPath(); g.ctx.roundRect(bx,by,bw,bh,7*sc.S); g.ctx.fill(); g.ctx.stroke(); }
+        else { g.ctx.fillRect(bx,by,bw,bh); g.ctx.strokeRect(bx,by,bw,bh); }
+        g.ctx.font=`${Math.max(11,14*sc.S*dpr)}px ${FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#fff0b6';
+        g.ctx.fillText('x'+(s.hbRelicCounts[bid]||0),bx+bw/2,by+bh/2);
+        g.ctx.restore();
+      }
+      if(it._hbNew){
+        const bx=x+8*sc.S, by=y+8*sc.S, bw=48*sc.S, bh=22*sc.S;
+        g.ctx.save();
+        g.ctx.shadowColor='rgba(185,255,37,.85)'; g.ctx.shadowBlur=12*sc.S;
+        g.ctx.fillStyle='#b9ff25'; g.ctx.strokeStyle='rgba(255,255,220,.9)'; g.ctx.lineWidth=Math.max(1,2*sc.S);
+        if(g.ctx.roundRect){ g.ctx.beginPath(); g.ctx.roundRect(bx,by,bw,bh,8*sc.S); g.ctx.fill(); g.ctx.stroke(); }
+        else { g.ctx.fillRect(bx,by,bw,bh); g.ctx.strokeRect(bx,by,bw,bh); }
+        g.ctx.shadowBlur=0;
+        g.ctx.font=`900 ${Math.max(11,15*sc.S*dpr)}px ${FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#162000';
+        g.ctx.fillText('NEW',bx+bw/2,by+bh/2+1*sc.S);
+        g.ctx.restore();
+      }
+    }
+  }
+  function drawBagInstanceActionOverlays(g){
+    if(!g._bag||g.screen!=='heroes'||!isBagKey(g._bagSel)) return;
+    const sc=scale(), S=sc.S, p=rbox(BAG_CAL.detail,sc);
+    const by=p.y+p.h-43*S, bh=33*S, gap=6*S, bw=(p.w-32*S-gap*3)/4, bx=p.x+16*S;
+    g.btn(bx,by,bw,bh,'hb_instance_equip',()=>{
+      g._hbEquipRelic&&g._hbEquipRelic(g._bagSel);
+    },{hidden:true});
+    g.btn(bx+(bw+gap)*2,by,bw,bh,'hb_instance_fuse',()=>{
+      g._hbStartFuseRelic&&g._hbStartFuseRelic(g._bagSel);
+    },{hidden:true});
+    g.btn(bx+(bw+gap)*3,by,bw,bh,'hb_instance_discard',()=>{
+      g._hbConfirmDiscardRelic&&g._hbConfirmDiscardRelic(g._bagSel);
+    },{hidden:true});
+  }
+  Game.prototype._hbDrawFusionReveal=function(){
+    const rev=this._hbFusionReveal;
+    if(!rev||!rev.id||this.screen!=='heroes') return;
+    const it=display(this,rev.id)||{}, sc=scale(), S=sc.S, x=BW/2-250*S, y=BH/2-182*S, w=500*S, h=364*S;
+    this.ctx.save();
+    this.ctx.fillStyle='rgba(0,0,0,.66)';
+    this.ctx.fillRect(0,0,BW,BH);
+    this.ctx.shadowColor='rgba(185,255,37,.6)'; this.ctx.shadowBlur=20*S;
+    this.ctx.fillStyle='rgba(14,10,18,.96)'; this.ctx.strokeStyle='#ffe588'; this.ctx.lineWidth=3*S;
+    if(this.ctx.roundRect){ this.ctx.beginPath(); this.ctx.roundRect(x,y,w,h,18*S); this.ctx.fill(); this.ctx.stroke(); }
+    else { this.ctx.fillRect(x,y,w,h); this.ctx.strokeRect(x,y,w,h); }
+    this.ctx.shadowBlur=0;
+    this.ctx.textAlign='center'; this.ctx.textBaseline='middle';
+    this.ctx.font=`900 ${Math.max(24,34*S)}px ${FONT}`; this.ctx.fillStyle='#fff4c1';
+    this.ctx.fillText('合成完成',x+w/2,y+48*S);
+    this.ctx.font=`900 ${Math.max(16,22*S)}px ${FONT}`; this.ctx.fillStyle='#b9ff25';
+    this.ctx.fillText('新合成裝備',x+w/2,y+82*S);
+    const ix=x+w/2-78*S, iy=y+106*S, iw=156*S, ih=126*S;
+    this.ctx.fillStyle='rgba(0,0,0,.65)'; this.ctx.strokeStyle=it.color||'#6edbff'; this.ctx.lineWidth=3*S;
+    if(this.ctx.roundRect){ this.ctx.beginPath(); this.ctx.roundRect(ix,iy,iw,ih,12*S); this.ctx.fill(); this.ctx.stroke(); }
+    else { this.ctx.fillRect(ix,iy,iw,ih); this.ctx.strokeRect(ix,iy,iw,ih); }
+    try{ if(this._drawRelicSheetIcon) this._drawRelicSheetIcon(it.type||'ball',it.idx||0,ix+18*S,iy+12*S,iw-36*S,ih-24*S,1); }catch(e){}
+    this.ctx.font=`900 ${Math.max(20,28*S)}px ${FONT}`; this.ctx.fillStyle=it.color||'#ffe588';
+    this.ctx.fillText(it.name||rev.id,x+w/2,y+260*S);
+    const aff=(it.affixes||it.mods||[]).slice(0,2).map(a=>typeof a==='string'?a:(a&&a.name?a.name:'')).filter(Boolean).join(' / ');
+    if(aff){
+      this.ctx.font=`800 ${Math.max(13,18*S)}px ${FONT}`; this.ctx.fillStyle='#fff7dc';
+      this.ctx.fillText(aff,x+w/2,y+292*S);
+    }
+    this.ctx.restore();
+    this.btn(0,0,BW,BH,'hb_fusion_modal_block',()=>{}, {hidden:true});
+    this._sb(x+w/2-86*S,y+h-64*S,172*S,48*S,'收下',()=>{
+      this._hbFusionReveal=null;
+      try{ this.audio&&this.audio.sfx&&this.audio.sfx('select'); }catch(e){}
+      this.render&&this.render();
+    },{primary:true,size:22*S});
+  };
+  const prevDrawRelicBag=Game.prototype.drawRelicBag;
+  Game.prototype.drawRelicBag=function(){
+    ensureBag(this.save||{});
+    const ret=prevDrawRelicBag.apply(this,arguments);
+    drawNewBadges(this);
+    drawBagInstanceActionOverlays(this);
+    this._hbDrawFusionReveal();
+    return ret;
+  };
+
+  Game.prototype._hbRelicBagDiagnostics=function(){
+    const s=ensureBag(this.save||{}), counts=s.hbRelicCounts||{};
+    return {
+      marker:MARK,
+      capacity:CAP,
+      total:totalCount(s),
+      pages:Math.max(1,Math.ceil(totalCount(s)/12)),
+      duplicateIds:Object.keys(counts).filter(id=>counts[id]>1),
+      newIds:Object.keys(s.hbRelicNew||{})
+    };
+  };
+})();

@@ -19,12 +19,14 @@ const required = [
   '__HB_RELIC_FUSION_FINAL__',
   '__HB_RELIC_FUSION_UX_FINAL__',
   '__HB_RELIC_FUSION_META_GUARD__',
+  '__HB_BACKPACK_HEALTHCHECK_FINAL__',
   '__HB_ENDLESS_MILESTONES_FINAL__',
   '__HB_ENDLESS_RARE_FORGE_FINAL__',
   '__HB_SAVE_SMOKE_FINAL__',
   'Game.prototype._hbQueueMakeUpgrade',
   'Game.prototype._hbMadeShotProgress',
   'Game.prototype._hbDrawFusionGuide',
+  'Game.prototype._hbRelicBagDiagnostics',
   'Game.prototype._hbEndlessMilestoneInfo'
 ];
 
@@ -34,6 +36,11 @@ for (const needle of required) {
 
 assert(src.includes('const MAKE_GOAL=5'), 'Made-shot upgrade goal must remain 5.');
 assert(src.includes("relicFusion:'two-to-one-reroll'"), 'Save migration must record relic fusion system.');
+assert(src.includes('hbRelicCounts'), 'Relic backpack must preserve duplicate item counts.');
+assert(src.includes('hbRelicNew'), 'Relic backpack must preserve NEW item badges.');
+assert(src.includes('_hbFusionReveal'), 'Relic fusion must show the new-item reveal screen.');
+assert(src.includes('BAG_KEY'), 'Relic backpack must distinguish duplicate item instances in the UI.');
+assert(src.includes('hb_instance_discard'), 'Relic detail actions must support duplicate item instances.');
 assert(!src.includes('contentLift=m.id===5'), 'Atlas act 5 card must not have a special content lift.');
 
 console.log('Smoke OK: engine syntax and final feature markers verified.');
