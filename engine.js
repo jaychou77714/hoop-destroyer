@@ -17634,3 +17634,264 @@ Object.assign(Game.prototype,{
 
   try{ window.__HB_MADE_SHOT_UPGRADES_FINAL__='v48-every-five-makes'; }catch(e){}
 })();
+
+// ---- UX pass: made-shot progress, fusion clarity, endless milestones, save migration ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const MAKE_GOAL=5;
+  const SAVE_SCHEMA=49;
+  const clone=o=>{ try{return o==null?o:JSON.parse(JSON.stringify(o));}catch(e){return o;} };
+  const num=(v,d)=>Number.isFinite(Number(v))?Number(v):(d||0);
+  const clamp01=v=>Math.max(0,Math.min(1,Number(v)||0));
+  function panel(g,x,y,w,h,r,fill,stroke){
+    const ctx=g.ctx;
+    ctx.save();
+    g.rr(x,y,w,h,r||12);
+    const gr=ctx.createLinearGradient(0,y,0,y+h);
+    gr.addColorStop(0,fill||'rgba(20,13,9,0.92)');
+    gr.addColorStop(1,'rgba(5,4,7,0.95)');
+    ctx.fillStyle=gr;
+    ctx.fill();
+    ctx.lineWidth=Math.max(2,Math.min(w,h)*0.05);
+    ctx.strokeStyle=stroke||'rgba(215,169,69,0.58)';
+    ctx.stroke();
+    ctx.restore();
+  }
+  function itemName(g,id){
+    try{
+      const it=g&&g._hbRelicDisplay?g._hbRelicDisplay(id):(typeof RELICS!=='undefined'?RELICS[id]:null);
+      return (it&&it.name)||id||'聖物';
+    }catch(e){ return id||'聖物'; }
+  }
+  function migrateSaveShape(s){
+    if(!s||typeof s!=='object') return false;
+    let changed=false;
+    const set=(k,v)=>{ if(JSON.stringify(s[k])!==JSON.stringify(v)){ s[k]=v; changed=true; } };
+    if(!Array.isArray(s.relics)) set('relics',[null,null,null]);
+    if(Array.isArray(s.relics)&&s.relics.length!==3){ s.relics=s.relics.slice(0,3); while(s.relics.length<3)s.relics.push(null); changed=true; }
+    if(!Array.isArray(s.loadout)) set('loadout',[null,null,null,null,null]);
+    if(Array.isArray(s.loadout)&&s.loadout.length!==5){ s.loadout=s.loadout.slice(0,5); while(s.loadout.length<5)s.loadout.push(null); changed=true; }
+    if(!Array.isArray(s.library)) set('library',[]);
+    if(Array.isArray(s.library)){
+      const seen=new Set(), lib=[];
+      for(const id of s.library){ if(id&&!seen.has(id)){ seen.add(id); lib.push(id); } }
+      if(lib.length!==s.library.length){ s.library=lib; changed=true; }
+    }
+    for(const k of ['endlessBest','endlessBestScore','endlessBestBosses','endlessBestKills','endlessBestCombo']){
+      const v=Math.max(0,Math.floor(num(s[k],0)));
+      if(s[k]!==v){ s[k]=v; changed=true; }
+    }
+    if(!s.hbSystems||typeof s.hbSystems!=='object'){ s.hbSystems={}; changed=true; }
+    const sys=s.hbSystems;
+    const systemDefaults={schema:SAVE_SCHEMA,madeShotUpgradeEvery:MAKE_GOAL,relicFusion:'two-to-one-reroll',endlessMilestones:'v1'};
+    for(const k in systemDefaults){ if(sys[k]!==systemDefaults[k]){ sys[k]=systemDefaults[k]; changed=true; } }
+    if(s.endlessResume&&s.endlessResume.run){
+      const r=s.endlessResume.run;
+      const makes=Math.max(0,Math.floor(num(r.makes,0)));
+      const next=(Math.floor(makes/MAKE_GOAL)+1)*MAKE_GOAL;
+      if(!Number.isFinite(Number(r._hbNextMakeUpgrade))||Number(r._hbNextMakeUpgrade)<=makes){ r._hbNextMakeUpgrade=next; changed=true; }
+      if(!r._hbMilestoneSeen||typeof r._hbMilestoneSeen!=='object'){ r._hbMilestoneSeen={}; changed=true; }
+    }
+    return changed;
+  }
+
+  const prevLoadSave=loadSave;
+  loadSave=function(){
+    const s=prevLoadSave.apply(this,arguments);
+    if(migrateSaveShape(s)) persist(s);
+    return s;
+  };
+
+  Game.prototype._hbMadeShotProgress=function(run){
+    if(!run||run.speed) return null;
+    const makes=Math.max(0,Math.floor(num(run.makes,0)));
+    let next=Math.floor(num(run._hbNextMakeUpgrade,0));
+    if(!Number.isFinite(next)||next<=makes) next=(Math.floor(makes/MAKE_GOAL)+1)*MAKE_GOAL;
+    const prev=Math.max(0,next-MAKE_GOAL);
+    return {makes,next,count:Math.max(0,Math.min(MAKE_GOAL,makes-prev)),goal:MAKE_GOAL,pending:Math.max(0,Math.floor(num(run.levelUpsPending,0)))};
+  };
+
+  Game.prototype._hbDrawMadeShotProgressHUD=function(){
+    const run=this.run, p=this._hbMadeShotProgress&&this._hbMadeShotProgress(run);
+    if(!p||run.modal||this._paused) return;
+    const ctx=this.ctx, IT=this.insT||0;
+    const w=Math.min(390,Math.max(330,BW*0.21)), h=54, x=BW/2-w/2, y=IT+(run.endless?210:(run.combo>1?168:124));
+    panel(this,x,y,w,h,14,'rgba(17,11,7,0.88)',p.pending?'#d8ff44':'rgba(215,169,69,0.62)');
+    const label=p.pending?('命中成長 待選擇 x'+p.pending):('命中成長 '+p.count+'/'+p.goal);
+    this.text(label,x+20,y+18,18,p.pending?'#d8ff44':'#ffe7a6',{baseline:'middle',weight:'900',glow:p.pending?8:0});
+    this.text('每 5 顆進球觸發三選一',x+w-18,y+18,13,'#c8b894',{align:'right',baseline:'middle',weight:'800'});
+    const bx=x+18, by=y+34, bw=w-36, bh=9, ratio=p.pending?1:p.count/p.goal;
+    this.rr(bx,by,bw,bh,5); ctx.fillStyle='rgba(0,0,0,0.52)'; ctx.fill();
+    if(ratio>0){
+      this.rr(bx,by,bw*clamp01(ratio),bh,5);
+      const gr=ctx.createLinearGradient(bx,by,bx+bw,by);
+      gr.addColorStop(0,'#9fe024'); gr.addColorStop(1,'#ffe14d');
+      ctx.fillStyle=gr; ctx.fill();
+    }
+  };
+
+  Game.prototype._hbEndlessMilestoneInfo=function(depth){
+    depth=Math.max(1,Math.floor(num(depth,1)));
+    const current=depth%5===0;
+    const next=current?depth:(Math.ceil(depth/5)*5);
+    const rare=next%10===0;
+    const variant=next>=25;
+    const label=variant?'Boss 變體循環':(rare?'稀有鍛造':'裝備鍛造');
+    const sub=variant?'深層 Boss 會輪換詞綴與規則':(rare?'第 10 層倍數，鍛造節點更值得期待':'Boss 後可升級已裝備聖物');
+    return {depth,next,left:Math.max(0,next-depth),current,rare,variant,label,sub};
+  };
+
+  Game.prototype._hbDrawEndlessMilestoneHUD=function(){
+    const run=this.run;
+    if(!run||!run.endless||run.speed||run.modal||this._paused) return;
+    const info=this._hbEndlessMilestoneInfo(run.endlessDepth||1), IT=this.insT||0;
+    const w=Math.min(560,Math.max(460,BW*0.30)), h=42, x=BW/2-w/2, y=IT+156;
+    panel(this,x,y,w,h,12,'rgba(10,7,8,0.82)',info.variant?'#c89bff':(info.rare?'#ffb23c':'rgba(159,224,36,0.58)'));
+    const title=(info.current?'本層里程碑':'下一里程碑')+'：第 '+info.next+' 層 · '+info.label;
+    this.text(title,x+18,y+21,18,info.variant?'#c89bff':(info.rare?'#ffcf69':'#d8ff44'),{baseline:'middle',weight:'900',glow:info.current?7:0});
+    this.text(info.current?info.sub:('還差 '+info.left+' 層'),x+w-18,y+21,15,'#c8b894',{align:'right',baseline:'middle',weight:'900'});
+  };
+
+  const prevDrawHUD=Game.prototype.drawHUD;
+  Game.prototype.drawHUD=function(){
+    const ret=prevDrawHUD?prevDrawHUD.apply(this,arguments):undefined;
+    this._hbDrawEndlessMilestoneHUD&&this._hbDrawEndlessMilestoneHUD();
+    this._hbDrawMadeShotProgressHUD&&this._hbDrawMadeShotProgressHUD();
+    return ret;
+  };
+
+  const prevDrawRelicBag=Game.prototype.drawRelicBag;
+  Game.prototype.drawRelicBag=function(){
+    const ret=prevDrawRelicBag?prevDrawRelicBag.apply(this,arguments):undefined;
+    this._hbDrawFusionGuide&&this._hbDrawFusionGuide();
+    return ret;
+  };
+
+  Game.prototype._hbDrawFusionGuide=function(){
+    if(this.screen!=='heroes'||!this._bag) return;
+    const ctx=this.ctx, sx=BW/1280, sy=BH/590, S=Math.min(sx,sy), X=v=>v*sx, Y=v=>v*sy, W=v=>v*sx, H=v=>v*sy;
+    const base=this._hbFuseBase, has=!!base, x=X(34), y=Y(61), w=W(222), h=H(has?82:74);
+    panel(this,x,y,w,h,10*S,'rgba(14,10,8,0.92)',has?'#d8ff44':'rgba(215,169,69,0.58)');
+    this.text(has?'合成材料一':'合成系統',x+14*S,y+18*S,16*S,has?'#d8ff44':'#ffe7a6',{baseline:'middle',weight:'900',glow:has?6*S:0});
+    if(has){
+      this.text(this._clip?this._clip(itemName(this,base),w-28*S,15*S,'900'):itemName(this,base),x+14*S,y+41*S,15*S,'#fff4dc',{baseline:'middle',weight:'900'});
+      this.text('再選第二件按合成 · 點同件取消',x+14*S,y+63*S,11.5*S,'#c8b894',{baseline:'middle',weight:'900'});
+      this.btn(x,y,w,h,'fusion_guide_cancel',()=>{ this._hbFuseBase=null; this.audio&&this.audio.sfx&&this.audio.sfx('ui'); this.render&&this.render(); });
+    }else{
+      this.text('兩件庫存裝備 → 1 件隨機聖物',x+14*S,y+40*S,12.5*S,'#efe3ca',{baseline:'middle',weight:'900'});
+      this.text('詞綴與強度會重新骰',x+14*S,y+60*S,12*S,'#d8ff44',{baseline:'middle',weight:'900'});
+    }
+    ctx.save();
+    ctx.globalAlpha=0.18;
+    ctx.fillStyle=has?'#d8ff44':'#ffe14d';
+    ctx.beginPath(); ctx.arc(x+w-24*S,y+24*S,13*S,0,TAU); ctx.fill();
+    ctx.restore();
+  };
+
+  const prevStartFuse=Game.prototype._hbStartFuseRelic;
+  Game.prototype._hbStartFuseRelic=function(rid){
+    if(this._hbFuseBase&&this._hbFuseBase===rid){
+      this._hbFuseBase=null;
+      this.toast&&this.toast('已取消材料','重新選擇兩件庫存聖物合成');
+      this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+      this.render&&this.render();
+      return;
+    }
+    return prevStartFuse?prevStartFuse.apply(this,arguments):undefined;
+  };
+
+  Game.prototype._hbConfirmFuseRelics=function(a,b){
+    if(!a||!b||a===b) return;
+    const msg='確定合成「'+itemName(this,a)+'」與「'+itemName(this,b)+'」？會消耗兩件庫存聖物，產生 1 件隨機聖物；詞綴與強度會重新骰。';
+    if(this.confirm) this.confirm(msg,()=>this._hbFuseRelics(a,b));
+    else this._hbFuseRelics(a,b);
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  const prevEnterStage=Game.prototype.enterStage;
+  Game.prototype.enterStage=function(pi){
+    const ret=prevEnterStage?prevEnterStage.apply(this,arguments):undefined;
+    const run=this.run;
+    if(run&&run.endless&&Number(pi||0)===0){
+      const info=this._hbEndlessMilestoneInfo?this._hbEndlessMilestoneInfo(run.endlessDepth||1):null;
+      if(info&&info.current){
+        run._hbMilestoneSeen=run._hbMilestoneSeen||{};
+        const key='d'+info.depth;
+        if(!run._hbMilestoneSeen[key]){
+          run._hbMilestoneSeen[key]=true;
+          run.banner={text:info.label,sub:'第 '+info.depth+' 層 · '+info.sub,t:2.2};
+        }
+      }
+    }
+    return ret;
+  };
+
+  const prevResumeSnap=Game.prototype._hbEndlessResumeSnapshot;
+  Game.prototype._hbEndlessResumeSnapshot=function(run){
+    const snap=prevResumeSnap?prevResumeSnap.apply(this,arguments):{v:1,savedAt:new Date().toISOString(),run:clone(run||{})};
+    if(snap&&snap.run){
+      const makes=Math.max(0,Math.floor(num(snap.run.makes,0)));
+      snap.run._hbNextMakeUpgrade=Number.isFinite(Number(run&&run._hbNextMakeUpgrade))?run._hbNextMakeUpgrade:(Math.floor(makes/MAKE_GOAL)+1)*MAKE_GOAL;
+      snap.run._hbMilestoneSeen=clone(run&&run._hbMilestoneSeen)||{};
+    }
+    return snap;
+  };
+
+  try{ window.__HB_BATTLE_PROGRESS_FINAL__='v49-made-shot-hud'; window.__HB_RELIC_FUSION_UX_FINAL__='v49-fusion-guide'; window.__HB_ENDLESS_MILESTONES_FINAL__='v49-milestone-hud'; window.__HB_SAVE_SMOKE_FINAL__='v49-migration'; }catch(e){}
+})();
+
+// ---- Endless rare forge checkpoints and cloud-visible system metadata ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const clone=o=>{ try{return o==null?o:JSON.parse(JSON.stringify(o));}catch(e){return o;} };
+
+  const prevAdvanceDepth=Game.prototype._endlessAdvanceDepth;
+  Game.prototype._endlessAdvanceDepth=function(){
+    const ret=prevAdvanceDepth?prevAdvanceDepth.apply(this,arguments):undefined;
+    const run=this.run, m=run&&run.modal;
+    if(run&&run.endless&&m&&m.kind==='endlessGearReward'){
+      const depth=Math.max(1,Math.floor(Number(m.depth)||Number(run.endlessDepth)||1));
+      if(depth%10===0){
+        m.rare=true;
+        m.forge=true;
+        m.milestoneLabel='稀有鍛造';
+        run.banner={text:'稀有鍛造節點',sub:'第 '+depth+' 層 · 升級後可選詞綴鑲嵌或精煉',t:2.1};
+      }else if(depth>=25){
+        m.milestoneLabel='Boss 變體循環';
+      }
+    }
+    return ret;
+  };
+
+  const prevDrawModal=Game.prototype.drawModal;
+  Game.prototype.drawModal=function(){
+    const ret=prevDrawModal?prevDrawModal.apply(this,arguments):undefined;
+    const run=this.run, m=run&&run.modal;
+    if(m&&m.kind==='endlessGearReward'&&m.rare){
+      this.text('10 層倍數 · 稀有鍛造節點',BW/2,212,24,'#ffcf69',{align:'center',baseline:'middle',weight:'900',glow:8});
+    }
+    return ret;
+  };
+
+  const prevSubset=Game.prototype._progressSaveSubset;
+  Game.prototype._progressSaveSubset=function(){
+    const out=prevSubset?prevSubset.call(this):{};
+    if(this.save&&this.save.hbSystems) out.hbSystems=clone(this.save.hbSystems);
+    return out;
+  };
+
+  const prevApply=Game.prototype._applyCloudProgressSnapshot;
+  Game.prototype._applyCloudProgressSnapshot=function(remote){
+    const changed=prevApply?!!prevApply.call(this,remote):false;
+    const rs=remote&&remote.save&&typeof remote.save==='object'?remote.save:null;
+    if(rs&&rs.hbSystems&&this.save){
+      this.save.hbSystems=Object.assign({},rs.hbSystems,this.save.hbSystems||{});
+      persist(this.save);
+      return true;
+    }
+    return changed;
+  };
+
+  try{ window.__HB_ENDLESS_RARE_FORGE_FINAL__='v49-ten-depth-socket'; }catch(e){}
+})();
