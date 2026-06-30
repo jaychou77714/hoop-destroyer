@@ -17035,6 +17035,7 @@ Object.assign(Game.prototype,{
     const ctx=g.ctx, press=isPressed(g,r), lift=selected?0:10;
     const x=r.x, y=r.y+(press?6:lift), w=r.w, h=r.h-(selected?0:lift);
     const glow=selected?'rgba(255,220,92,0.50)':(locked?'rgba(120,80,80,0.08)':'rgba(154,255,52,0.18)');
+    const contentLift=m.id===5?(selected?-24:-18):0;
     const frame=img(g,'./assets/atlas_v2/card_frame.png');
     if(frame&&frame.complete&&frame.naturalWidth&&!frame._err){
       ctx.save();
@@ -17058,6 +17059,7 @@ Object.assign(Game.prototype,{
       ctx.stroke();
       ctx.restore();
     }
+    if(contentLift){ ctx.save(); ctx.translate(0,contentLift); }
     label(g,'第 '+m.id+' 幕',x+w/2,y+44,selected?35:25,locked?'rgba(230,211,165,0.46)':'#ffe66f',{align:'center',baseline:'middle',glow:selected?10:0});
     label(g,m.name,x+w/2,y+(selected?96:86),selected?48:33,locked?'rgba(240,228,204,0.44)':'#fff1d5',{align:'center',baseline:'middle',glow:selected?8:0});
     label(g,m.sub,x+w/2,y+(selected?142:125),selected?23:18,locked?'rgba(207,188,148,0.36)':'#e6c783',{align:'center',baseline:'middle',weight:'800'});
@@ -17077,6 +17079,7 @@ Object.assign(Game.prototype,{
     label(g,'印記 '+rec.marks,x+w*0.23,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#d6a8ff',{align:'center',baseline:'middle',weight:'900'});
     label(g,'擊敗 '+rec.clears,x+w*0.50,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ff897b',{align:'center',baseline:'middle',weight:'900'});
     label(g,'熟度 '+rec.heat,x+w*0.77,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ffd36b',{align:'center',baseline:'middle',weight:'900'});
+    if(contentLift) ctx.restore();
     if(locked){
       ctx.save();
       ctx.fillStyle='rgba(0,0,0,0.36)';
@@ -17151,6 +17154,34 @@ Object.assign(Game.prototype,{
       if(locked){
         if(g.audio&&g.audio.sfx)g.audio.sfx('hurt');
         if(g.toast)g.toast('戰幕尚未解鎖','先擊破前一幕 Boss');
+        if(g.render)g.render();
+        return;
+      }
+      if(g.audio&&g.audio.sfx)g.audio.sfx('ui');
+      g.go('route');
+    });
+  }
+  function drawEnterTextButton(g,r,m,locked,selected){
+    const text=locked?'\u5c1a\u672a\u89e3\u9396':'\u9032\u5165\u7b2c '+m.id+' \u5e55';
+    const tx=r.x+r.w/2, baseY=r.y+r.h+(selected?64:58);
+    const fs=selected?29:23;
+    const hit={x:r.x+r.w*0.06,y:baseY-fs*0.95,w:r.w*0.88,h:fs*1.9};
+    const press=isPressed(g,hit), ty=baseY+(press?3:0);
+    label(g,text,tx,ty,fs,locked?'rgba(226,204,160,0.54)':(press?'#f7ffbd':'#ffe58a'),{align:'center',baseline:'middle',weight:'900',glow:locked?0:(press?13:8)});
+    const ctx=g.ctx;
+    ctx.save();
+    ctx.strokeStyle=locked?'rgba(226,204,160,0.18)':'rgba(255,229,138,0.56)';
+    ctx.lineWidth=Math.max(2,fs*0.08);
+    ctx.beginPath();
+    ctx.moveTo(tx-r.w*0.22,ty+fs*0.78);
+    ctx.lineTo(tx+r.w*0.22,ty+fs*0.78);
+    ctx.stroke();
+    ctx.restore();
+    g.btn(hit.x,hit.y,hit.w,hit.h,'atlas_gate_enter_'+m.id,()=>{
+      g._selAct=m.id;
+      if(locked){
+        if(g.audio&&g.audio.sfx)g.audio.sfx('hurt');
+        if(g.toast)g.toast('\u5c1a\u672a\u89e3\u9396','\u8acb\u5148\u901a\u95dc\u524d\u4e00\u5e55 Boss');
         if(g.render)g.render();
         return;
       }
@@ -17342,12 +17373,12 @@ Object.assign(Game.prototype,{
       selectedRects[m.id]=r;
       drawGate(this,m,r,selected,locked,unlocked);
     }
-    const m=pickMeta(this._selAct), sr=selectedRects[this._selAct], locked=this._selAct>unlocked;
-    const base=(layout&&layout.base)||DEFAULT_ATLAS_GROUPS.base, u=BH/(Number(base.h)||786);
-    const ball=(layout&&layout.ball)||DEFAULT_ATLAS_GROUPS.ball, ballSize=(Number(ball.size)||132)*u, ballDy=(Number(ball.dy)||34)*u;
-    drawBallButton(this,{x:sr.x+sr.w/2-ballSize/2,y:sr.y+sr.h+ballDy,w:ballSize,h:ballSize},m,locked);
+    for(let i=0;i<maxAct;i++){
+      const m=pickMeta(i+1), r=selectedRects[m.id];
+      if(r) drawEnterTextButton(this,r,m,m.id>unlocked,m.id===this._selAct);
+    }
     drawRightPanel(this,this._selAct,unlocked,mapGroupRect(layout,groupRect(layout,'side'),false));
-    try{ window.__HB_ATLAS_SCENE_GATES__='v1-five-node-bean-side-panel'; }catch(e){}
+    try{ window.__HB_ATLAS_SCENE_GATES__='v2-text-enter-buttons'; }catch(e){}
   };
 })();
 
