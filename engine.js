@@ -6293,23 +6293,18 @@ Object.assign(Game.prototype,{
     this.text(this._clip(h.passive,tw,ds,'400'), tx, y+38*U, ds,'#cfc6b0');
     this.btn(r.x,r.y,r.w,r.h,'skill',()=>{ this._bag=null; this._heroSheet={title:h.name+'｜'+h.en,accent:'#e6c068',rows:[['定位',h.role],['一句話',h.tag||'']],desc:h.passive}; this.audio.sfx('ui'); this.render(); });
   }
-  ,_relicRow(x,y,w,hh,U){ const ctx=this.ctx, s=this.save; const load=s.loadout||[null,null,null,null,null]; const cnt=load.filter(Boolean).length;
-    this.text('聖物 '+cnt+'/5', x, y+16*U, 13*U,'#e6c068',{weight:'700'});
-    const tags=this._bdTags(load); let tx=x+58*U;
-    for(const tg of tags.slice(0,4)){ ctx.font='700 '+(10*U)+'px Georgia,serif'; const tw=ctx.measureText(tg).width+9*U; if(tx+tw>x+w) break; this.rr(tx,y+5*U,tw,15*U,5*U); ctx.fillStyle='rgba(58,44,20,0.92)'; ctx.fill(); ctx.lineWidth=1*U; ctx.strokeStyle='rgba(200,160,70,0.5)'; ctx.stroke(); this.text(tg,tx+tw/2,y+12.5*U,10*U,'#f0d8a0',{align:'center',baseline:'middle',weight:'700'}); tx+=tw+5*U; }
-    const slotN=5, sgap=7*U, bagW=58*U, bagH=Math.min(32*U,hh-26*U), gapToBag=12*U;
-    let sw=23*U; let groupW=slotN*sw+(slotN-1)*sgap+gapToBag+bagW;
-    if(groupW>w){ const avail=w-gapToBag-bagW-(slotN-1)*sgap; sw=Math.max(18*U,avail/slotN); groupW=slotN*sw+(slotN-1)*sgap+gapToBag+bagW; }
-    const gx=x+(w-groupW)/2, sy=y+24*U;
-    for(let i=0;i<slotN;i++){ const sx=gx+i*(sw+sgap); const rid=load[i]; const rel=rid&&RELICS[rid];
-      this.rr(sx,sy,sw,sw,5*U); ctx.fillStyle= rel? this._fade(this._clsCol(rel.cls),0.5) : 'rgba(20,14,9,0.88)'; ctx.fill(); ctx.lineWidth=1.4*U; ctx.strokeStyle= rel? this._clsCol(rel.cls) : 'rgba(230,192,104,0.38)'; ctx.stroke();
-      if(rel){ this.text(rel.name.slice(0,1), sx+sw/2, sy+sw/2, 14*U,'#f4ead2',{align:'center',baseline:'middle',weight:'800'}); }
-      const hit=Math.max(44*U,sw); ((ii)=>{ this.btn(sx-(hit-sw)/2,sy-(hit-sw)/2,hit,hit,'relic'+ii,()=>{ const rid=(this.save.loadout||[])[ii]; if(rid){ this._openRelicSheet(rid); } else { this._bag=true; this._heroSheet=null; this.audio.sfx('ui'); this.render(); } }); })(i); }
-    const bagX=gx+slotN*sw+(slotN-1)*sgap+gapToBag, bagY=sy+(sw-bagH)/2;
-    const r={x:bagX,y:bagY,w:bagW,h:bagH}; ctx.save(); if(this._press(r))ctx.globalAlpha=0.84;
-    this.rr(bagX,bagY,bagW,bagH,8*U); ctx.fillStyle='rgba(40,30,18,0.92)'; ctx.fill(); ctx.lineWidth=1.6*U; ctx.strokeStyle='rgba(200,155,60,0.5)'; ctx.stroke(); ctx.restore();
-    this.text('背包 \u203a', bagX+bagW/2, bagY+bagH/2, 12*U,'#ece0c4',{align:'center',baseline:'middle',weight:'700'});
-    this.btn(bagX,bagY-(44*U-bagH)/2,bagW,Math.max(44*U,bagH),'bag',()=>{ this._bag=true; this._bagSel=null; this._heroSheet=null; this.audio.sfx('ui'); this.render(); });
+  ,_relicRow(x,y,w,hh,U){ const ctx=this.ctx;
+    const btnH=Math.min(42*U,hh-8*U), btnY=y+(hh-btnH)/2, r={x:x,y:btnY,w:w,h:btnH};
+    ctx.save(); if(this._press(r))ctx.globalAlpha=0.84;
+    this.rr(r.x,r.y,r.w,r.h,9*U);
+    ctx.fillStyle='rgba(40,30,18,0.92)';
+    ctx.fill();
+    ctx.lineWidth=1.8*U;
+    ctx.strokeStyle='rgba(200,155,60,0.62)';
+    ctx.stroke();
+    ctx.restore();
+    this.text('聖物背包',r.x+r.w/2,r.y+r.h/2,15*U,'#ece0c4',{align:'center',baseline:'middle',weight:'800'});
+    this.btn(r.x,r.y,r.w,Math.max(44*U,r.h),'bag',()=>{ this._bag=true; this._bagSel=null; this._heroSheet=null; this.audio.sfx('ui'); this.render(); });
   }
   // ===== right talent tree =====
   ,_talentLanes(){ return [ {key:'break',name:'破框系',col:'#e88a5a',icon:'⚔'}, {key:'dirty',name:'髒球系',col:'#6fb0e8',icon:'❖'}, {key:'feel',name:'手感系',col:'#79c06a',icon:'❀'} ]; }
@@ -7334,7 +7329,7 @@ Object.assign(Game.prototype,{
         this.text(TREE_NAME[a.tree],x+cw/2,y+56,20,col,{align:'center',weight:'700'}); this.text(a.name,x+cw/2,y+150,40,'#ece0c4',{align:'center',weight:'800'}); this.wrap(a.desc(lv+1),x+cw/2,y+230,cw-50,28,'#cfc6b0',24); this.text(lv>0?`Lv${lv} → Lv${lv+1}`:'新能力',x+cw/2,y+420-40,22,lv>0?'#6fae4a':'#e6c068',{align:'center',weight:'700'});
         this.btn(x,y,cw,420,'ab'+i,()=>this.chooseAbility(a)); }
       if(m.reroll>0) this.button(BW/2-150,y+440,300,56,'重抽 ('+m.reroll+')','rr',()=>this.rerollAbility(),{size:24});
-    } else if(m.kind==='upgrade'){ this.text('升級 · 三選一',BW/2,150,52,'#ece0c4',{align:'center',weight:'800'}); this.text('Lv'+run.level+'　·　共用成長',BW/2,196,22,'#e6c068',{align:'center'});
+    } else if(m.kind==='upgrade'){ this.text('命中成長 · 三選一',BW/2,150,52,'#ece0c4',{align:'center',weight:'800'}); this.text('每 5 顆進球　·　共用成長',BW/2,196,22,'#e6c068',{align:'center'});
       const TC={'生存':'#39ad39','投籃':'#6b86e8','攻擊':'#e0853c','經濟':'#d7a945'};
       const cw=380,gap=40,total=m.choices.length*cw+(m.choices.length-1)*gap,x0=BW/2-total/2,y=250;
       for(let i=0;i<m.choices.length;i++){ const def=UPMAP[m.choices[i]]; if(!def)continue; const x=x0+i*(cw+gap),col=TC[def.type]||'#e6c068',lv=def.instant?0:(run.modStacks[def.id]||0);
@@ -15343,7 +15338,7 @@ Object.assign(Game.prototype,{
     const equipCb=equipped?(()=>g._hbUnequipRelic(sel.id)):(()=>g._hbEquipRelic(sel.id,{slot:g._hbBeanPreferredSlot(sel)}));
     g.button(bx,by,bw,bh,equipLabel,'bean_v39_equip_'+sel.id,equipCb,{primary:true,size:15*S,weight:'900',r:6*S});
     g.button(bx+(bw+gap),by,bw,bh,'\u5347\u7d1a','bean_v39_upgrade_'+sel.id,()=>g.toast&&g.toast('\u7121\u76e1\u935b\u9020','\u7121\u76e1\u6a21\u5f0f\u6bcf 5 \u5c64\u53ef\u5347\u7d1a\u88dd\u5099'),{size:15*S,weight:'900',r:6*S});
-    g.button(bx+(bw+gap)*2,by,bw,bh,'\u9396\u5b9a','bean_v39_lock_'+sel.id,()=>g.toast&&g.toast('\u9396\u5b9a\u529f\u80fd','\u4e0b\u4e00\u7248\u958b\u653e\uff0c\u73fe\u5728\u4e0d\u6539\u52d5\u8cc7\u6599'),{size:15*S,weight:'900',r:6*S});
+    g.button(bx+(bw+gap)*2,by,bw,bh,'\u5408\u6210','bean_v39_fuse_'+sel.id,()=>g._hbStartFuseRelic&&g._hbStartFuseRelic(sel.id),{size:15*S,weight:'900',r:6*S});
     g.button(bx+(bw+gap)*3,by,bw,bh,'\u4e1f\u68c4','bean_v39_discard_'+sel.id,()=>inLibrary&&!equipped?g._hbConfirmDiscardRelic(sel.id):g.toast&&g.toast('\u7121\u6cd5\u4e1f\u68c4','\u8acb\u5148\u5378\u4e0b\u4e26\u78ba\u8a8d\u5728\u5eab\u5b58\u4e2d'),{danger:true,size:15*S,color:'#fff0e8',weight:'900',r:6*S});
   }
   Game.prototype.drawRelicBag=function(){
@@ -17380,4 +17375,233 @@ Object.assign(Game.prototype,{
     return out;
   };
   try{ window.__HB_ATLAS_PRELOAD_FINAL__='v46-atlas-v2-art-loading'; }catch(e){}
+})();
+
+// ---- Relic fusion: two unequipped inventory items become one rerolled random item ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const CAP=40;
+  const ensure=s=>{
+    if(!s) return;
+    if(!Array.isArray(s.loadout)) s.loadout=[null,null,null,null,null];
+    while(s.loadout.length<5) s.loadout.push(null);
+    if(s.loadout.length>5) s.loadout=s.loadout.slice(0,5);
+    if(!Array.isArray(s.library)) s.library=[];
+  };
+  const sync=g=>{ try{ g&&g._scheduleCloudProgressSync&&g._scheduleCloudProgressSync(false); }catch(e){} };
+  const toast=(g,m,sub)=>{ try{ g.toast&&g.toast(m,sub); }catch(e){} };
+  const itemName=(g,id)=>{
+    try{
+      const it=g&&g._hbRelicDisplay?g._hbRelicDisplay(id):(typeof RELICS!=='undefined'?RELICS[id]:null);
+      return (it&&it.name)||(typeof RELICS!=='undefined'&&RELICS[id]&&RELICS[id].name)||id;
+    }catch(e){ return id; }
+  };
+  const uniq=a=>{ const seen=new Set(), out=[]; for(const x of a||[]) if(x&&!seen.has(x)){ seen.add(x); out.push(x); } return out; };
+  const rand=a=>a[Math.floor(Math.random()*a.length)];
+
+  Game.prototype._hbFusionCandidates=function(exclude){
+    const s=this.save||{};
+    ensure(s);
+    const bad=new Set((exclude||[]).filter(Boolean));
+    return uniq(s.library).filter(id=>id&&!bad.has(id)&&typeof RELICS!=='undefined'&&RELICS[id]);
+  };
+
+  Game.prototype._hbRollFusionResult=function(a,b){
+    const s=this.save||{};
+    ensure(s);
+    const all=(typeof RELICS==='undefined')?[]:Object.keys(RELICS).filter(id=>RELICS[id]);
+    const ownedAfter=new Set((s.loadout||[]).filter(Boolean).concat((s.library||[]).filter(id=>id!==a&&id!==b)));
+    let pool=all.filter(id=>!ownedAfter.has(id));
+    if(!pool.length) pool=[a,b].filter(id=>id&&RELICS[id]);
+    return pool.length?rand(pool):null;
+  };
+
+  Game.prototype._hbStartFuseRelic=function(rid){
+    const s=this.save||{};
+    ensure(s);
+    if(!rid||typeof RELICS==='undefined'||!RELICS[rid]) return;
+    if((s.loadout||[]).includes(rid)){
+      toast(this,'請先卸下','已裝備中的聖物不能直接合成');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    if(!s.library.includes(rid)){
+      toast(this,'不在庫存','只能合成背包庫存內的聖物');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    if(this._hbFuseBase&&!s.library.includes(this._hbFuseBase)) this._hbFuseBase=null;
+    const first=this._hbFuseBase;
+    if(first&&first!==rid){
+      this._hbConfirmFuseRelics(first,rid);
+      return;
+    }
+    if(this._hbFusionCandidates([rid]).length<1){
+      toast(this,'材料不足','需要兩件庫存聖物才能合成');
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    this._hbFuseBase=rid;
+    toast(this,'已選材料一','再選另一件庫存聖物並按合成');
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbConfirmFuseRelics=function(a,b){
+    if(!a||!b||a===b) return;
+    const msg='確定合成「'+itemName(this,a)+'」與「'+itemName(this,b)+'」？會消耗兩件聖物，產生一件隨機聖物。';
+    if(this.confirm) this.confirm(msg,()=>this._hbFuseRelics(a,b));
+    else this._hbFuseRelics(a,b);
+    this.audio&&this.audio.sfx&&this.audio.sfx('ui');
+    this.render&&this.render();
+  };
+
+  Game.prototype._hbFuseRelics=function(a,b){
+    const s=this.save||{};
+    ensure(s);
+    if(!a||!b||a===b) return;
+    if((s.loadout||[]).includes(a)||(s.loadout||[]).includes(b)){
+      toast(this,'請先卸下','已裝備中的聖物不能直接合成');
+      this._hbFuseBase=null;
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    if(!s.library.includes(a)||!s.library.includes(b)){
+      toast(this,'材料不存在','請重新選擇兩件庫存聖物');
+      this._hbFuseBase=null;
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+    const result=this._hbRollFusionResult(a,b);
+    if(!result){
+      toast(this,'合成失敗','找不到可產生的聖物');
+      this._hbFuseBase=null;
+      this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+      this.render&&this.render();
+      return;
+    }
+
+    s.library=s.library.filter(id=>id!==a&&id!==b);
+    if(!s.library.includes(result)){
+      if(s.library.length>=CAP){
+        toast(this,'背包已滿','請先整理背包');
+        this._hbFuseBase=null;
+        this.audio&&this.audio.sfx&&this.audio.sfx('hurt');
+        this.render&&this.render();
+        return;
+      }
+      s.library.push(result);
+    }
+    if(this._setRelicMetaBiased) this._setRelicMetaBiased(result,5,50);
+    else if(this._rerollRelicMeta) this._rerollRelicMeta(result);
+    persist(s);
+    sync(this);
+    this._hbFuseBase=null;
+    this._bagSel=result;
+    this._relicCompare=null;
+    this._relicSlotTarget=null;
+    this._relicPageHero=0;
+    toast(this,'合成完成',itemName(this,result));
+    this.audio&&this.audio.sfx&&this.audio.sfx('coin');
+    this.render&&this.render();
+  };
+
+  const prevCloseHeroRelicBag=Game.prototype._closeHeroRelicBag;
+  Game.prototype._closeHeroRelicBag=function(){
+    this._hbFuseBase=null;
+    return prevCloseHeroRelicBag?prevCloseHeroRelicBag.apply(this,arguments):undefined;
+  };
+
+  try{ window.__HB_RELIC_FUSION_FINAL__='v47-two-to-one-reroll'; }catch(e){}
+})();
+
+// ---- Growth choices are awarded by made shots, not hero XP level ----
+(function(){
+  if(typeof Game==='undefined') return;
+  const SHOTS_PER_UPGRADE=5;
+  const clampLevel=v=>Math.max(1,Math.min(100,Math.floor(Number(v)||1)));
+  const xpNext=lv=>Math.min(180,Math.round(100*Math.pow(1.15,lv-1)));
+
+  Game.prototype.gainXP=function(n){
+    const run=this.run;
+    if(!run||run.speed) return;
+    const maxLevel=100;
+    run.level=clampLevel(run.level);
+    if(run.level>=maxLevel){
+      run.level=maxLevel;
+      run.xp=0;
+      run.xpNext=xpNext(run.level);
+      if(!this.save.admin){
+        const pr=this._heroProg(run.heroId);
+        pr.level=maxLevel;
+        pr.xp=0;
+        this._saveProfile();
+      }
+      return;
+    }
+    n=Math.round((Number(n)||0)*(1+(run.mods&&run.mods.xpMul?run.mods.xpMul:0)));
+    run.xp=Math.max(0,Number(run.xp)||0)+n;
+    let leveled=false;
+    while(run.level<maxLevel&&run.xp>=run.xpNext){
+      run.xp-=run.xpNext;
+      run.level++;
+      leveled=true;
+      run.xpNext=xpNext(run.level);
+    }
+    if(run.level>=maxLevel){
+      run.level=maxLevel;
+      run.xp=0;
+      run.xpNext=xpNext(run.level);
+    }
+    if(!this.save.admin){
+      const pr=this._heroProg(run.heroId);
+      pr.level=run.level;
+      pr.xp=run.xp;
+      if(leveled) this._saveProfile();
+    }
+  };
+
+  Game.prototype._hbQueueMakeUpgrade=function(run,beforeMakes){
+    if(!run||run.speed) return;
+    const before=Math.max(0,Number(beforeMakes)||0);
+    const makes=Math.max(0,Number(run.makes)||0);
+    if(makes<=before) return;
+    if(!Number.isFinite(Number(run._hbNextMakeUpgrade))||Number(run._hbNextMakeUpgrade)<=before){
+      run._hbNextMakeUpgrade=(Math.floor(before/SHOTS_PER_UPGRADE)+1)*SHOTS_PER_UPGRADE;
+    }
+    let queued=0;
+    while(makes>=run._hbNextMakeUpgrade){
+      run.levelUpsPending=(Number(run.levelUpsPending)||0)+1;
+      queued++;
+      run._hbNextMakeUpgrade+=SHOTS_PER_UPGRADE;
+    }
+    if(queued>0){
+      run.banner={text:'命中成長',sub:'投進 '+SHOTS_PER_UPGRADE+' 球 · 選擇一項強化',t:1.35};
+      this.audio&&this.audio.sfx&&this.audio.sfx('levelup');
+      if(run.levelUpsPending>0&&!run.modal&&!run._stageClearing&&(!run.ball||!run.ball.live)) this.openLevelUp();
+    }
+  };
+
+  const prevStartRun=Game.prototype.startRun;
+  Game.prototype.startRun=function(){
+    const ret=prevStartRun.apply(this,arguments);
+    if(this.run) this.run._hbNextMakeUpgrade=SHOTS_PER_UPGRADE;
+    return ret;
+  };
+
+  const prevMakeBasket=Game.prototype.makeBasket;
+  Game.prototype.makeBasket=function(){
+    const beforeRun=this.run, beforeMakes=beforeRun?Math.max(0,Number(beforeRun.makes)||0):0;
+    const ret=prevMakeBasket.apply(this,arguments);
+    const run=this.run;
+    if(run&&run===beforeRun) this._hbQueueMakeUpgrade(run,beforeMakes);
+    return ret;
+  };
+
+  try{ window.__HB_MADE_SHOT_UPGRADES_FINAL__='v48-every-five-makes'; }catch(e){}
 })();
