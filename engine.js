@@ -17035,7 +17035,6 @@ Object.assign(Game.prototype,{
     const ctx=g.ctx, press=isPressed(g,r), lift=selected?0:10;
     const x=r.x, y=r.y+(press?6:lift), w=r.w, h=r.h-(selected?0:lift);
     const glow=selected?'rgba(255,220,92,0.50)':(locked?'rgba(120,80,80,0.08)':'rgba(154,255,52,0.18)');
-    const contentLift=m.id===5?(selected?-24:-18):0;
     const frame=img(g,'./assets/atlas_v2/card_frame.png');
     if(frame&&frame.complete&&frame.naturalWidth&&!frame._err){
       ctx.save();
@@ -17059,7 +17058,6 @@ Object.assign(Game.prototype,{
       ctx.stroke();
       ctx.restore();
     }
-    if(contentLift){ ctx.save(); ctx.translate(0,contentLift); }
     label(g,'第 '+m.id+' 幕',x+w/2,y+44,selected?35:25,locked?'rgba(230,211,165,0.46)':'#ffe66f',{align:'center',baseline:'middle',glow:selected?10:0});
     label(g,m.name,x+w/2,y+(selected?96:86),selected?48:33,locked?'rgba(240,228,204,0.44)':'#fff1d5',{align:'center',baseline:'middle',glow:selected?8:0});
     label(g,m.sub,x+w/2,y+(selected?142:125),selected?23:18,locked?'rgba(207,188,148,0.36)':'#e6c783',{align:'center',baseline:'middle',weight:'800'});
@@ -17079,7 +17077,6 @@ Object.assign(Game.prototype,{
     label(g,'印記 '+rec.marks,x+w*0.23,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#d6a8ff',{align:'center',baseline:'middle',weight:'900'});
     label(g,'擊敗 '+rec.clears,x+w*0.50,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ff897b',{align:'center',baseline:'middle',weight:'900'});
     label(g,'熟度 '+rec.heat,x+w*0.77,infoY,selected?20:15,locked?'rgba(226,207,178,0.36)':'#ffd36b',{align:'center',baseline:'middle',weight:'900'});
-    if(contentLift) ctx.restore();
     if(locked){
       ctx.save();
       ctx.fillStyle='rgba(0,0,0,0.36)';
@@ -17254,6 +17251,7 @@ Object.assign(Game.prototype,{
     const S=Math.max(0.72,Math.min(rawW/baseW,rawH/baseH));
     const x=rawX+(rawW-baseW*S)/2, y=rawY+(rawH-baseH*S)/2, w=baseW*S, h=baseH*S;
     const X=v=>x+v*S, Y=v=>y+v*S, D=v=>v*S;
+    const C=v=>Y(v-26);
     ctx.save();
     ctx.globalAlpha=locked?0.58:1;
     panel(g,x,y,w,h,D(18),'rgba(8,7,7,0.94)',locked?'rgba(118,92,58,0.55)':'rgba(218,167,65,0.86)',locked?null:'rgba(255,217,86,0.10)');
@@ -17261,10 +17259,10 @@ Object.assign(Game.prototype,{
     ctx.lineWidth=D(1);
     g.rr(X(10),Y(10),D(306),D(592),D(15));
     ctx.stroke();
-    label(g,'\u7b2c '+m.id+' \u5e55',X(36),Y(58),D(23),locked?'rgba(240,223,178,0.54)':'#ffe66f',{baseline:'middle'});
-    label(g,m.name,X(36),Y(105),D(39),locked?'rgba(252,239,210,0.56)':'#fff1d6',{baseline:'middle',glow:locked?0:D(8)});
-    label(g,'Boss\u3000'+m.boss,X(36),Y(158),D(23),locked?'rgba(226,204,166,0.48)':'#e8c88a',{baseline:'middle'});
-    const art={x:X(32),y:Y(182),w:D(262),h:D(172)};
+    label(g,'\u7b2c '+m.id+' \u5e55',X(36),C(58),D(23),locked?'rgba(240,223,178,0.54)':'#ffe66f',{baseline:'middle'});
+    label(g,m.name,X(36),C(105),D(39),locked?'rgba(252,239,210,0.56)':'#fff1d6',{baseline:'middle',glow:locked?0:D(8)});
+    label(g,'Boss\u3000'+m.boss,X(36),C(158),D(23),locked?'rgba(226,204,166,0.48)':'#e8c88a',{baseline:'middle'});
+    const art={x:X(32),y:C(182),w:D(262),h:D(172)};
     panel(g,art.x,art.y,art.w,art.h,D(9),'rgba(6,5,6,0.78)',locked?'rgba(110,88,60,0.48)':m.tone,locked?null:m.tone);
     const boss=img(g,'./assets/mob/bosses/act'+m.id+'.png');
     if(boss&&boss.complete&&boss.naturalWidth&&!boss._err){
@@ -17289,11 +17287,11 @@ Object.assign(Game.prototype,{
       ctx.restore();
     }
     const rec=recordFor(g,m.id);
-    label(g,'\u9032\u5ea6',X(36),Y(392),D(21),'#cbb88e',{baseline:'middle'});
-    label(g,rec.progress+' / 5',X(282),Y(392),D(30),locked?'rgba(237,221,184,0.50)':'#fff0b6',{align:'right',baseline:'middle'});
+    label(g,'\u9032\u5ea6',X(36),C(392),D(21),'#cbb88e',{baseline:'middle'});
+    label(g,rec.progress+' / 5',X(282),C(392),D(30),locked?'rgba(237,221,184,0.50)':'#fff0b6',{align:'right',baseline:'middle'});
     ctx.strokeStyle='rgba(226,176,74,0.32)';
     ctx.lineWidth=D(2);
-    ctx.beginPath(); ctx.moveTo(X(34),Y(425)); ctx.lineTo(X(292),Y(425)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(34),C(425)); ctx.lineTo(X(292),C(425)); ctx.stroke();
     const rows=[
       ['\u7c43\u7344\u5370\u8a18',rec.marks,'#d5a6ff'],
       ['Boss \u64ca\u6557',rec.clears,'#ff8a76'],
@@ -17302,11 +17300,11 @@ Object.assign(Game.prototype,{
       ['\u7cbe\u9b44\u8056\u7269',m.relic,'#d8ff44']
     ];
     for(let i=0;i<rows.length;i++){
-      const yy=Y(462+i*34);
+      const yy=C(462+i*34);
       label(g,rows[i][0],X(38),yy,D(18),'#b9aa87',{baseline:'middle',weight:'900'});
       label(g,String(rows[i][1]),X(284),yy,i<3?D(24):D(18),locked?'rgba(235,220,184,0.46)':rows[i][2],{align:'right',baseline:'middle',weight:'900',glow:i<3&&!locked?D(5):0});
     }
-    if(locked) label(g,'\u901a\u95dc\u524d\u5e55 Boss \u89e3\u9396',X(163),Y(578),D(20),'rgba(255,224,160,0.58)',{align:'center',baseline:'middle',weight:'900'});
+    if(locked) label(g,'\u901a\u95dc\u524d\u5e55 Boss \u89e3\u9396',X(163),C(578),D(20),'rgba(255,224,160,0.58)',{align:'center',baseline:'middle',weight:'900'});
     ctx.restore();
   };
   const DEFAULT_ATLAS_GROUPS={
