@@ -17982,6 +17982,7 @@ Object.assign(Game.prototype,{
   const CAP=40, BALL_SLOT=2, SIDE_SLOTS=[0,1,3,4];
   const BAG_CAL={slots:{x:280,y:64,w:101,h:83,gap:54},main:{x:151,y:165,w:1008,h:410},tabs:{x:7,y:166,w:138,h:35,gap:10},grid:{x:166,y:180,w:563,h:379},detail:{x:744,y:178,w:401,h:379}};
   const TYPE_ORDER={ball:0,wrist:1,shoes:2,charm:3,mask:4,hoop:5};
+  const SAFE_FONT='"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif';
   const BAG_KEY='::bag:';
   const baseId=id=>typeof id==='string'&&id.includes(BAG_KEY)?id.slice(0,id.indexOf(BAG_KEY)):id;
   const bagKey=(id,seq)=>String(id)+BAG_KEY+seq;
@@ -18471,7 +18472,7 @@ Object.assign(Game.prototype,{
         g.ctx.fillStyle='rgba(5,7,9,.82)'; g.ctx.strokeStyle='rgba(255,229,137,.9)'; g.ctx.lineWidth=Math.max(1,2*sc.S);
         if(g.ctx.roundRect){ g.ctx.beginPath(); g.ctx.roundRect(bx,by,bw,bh,7*sc.S); g.ctx.fill(); g.ctx.stroke(); }
         else { g.ctx.fillRect(bx,by,bw,bh); g.ctx.strokeRect(bx,by,bw,bh); }
-        g.ctx.font=`${Math.max(11,14*sc.S*dpr)}px ${FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#fff0b6';
+        g.ctx.font=`${Math.max(11,14*sc.S*dpr)}px ${SAFE_FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#fff0b6';
         g.ctx.fillText('x'+(s.hbRelicCounts[bid]||0),bx+bw/2,by+bh/2);
         g.ctx.restore();
       }
@@ -18483,7 +18484,7 @@ Object.assign(Game.prototype,{
         if(g.ctx.roundRect){ g.ctx.beginPath(); g.ctx.roundRect(bx,by,bw,bh,8*sc.S); g.ctx.fill(); g.ctx.stroke(); }
         else { g.ctx.fillRect(bx,by,bw,bh); g.ctx.strokeRect(bx,by,bw,bh); }
         g.ctx.shadowBlur=0;
-        g.ctx.font=`900 ${Math.max(11,15*sc.S*dpr)}px ${FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#162000';
+        g.ctx.font=`900 ${Math.max(11,15*sc.S*dpr)}px ${SAFE_FONT}`; g.ctx.textAlign='center'; g.ctx.textBaseline='middle'; g.ctx.fillStyle='#162000';
         g.ctx.fillText('NEW',bx+bw/2,by+bh/2+1*sc.S);
         g.ctx.restore();
       }
@@ -18516,20 +18517,20 @@ Object.assign(Game.prototype,{
     else { this.ctx.fillRect(x,y,w,h); this.ctx.strokeRect(x,y,w,h); }
     this.ctx.shadowBlur=0;
     this.ctx.textAlign='center'; this.ctx.textBaseline='middle';
-    this.ctx.font=`900 ${Math.max(24,34*S)}px ${FONT}`; this.ctx.fillStyle='#fff4c1';
+    this.ctx.font=`900 ${Math.max(24,34*S)}px ${SAFE_FONT}`; this.ctx.fillStyle='#fff4c1';
     this.ctx.fillText('合成完成',x+w/2,y+48*S);
-    this.ctx.font=`900 ${Math.max(16,22*S)}px ${FONT}`; this.ctx.fillStyle='#b9ff25';
+    this.ctx.font=`900 ${Math.max(16,22*S)}px ${SAFE_FONT}`; this.ctx.fillStyle='#b9ff25';
     this.ctx.fillText('新合成裝備',x+w/2,y+82*S);
     const ix=x+w/2-78*S, iy=y+106*S, iw=156*S, ih=126*S;
     this.ctx.fillStyle='rgba(0,0,0,.65)'; this.ctx.strokeStyle=it.color||'#6edbff'; this.ctx.lineWidth=3*S;
     if(this.ctx.roundRect){ this.ctx.beginPath(); this.ctx.roundRect(ix,iy,iw,ih,12*S); this.ctx.fill(); this.ctx.stroke(); }
     else { this.ctx.fillRect(ix,iy,iw,ih); this.ctx.strokeRect(ix,iy,iw,ih); }
     try{ if(this._drawRelicSheetIcon) this._drawRelicSheetIcon(it.type||'ball',it.idx||0,ix+18*S,iy+12*S,iw-36*S,ih-24*S,1); }catch(e){}
-    this.ctx.font=`900 ${Math.max(20,28*S)}px ${FONT}`; this.ctx.fillStyle=it.color||'#ffe588';
+    this.ctx.font=`900 ${Math.max(20,28*S)}px ${SAFE_FONT}`; this.ctx.fillStyle=it.color||'#ffe588';
     this.ctx.fillText(it.name||rev.id,x+w/2,y+260*S);
     const aff=(it.affixes||it.mods||[]).slice(0,2).map(a=>typeof a==='string'?a:(a&&a.name?a.name:'')).filter(Boolean).join(' / ');
     if(aff){
-      this.ctx.font=`800 ${Math.max(13,18*S)}px ${FONT}`; this.ctx.fillStyle='#fff7dc';
+      this.ctx.font=`800 ${Math.max(13,18*S)}px ${SAFE_FONT}`; this.ctx.fillStyle='#fff7dc';
       this.ctx.fillText(aff,x+w/2,y+292*S);
     }
     this.ctx.restore();

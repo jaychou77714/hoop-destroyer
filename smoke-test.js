@@ -41,6 +41,7 @@ assert(src.includes('hbRelicNew'), 'Relic backpack must preserve NEW item badges
 assert(src.includes('_hbFusionReveal'), 'Relic fusion must show the new-item reveal screen.');
 assert(src.includes('BAG_KEY'), 'Relic backpack must distinguish duplicate item instances in the UI.');
 assert(src.includes('hb_instance_discard'), 'Relic detail actions must support duplicate item instances.');
+assert(src.includes('SAFE_FONT'), 'Relic backpack overlays must not depend on scoped FONT constants.');
 assert(!src.includes('contentLift=m.id===5'), 'Atlas act 5 card must not have a special content lift.');
 
 console.log('Smoke OK: engine syntax and final feature markers verified.');
